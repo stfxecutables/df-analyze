@@ -1,6 +1,8 @@
+### Project-Specific ###
+data/*.rar
 
-# Created by https://www.toptal.com/developers/gitignore/api/python,macos,linux,vscode,vim,libreoffice
-# Edit at https://www.toptal.com/developers/gitignore?templates=python,macos,linux,vscode,vim,libreoffice
+
+### Generic ####
 
 ### LibreOffice ###
 # LibreOffice locks
@@ -227,4 +229,5 @@ tags
 !.vscode/extensions.json
 *.code-workspace
 
-# End of https://www.toptal.com/developers/gitignore/api/python,macos,linux,vscode,vim,libreoffice
+# Created by https://www.toptal.com/developers/gitignore/api/python,macos,linux,vscode,vim,libreoffice
+# Edit at https://www.toptal.com/developers/gitignore?templates=python,macos,linux,vscode,vim,libreoffice
