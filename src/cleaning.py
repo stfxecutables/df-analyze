@@ -16,6 +16,8 @@ from os import PathLike
 
 
 DATAFILE = Path(__file__).resolve().parent.parent / "data/MCICFreeSurfer.mat"
+DATA_JSON = DATAFILE.parent / "mcic.json"
+CLEAN_JSON = DATAFILE.parent / "mcic_clean.json"
 
 
 def clean_fs_label(s: str) -> str:
@@ -33,7 +35,7 @@ def clean_fs_label(s: str) -> str:
     return shorter
 
 
-def load_matlab_schizo(path: PathLike) -> DataFrame:
+def reformat_matlab_schizo(path: PathLike) -> DataFrame:
     """
     Notes
     -----
@@ -51,7 +53,8 @@ def load_matlab_schizo(path: PathLike) -> DataFrame:
 
     Gender variables are all either 0 or 1 only.
     """
-    file = str(Path(path).resolve())
+    p = Path(path)
+    file = str(p.resolve())
     data = loadmat(file)
     varnames = [key for key in list(data.keys()) if "__" not in key]
     for i, v in enumerate(varnames):
@@ -73,10 +76,57 @@ def load_matlab_schizo(path: PathLike) -> DataFrame:
     X = np.concatenate([X_health, X_schizo], axis=0)
     y = np.concatenate([y_health, y_schizo], axis=0)
     feature_names = list(map(clean_fs_label, data["thisSubjectLabels"].tolist())) + ["Age", "Sex"]
+    # there are duplicate column names for some reason...
+    feature_names = [f"{i}__{fname}" for fname, i in enumerate(feature_names)]
     df = DataFrame(data=X, columns=feature_names)
     df["target"] = y
+    df.to_json(DATA_JSON)
+    print(f"Saved processed DataFrame to:\r\n{DATA_JSON}")
+    return df
+
+def load_data() -> DataFrame:
+    if DATA_JSON.exists():
+        return pd.read_json(DATA_JSON)
+    return reformat_matlab_schizo(DATAFILE)
+
+def remove_nan_features(df: DataFrame) -> DataFrame:
+    """Remove columns (features) that are ALL NaN"""
+    return df.dropna(axis=1, how="all").dropna(axis=1, how="all")
+
+def remove_nan_samples(df: DataFrame) -> DataFrame:
+    """Remove rows (samples) that have ANY NaN"""
+    return df.dropna(axis=0, how="any").dropna(axis=0, how="any")
+
+def get_clean_data() -> DataFrame:
+    """Perform minimal cleaning, like removing NaN features"""
+    if CLEAN_JSON.exists():
+        return pd.read_json(CLEAN_JSON)
+
+    df = load_data()
+    print(f"Shape before dropping:", df.shape)
+    inspect_data(df)
+    df = remove_nan_features(df)
+    df = remove_nan_samples(df)
+    print(f"Shape after dropping:", df.shape)
+    inspect_data(df)
+    df.to_json(CLEAN_JSON)
     return df
 
 
+def inspect_data(df: DataFrame) -> DataFrame:
+    A = df.to_numpy()
+    nan_rows = [i for i in range(A.shape[0]) if np.sum(np.isnan(A[i])) > 0]
+    print("NaN rows:\n", nan_rows)
+    nan_cols = {}
+    for i in range(A.shape[1]):
+        nan_count = np.sum(np.isnan(A[:, i]))
+        if nan_count > 0:
+            nan_cols[i] = nan_count
+    print("NaN cols:")
+    for idx, count in nan_cols.items():
+        print(f"{idx}: {count}", end=", ")
+    print("")
+
+
 if __name__ == "__main__":
-    load_matlab_schizo(DATAFILE)
+    df = get_clean_data()
