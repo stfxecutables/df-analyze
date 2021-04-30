@@ -7,15 +7,13 @@ from typing_extensions import Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
-import seaborn as sbn
 from numpy import ndarray
 from pandas import DataFrame, Series
 
 from os import PathLike
 
-
-DATAFILE = Path(__file__).resolve().parent.parent / "data/MCICFreeSurfer.mat"
+DATADIR = Path(__file__).resolve().parent.parent / "data"
+DATAFILE = DATADIR / "MCICFreeSurfer.mat"
 DATA_JSON = DATAFILE.parent / "mcic.json"
 CLEAN_JSON = DATAFILE.parent / "mcic_clean.json"
 
@@ -84,18 +82,22 @@ def reformat_matlab_schizo(path: PathLike) -> DataFrame:
     print(f"Saved processed DataFrame to:\r\n{DATA_JSON}")
     return df
 
+
 def load_data() -> DataFrame:
     if DATA_JSON.exists():
         return pd.read_json(DATA_JSON)
     return reformat_matlab_schizo(DATAFILE)
 
+
 def remove_nan_features(df: DataFrame) -> DataFrame:
     """Remove columns (features) that are ALL NaN"""
     return df.dropna(axis=1, how="all").dropna(axis=1, how="all")
 
+
 def remove_nan_samples(df: DataFrame) -> DataFrame:
     """Remove rows (samples) that have ANY NaN"""
     return df.dropna(axis=0, how="any").dropna(axis=0, how="any")
+
 
 def get_clean_data() -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
