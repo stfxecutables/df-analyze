@@ -12,10 +12,7 @@ from pandas import DataFrame, Series
 
 from os import PathLike
 
-DATADIR = Path(__file__).resolve().parent.parent / "data"
-DATAFILE = DATADIR / "MCICFreeSurfer.mat"
-DATA_JSON = DATAFILE.parent / "mcic.json"
-CLEAN_JSON = DATAFILE.parent / "mcic_clean.json"
+from src.constants import DATAFILE, DATA_JSON, CLEAN_JSON
 
 
 def clean_fs_label(s: str) -> str:

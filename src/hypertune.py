@@ -11,10 +11,7 @@ from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 from src.cleaning import get_clean_data
-
-
-VAL_SIZE = 0.20
-SEED = 69
+from src.constants import VAL_SIZE, SEED
 
 
 def train_val_splits(df: DataFrame) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
