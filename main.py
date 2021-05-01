@@ -25,7 +25,8 @@ from sklearn.model_selection import cross_val_score
 
 
 FEATURE_SELECTION_ANALYSES = [
-    "pca" "kernel_pca",
+    "pca",
+    "kernel_pca",
     "unvariate_d",
     "unvariate_auc",
     "unvariate_pearson",
@@ -41,31 +42,10 @@ if __name__ == "__main__":
     classifier_analysis(
         feature_selection="pca",
         n_features=50,
-        htune_trials=200,
-        htune_validation=10,
-        test_validation=10,
+        htune_trials=20,
+        htune_validation=0.3,
+        test_validation=5,
         classifier="svm",
     )
     sys.exit()
-    # df = get_clean_data()
-    # selected = remove_weak_features(df)
-    # X_train, X_test, y_train, y_test = train_val_splits(selected)
-    # pca = get_pca_features(df, 100)
-    # print(pca)
-    # kpca = get_kernel_pca_features(df, 100)
-    # print(kpca)
-
-    # hypertune_classifier("mlp", X_train, y_train, X_test, y_test, n_trials=200, mlp_args=dict(val_size=0.2))
-    # htune = hypertune_classifier(
-    #     classifier="svm", X_train=X_train, y_train=y_train, n_trials=20, cv_method=10
-    # )
-    # evaluate_hypertuned(htune, 5, selected)
-
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
-    study.optimize(wrapper(X_train, y_train), n_trials=100)
-    print("Best params:", study.best_params)
-    print("Best 3-Fold Accuracy on Training Set:", study.best_value)
-    svc = SVC(**study.best_params)
-    test_acc = svc.fit(X_train, y_train).score(X_test, y_test)
-    print("Test Accuracy:", test_acc)
 

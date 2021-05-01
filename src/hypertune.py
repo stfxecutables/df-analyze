@@ -2,8 +2,10 @@ import numpy as np
 import optuna
 
 from dataclasses import dataclass, field
+from pprint import pprint
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, Optional
 from typing_extensions import Literal
+from warnings import filterwarnings
 
 from numpy import ndarray
 from optuna import Trial
@@ -18,6 +20,7 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier as MLP
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import (
     train_test_split,
@@ -89,6 +92,22 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
         return LeaveOneOut()
     if cv_method == "mc":
         return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
+    raise ValueError("Invalid `cv_method`")
+
+
+def cv_desc(cv_method: CVMethod) -> str:
+    if isinstance(cv_method, int):
+        return f"stratified {cv_method}-fold"
+    if isinstance(cv_method, float):  # stratified holdout
+        if cv_method <= 0 or cv_method >= 1:
+            raise ValueError("Holdout test_size must be in (0, 1)")
+        perc = int(100 * cv_method)
+        return f"stratified {perc}% holdout"
+    cv_method = str(cv_method).lower()  # type: ignore
+    if cv_method == "loocv":
+        return "LOOCV"
+    if cv_method == "mc":
+        return "stratified Monte-Carlo (20 random 20%-sized test sets)"
     raise ValueError("Invalid `cv_method`")
 
 
@@ -184,15 +203,8 @@ def mlp_args_from_params(params: Dict) -> Dict:
 
 
 def mlp_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5, val_size: float = VAL_SIZE
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
-    if val_size > 0:
-        df = X_train.copy()
-        df["target"] = y_train
-        X_train, X_test, y_train, y_test = train_val_splits(df, val_size)
-    else:
-        X_test, y_test = X_train, y_train
-
     def objective(trial: Trial) -> float:
         l1 = trial.suggest_categorical("l1", choices=MLP_LAYER_SIZES)
         l2 = trial.suggest_categorical("l2", choices=MLP_LAYER_SIZES)
@@ -215,12 +227,13 @@ def mlp_objective(
             validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
         )
         mlp = MLP(**args)
-        mlp.fit(X_train, y_train.astype(float))
-        # y_pred = mlp.predict(X_test)
-        # acc = accuracy_score(y_test, y_pred)
-        # y_score = mlp.predict_proba(X_test)
-        # auc = roc_auc_score(y_test, y_score)
-        return float(mlp.score(X_test, y_test.astype(float)))
+        filterwarnings("ignore", category=ConvergenceWarning)
+        _cv = get_cv(y_train, cv_method)
+        scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        acc = float(np.mean(scores["test_score"]))
+        return acc
+        # mlp.fit(X_train, y_train.astype(float))
+        # return float(mlp.score(X_test, y_test.astype(float)))
 
     return objective
 
@@ -243,28 +256,27 @@ def hypertune_classifier(
     y_train: DataFrame,
     n_trials: int = 200,
     cv_method: CVMethod = 5,
-    mlp_args: Dict = {},
 ) -> HtuneResult:
     OBJECTIVES: Dict[str, Callable] = {
         "rf": rf_objective(X_train, y_train, cv_method),
         "svm": svm_objective(X_train, y_train, cv_method),
         "dtree": dtree_objective(X_train, y_train, cv_method),
-        "mlp": mlp_objective(X_train, y_train, cv_method, **mlp_args),
+        "mlp": mlp_objective(X_train, y_train, cv_method),
         "bag": logistic_bagging_objective(X_train, y_train, cv_method),
     }
     # HYPERTUNING
     objective = OBJECTIVES[classifier]
-    constructor = get_classifier_constructor(name=classifier)
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
     study.optimize(objective, n_trials=n_trials)
 
-    # RESULTS
-    print("Best params:", study.best_params)
+    val_method = cv_desc(cv_method)
     acc = np.round(study.best_value, 3)
-    if classifier != "mlp":
-        print(f"Best {cv_method}-Fold Accuracy on Training Set: {acc:0.3f}")
-    else:
-        print(f"Best Accuracy on MLP Validation Set: {acc:0.3f}")
+    print(f"\n{' Tuning Results ':=^80}")
+    print("Best params:")
+    pprint(study.best_params, indent=4, width=80)
+    print(f"\nTuning validation: {val_method}")
+    print(f"Best accuracy:      μ = {acc:0.3f}")
+    # print("=" * 80, end="\n")
 
     return HtuneResult(
         classifier=classifier,
@@ -274,16 +286,6 @@ def hypertune_classifier(
         best_params=study.best_params,
     )
 
-    # TESTING
-    args = mlp_args_from_params(study.best_params) if classifier == "mlp" else study.best_params
-    estimator: Any = constructor(**args)
-    X_test = X_train if X_test is None else X_test
-    y_test = y_train if y_test is None else y_test
-    if classifier == "mlp":
-        print("Running final MLP test...")
-    test_acc = estimator.fit(X_train, y_train).score(X_test, y_test)
-    print("Test Accuracy:", test_acc)
-
 
 def evaluate_hypertuned(
     htuned: HtuneResult,
@@ -292,9 +294,11 @@ def evaluate_hypertuned(
     y_train: DataFrame,
     X_test: Optional[DataFrame] = None,
     y_test: Optional[DataFrame] = None,
-) -> Any:
+) -> Tuple[float, float, float, float]:
     classifier = htuned.classifier
-    estimator = get_classifier_constructor(classifier)(**htuned.best_params)
+    params = htuned.best_params
+    args = mlp_args_from_params(params) if classifier == "mlp" else params
+    estimator = get_classifier_constructor(classifier)(**args)
     if (X_test is None) and (y_test is None):
         _cv = get_cv(y_train, cv_method)
         scores = cv(estimator, X=X_train, y=y_train, scoring=TEST_SCORES, cv=_cv)
@@ -302,9 +306,14 @@ def evaluate_hypertuned(
         auc_mean = float(np.mean(scores["test_roc_auc"]))
         acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
         auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
-        print("Hypertuned model performance:")
-        print(f"  Accuracy: μ={np.round(acc_mean, 3):0.3f} ({np.round(acc_sd, 4):0.4f})")
-        print(f"  AUC:      μ={np.round(auc_mean, 3):0.3f} ({np.round(auc_sd, 4):0.4f})")
+        desc = cv_desc(cv_method)
+        # fmt: off
+        print(f"\n{' Testing Results ':=^80}\n")
+        print(f"Testing validation: {desc}")
+        print(f"Accuracy:           μ = {np.round(acc_mean, 3):0.3f} (sd = {np.round(acc_sd, 4):0.4f})")  # noqa
+        print(f"AUC:                μ = {np.round(auc_mean, 3):0.3f} (sd = {np.round(auc_sd, 4):0.4f})")  # noqa
+        # fmt: on
+        return acc_mean, acc_sd, auc_mean, auc_sd
     elif (X_test is not None) and (y_test is not None):
         y_pred = estimator.fit(X_train, y_train).predict(X_test)
         y_score = (
@@ -315,7 +324,11 @@ def evaluate_hypertuned(
         acc = accuracy_score(y_test, y_pred)
         auc = roc_auc_score(y_test, y_score)
         percent = int(100 * float(cv_method))
-        print(f"Hypertuned model performance on final {percent}% holdout set:")
-        print(f"  Accuracy: μ={np.round(acc, 3):0.3f} ({np.round(acc, 4):0.4f})")
-        print(f"  AUC:      μ={np.round(auc, 3):0.3f} ({np.round(auc, 4):0.4f})")
+        print(f"\n{' Testing Results ':=^80}\n")
+        print(f"Testing validation: {percent}% holdout")
+        print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
+        print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
+        return acc, np.nan, auc, np.nan
+    else:
+        raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")
 
