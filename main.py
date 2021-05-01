@@ -1,15 +1,22 @@
+import pandas as pd
 import sys
 
-from typing import Callable
+from typing import Callable, Dict, Any, Optional
 import optuna
 import numpy as np
 
 from optuna import Trial
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
-from src.analyses import classifier_analysis, classifier_analysis_multitest
+from src.analyses import FeatureSelection, classifier_analysis, classifier_analysis_multitest
 from src.cleaning import get_clean_data
-from src.hypertune import evaluate_hypertuned, hypertune_classifier, train_val_splits
+from src.hypertune import (
+    CVMethod,
+    Classifier,
+    evaluate_hypertuned,
+    hypertune_classifier,
+    train_val_splits,
+)
 from src.feature_selection import (
     auroc,
     cohens_d,
@@ -24,6 +31,12 @@ from sklearn.svm import SVC
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
+TEST_ARG_OPTIONS = dict(
+    classifier=["svm", "rf"],
+    feature_selection=["pca", "d"],
+    n_features=[10, 20],
+    htune_validation=[5, "mc", 0.2],
+)
 ARG_OPTIONS = dict(
     classifier=["svm", "rf", "dtree", "bag", "mlp"],
     feature_selection=["pca", "kpca", "d", "auc"],
@@ -31,6 +44,7 @@ ARG_OPTIONS = dict(
     htune_validation=[5, 10, "mc", 0.2],
 )
 ARGS = list(ParameterGrid(ARG_OPTIONS))
+TEST_ARGS = list(ParameterGrid(TEST_ARG_OPTIONS))
 
 
 FEATURE_SELECTION_ANALYSES = [
@@ -46,9 +60,34 @@ FEATURE_SELECTION_ANALYSES = [
 CLASSIFIERS = ["svm", "rf", "dtree", "lsq_bag", "ann-mlp"]
 
 
-if __name__ == "__main__":
+def pbar_desc(args: Dict[str, Any]) -> str:
+    classifier = args["classifier"]
+    selection = args["feature_selection"]
+    n_feat = args["n_features"]
+    htune_val = args["htune_validation"]
+    if isinstance(htune_val, int):
+        hv = f"{htune_val}-fold"
+    elif isinstance(htune_val, float):
+        hv = f"{int(100*htune_val)}%-holdout"
+    elif htune_val == "mc":
+        hv = "mc"
+    else:
+        hv = "none"
+    return f"{classifier}|{selection}|{n_feat} features|htune_val={hv}"
 
-    for args in tqdm(ARGS):
-        classifier_analysis_multitest(htune_trials=20, **args)
+
+if __name__ == "__main__":
+    ARGS = TEST_ARGS
+
+    results = []
+    pbar = tqdm(total=len(ARGS))
+    for args in ARGS:
+        results.append(
+            classifier_analysis_multitest(htune_trials=20, verbosity=optuna.logging.INFO, **args)
+        )
+        pbar.set_description(pbar_desc(args))
+        pbar.update()
+    df = pd.concat(results, axis=0, ignore_index=True)
+    print(df)
     sys.exit()
 

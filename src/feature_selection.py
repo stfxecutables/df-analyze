@@ -178,7 +178,7 @@ def select_features_by_univariate_rank(
         Data with reduced feature set.
     """
     X = df.drop(columns="target")
-    y = df["target"].copy()
+    y = df["target"].to_numpy()
     importances = None
     if metric.lower() == "d":
         importances = cohens_d(df).sort_values(ascending=False)

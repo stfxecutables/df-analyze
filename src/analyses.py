@@ -1,9 +1,11 @@
+import pandas as pd
 import optuna
 from typing import Any, Optional, Union, List, Dict
 from typing_extensions import Literal
 
 from pandas import DataFrame
 from sklearn.model_selection import cross_validate
+from sklearn.preprocessing import StandardScaler
 
 from src.cleaning import get_clean_data
 from src.feature_selection import (
@@ -71,11 +73,42 @@ def select_features(
     return df
 
 
-def result_to_df(result: Dict[str, Any]) -> DataFrame:
-    htuned: HtuneResult = result.htuned
+def val_method_short(method: CVMethod) -> str:
+    if isinstance(method, int):
+        return f"{method}-fold"
+    elif isinstance(method, float):
+        return f"{int(100*method)}%-holdout"
+    elif str(method).lower() == "mc":
+        return "m-carlo"
+    elif str(method).lower() == "loocv":
+        return "loocv"
+    else:
+        return "none"
 
-    row = dict(model=htuned.classifier, htune_val=htuned.cv_method)
-    pass
+
+def results_df(
+    selection: FeatureSelection,
+    n_features: int,
+    trials: int,
+    test_validation: CVMethod,
+    result: Dict[str, Any],
+) -> DataFrame:
+    htuned: HtuneResult = result["htuned"]
+    test_val = val_method_short(test_validation)
+    htune_val = val_method_short(result["cv_method"])
+    row = dict(
+        model=htuned.classifier,
+        feat_select=selection,
+        n_feat=n_features,
+        test_val=test_val,
+        acc=result["acc"],
+        acc_sd=result["acc_sd"],
+        auc=result["auc"],
+        auc_sd=result["auc_sd"],
+        htune_val=htune_val,
+        htune_trials=trials,
+    )
+    return DataFrame([row])
 
 
 def classifier_analysis(
@@ -138,7 +171,7 @@ def classifier_analysis_multitest(
     htune_validation: CVMethod = 5,
     test_validations: List[MultiTestCVMethod] = [5, 10, "mc"],
     verbosity: int = optuna.logging.ERROR,
-) -> None:
+) -> DataFrame:
     """Summary
 
     Parameters
@@ -158,7 +191,8 @@ def classifier_analysis_multitest(
     if log:
         print(f"Preparing feature selection with method: {feature_selection}")
     df = select_features(df_all, feature_selection, n_features, classifier)
-    X_train = df.drop(columns="target")
+    X_raw = df.drop(columns="target")
+    X_train = StandardScaler().fit_transform(X_raw)
     y_train = df["target"].to_numpy().astype(int)
     htuned = hypertune_classifier(
         classifier=classifier,
@@ -175,7 +209,17 @@ def classifier_analysis_multitest(
         result = evaluate_hypertuned(
             htuned, cv_method=test_validation, X_train=X_train, y_train=y_train, log=log
         )
-        results.append(result_to_df(result))
+        results.append(
+            results_df(
+                selection=feature_selection,
+                n_features=n_features,
+                trials=htune_trials,
+                test_validation=test_validation,
+                result=result,
+            )
+        )
+    all_results = pd.concat(results, axis=0, ignore_index=True)
+    return all_results
 
 
 if __name__ == "__main__":

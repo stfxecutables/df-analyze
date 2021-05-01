@@ -273,12 +273,13 @@ def hypertune_classifier(
 
     val_method = cv_desc(cv_method)
     acc = np.round(study.best_value, 3)
-    print(f"\n{' Tuning Results ':=^80}")
-    print("Best params:")
-    pprint(study.best_params, indent=4, width=80)
-    print(f"\nTuning validation: {val_method}")
-    print(f"Best accuracy:      μ = {acc:0.3f}")
-    # print("=" * 80, end="\n")
+    if verbosity != optuna.logging.ERROR:
+        print(f"\n{' Tuning Results ':=^80}")
+        print("Best params:")
+        pprint(study.best_params, indent=4, width=80)
+        print(f"\nTuning validation: {val_method}")
+        print(f"Best accuracy:      μ = {acc:0.3f}")
+        # print("=" * 80, end="\n")
 
     return HtuneResult(
         classifier=classifier,
