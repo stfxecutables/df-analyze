@@ -42,6 +42,7 @@ from sklearn.svm import LinearSVC
 from sklearn.linear_model import LassoCV, LinearRegression
 
 from src.constants import DATADIR, SEED, UNCORRELATED
+from src.hypertune import Classifier, get_classifier_constructor
 from src._sequential import SequentialFeatureSelector
 
 # see https://scikit-learn.org/stable/modules/feature_selection.html
@@ -246,18 +247,19 @@ def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     return ret
 
 
-def select_stepwise_features(
+def preselect_stepwise_features(
     df: DataFrame,
-    estimator: Any = None,
-    n_features: int = 10,
+    classifier: Classifier,
+    n_features: int = 100,
     direction: Literal["forward", "backward"] = "forward",
 ) -> DataFrame:
+    outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
     selector = SequentialFeatureSelector(
-        estimator,
+        estimator=get_classifier_constructor(classifier)(),
         n_features_to_select=n_features,
         direction=direction,
         scoring="accuracy",
-        cv=3,
+        cv=5,
         n_jobs=-1,
     )
     X = df.drop(columns="target")
@@ -265,5 +267,23 @@ def select_stepwise_features(
     selector.fit(X, y)
     column_idx = selector.get_support()
     reduced = X.loc[:, column_idx].copy()
-    reduced["target"] = y.copy()
+    reduced["target"] = y
+    reduced.to_json(outfile)
     return reduced
+
+
+def select_stepwise_features(
+    df: DataFrame,
+    classifier: Classifier,
+    n_features: int = 10,
+    direction: Literal["forward", "backward"] = "forward",
+) -> DataFrame:
+    outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
+    if outfile.exists():
+        return pd.read_json(outfile)
+    return preselect_stepwise_features(
+        df=df,
+        classifier=classifier,
+        n_features=n_features,
+        direction=direction
+    )

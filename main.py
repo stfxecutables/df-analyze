@@ -77,6 +77,18 @@ def pbar_desc(args: Dict[str, Any]) -> str:
 
 
 if __name__ == "__main__":
+
+    classifier_analysis(
+        "svm",
+        feature_selection="step-down",
+        n_features=20,
+        htune_trials=20,
+        htune_validation=5,
+        test_validation=10,
+    )
+    sys.exit()
+
+
     ARGS = TEST_ARGS
 
     results = []

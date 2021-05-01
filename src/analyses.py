@@ -50,18 +50,12 @@ def select_features(
         df = select_features_by_univariate_rank(df_most, metric=selection, n_features=n_features)
     elif selection == "step-down":
         df = select_stepwise_features(
-            df_most,
-            estimator=get_classifier_constructor(classifier)(),
-            n_features=n_features,
-            direction="backward",
+            df_most, classifier=classifier, n_features=n_features, direction="backward"
         )
         raise NotImplementedError()
     elif selection == "step-down":
         df = select_stepwise_features(
-            df_most,
-            estimator=get_classifier_constructor(classifier)(),
-            n_features=n_features,
-            direction="forward",
+            df_most, classifier=classifier, n_features=n_features, direction="forward"
         )
         raise NotImplementedError()
     elif selection == "minimal":
