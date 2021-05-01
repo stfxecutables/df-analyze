@@ -256,6 +256,7 @@ def hypertune_classifier(
     y_train: DataFrame,
     n_trials: int = 200,
     cv_method: CVMethod = 5,
+    verbosity: int = optuna.logging.ERROR,
 ) -> HtuneResult:
     OBJECTIVES: Dict[str, Callable] = {
         "rf": rf_objective(X_train, y_train, cv_method),
@@ -267,6 +268,7 @@ def hypertune_classifier(
     # HYPERTUNING
     objective = OBJECTIVES[classifier]
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    optuna.logging.set_verbosity(verbosity)
     study.optimize(objective, n_trials=n_trials)
 
     val_method = cv_desc(cv_method)
@@ -294,7 +296,8 @@ def evaluate_hypertuned(
     y_train: DataFrame,
     X_test: Optional[DataFrame] = None,
     y_test: Optional[DataFrame] = None,
-) -> Tuple[float, float, float, float]:
+    log: bool = True,
+) -> Dict[str, Any]:
     classifier = htuned.classifier
     params = htuned.best_params
     args = mlp_args_from_params(params) if classifier == "mlp" else params
@@ -307,13 +310,22 @@ def evaluate_hypertuned(
         acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
         auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
         desc = cv_desc(cv_method)
+        result = dict(
+            htuned=htuned,
+            cv_method=cv_method,
+            acc=np.mean(scores["test_accuracy"]),
+            auc=np.mean(scores["test_roc_auc"]),
+            acc_sd=np.std(scores["test_accuracy"], ddof=1),
+            auc_sd=np.std(scores["test_roc_auc"], ddof=1),
+        )
+        if not log:
+            return result
         # fmt: off
-        print(f"\n{' Testing Results ':=^80}\n")
         print(f"Testing validation: {desc}")
         print(f"Accuracy:           μ = {np.round(acc_mean, 3):0.3f} (sd = {np.round(acc_sd, 4):0.4f})")  # noqa
         print(f"AUC:                μ = {np.round(auc_mean, 3):0.3f} (sd = {np.round(auc_sd, 4):0.4f})")  # noqa
         # fmt: on
-        return acc_mean, acc_sd, auc_mean, auc_sd
+        return result
     elif (X_test is not None) and (y_test is not None):
         y_pred = estimator.fit(X_train, y_train).predict(X_test)
         y_score = (
@@ -324,11 +336,21 @@ def evaluate_hypertuned(
         acc = accuracy_score(y_test, y_pred)
         auc = roc_auc_score(y_test, y_score)
         percent = int(100 * float(cv_method))
-        print(f"\n{' Testing Results ':=^80}\n")
+        scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
+        result = dict(
+            htuned=htuned,
+            cv_method=cv_method,
+            acc=np.mean(scores["test_accuracy"]),
+            auc=np.mean(scores["test_roc_auc"]),
+            acc_sd=np.nan,
+            auc_sd=np.nan,
+        )
+        if not log:
+            return result
         print(f"Testing validation: {percent}% holdout")
         print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
         print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
-        return acc, np.nan, auc, np.nan
+        return result
     else:
         raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")
 
