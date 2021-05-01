@@ -41,16 +41,6 @@ CLASSIFIERS = [
     "ann-mlp",
 ]
 
-def wrapper(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], float]:
-
-    def objective(trial: Trial) -> float:
-        # kernel = trial.suggest_categorical("kernel", choices=["rbf", "linear", "sigmoid"])
-        kernel = trial.suggest_categorical("kernel", choices=["rbf"])
-        c = trial.suggest_loguniform("C", 1e-10, 1e10)
-        svc = SVC(C=c, kernel=kernel)
-        return np.mean(cross_val_score(svc, X=X_train, y=y_train, scoring="accuracy", cv=3))
-
-    return objective
 
 
 if __name__ == "__main__":
@@ -76,7 +66,7 @@ if __name__ == "__main__":
     # print(reduced)
 
     # hypertune_classifier("svm", X_train, y_train, X_test, y_test, n_trials=100)
-    hypertune_classifier("mlp", X_train, y_train, X_test, y_test, n_trials=200)
+    hypertune_classifier("mlp", X_train, y_train, X_test, y_test, n_trials=200, mlp_args=dict(val_size=0.2))
     sys.exit()
 
 

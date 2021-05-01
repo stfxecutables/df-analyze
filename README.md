@@ -2,6 +2,38 @@
 
 To run the script do ...
 
+# Analysis Plan
+
+For each algorithm, there are n ways to hypertune:
+
+1. some kind of holdout
+  1. Create a final holdout test set (size=p in [0, 0.4]), optimize using params that give **best
+     k-fold mean accuracy k-fold on the training set** (means each train set is really size (1 - p) x
+     (1 - 1/k)) and **report final test accuracy** of classifier trained on full training set and
+  2. Create train, val, test sets, optimize using params that give **best validation accuracy**
+     training on training set, **report final test accuracy**
+  3. maybe LOOCV here?, e.g. fit using LOOCV, evaluate using k-fold?
+  4. Maybe a 20% Monte-Carlo about 20 times would be better here than either k-fold or LOOCV given
+     the tiny dataset (or at least for e.g. MLP which is so sensitive to train set)
+1. just overfit (overestimate accuracy)
+  1. E.g. just run optimizer with k-fold on the whole data (no held-out split) and mean accs and
+     mean AUCs are reported as is
+  2. do above but with LOOCV instead
+
+For each way to hypertune, there are f model-agnostic ways to select features:
+
+1. univariate
+  1. d
+  2. AUC
+  3. pearson
+2. PCA
+3. KernelPCA
+
+But then there are the more annoying model-specific versions:
+
+1. step-up
+2. step-down
+
 # Data Notes
 
 - the dataframe is divided into one for schizophrenia and one for normals in variables titled

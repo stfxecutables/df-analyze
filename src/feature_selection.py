@@ -48,6 +48,8 @@ from src._sequential import SequentialFeatureSelector
 # for SVM-based feature selection, LASSO based feature selction, and RF-based feature-selection
 # using SelectFromModel
 FlatArray = Union[DataFrame, Series, ndarray]
+UnivariateMetric = Literal["d", "auc", "pearson", "spearman"]
+CorrMethod = Literal["pearson", "spearman"]
 
 
 def cohens_d(df: DataFrame) -> Series:
@@ -101,7 +103,7 @@ def auroc(df: DataFrame) -> Series:
     return rescaled
 
 
-def correlations(df: DataFrame, method: Literal["pearson", "spearman"] = "pearson") -> Series:
+def correlations(df: DataFrame, method: CorrMethod = "pearson") -> Series:
     """For each feature in `df` compute the ABSOLUTE correlation with the target variable.
 
     Parameters
@@ -146,9 +148,8 @@ def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
     df_c.to_json(UNCORRELATED)
     print(f"Saved uncorrelated features to {UNCORRELATED}")
 
-
 def select_features_by_univariate_rank(
-    df: DataFrame, metric: Literal["d", "auc", "pearson", "spearman"], n_features: int = 10
+    df: DataFrame, metric: UnivariateMetric,
 ) -> DataFrame:
     """Naively select features based on their univariate relation with the target variable.
 

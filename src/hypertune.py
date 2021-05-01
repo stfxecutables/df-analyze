@@ -26,17 +26,17 @@ Kernel = Literal["rbf", "linear", "sigmoid"]
 LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
+N_SPLITS = 5
 
-def svm_objective(
-    X_train: DataFrame, y_train: DataFrame, kernels: List[Kernel]=["rbf", "linear"]
-) -> Callable[[Trial], float]:
+
+def svm_objective(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
         args: Dict = dict(
-            kernel=trial.suggest_categorical("kernel", choices=kernels),
+            kernel=trial.suggest_categorical("kernel", choices=["rbf"]),
             C=trial.suggest_loguniform("C", 1e-10, 1e10),
         )
         svc = SVC(**args)
-        return float(np.mean(cv(svc, X=X_train, y=y_train, scoring="accuracy", cv=3)))
+        return float(np.mean(cv(svc, X=X_train, y=y_train, scoring="accuracy", cv=N_SPLITS)))
 
     return objective
 
@@ -50,7 +50,7 @@ def rf_objective(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], fl
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
         rf = RF(**args, n_jobs=2)
-        return float(np.mean(cv(rf, X=X_train, y=y_train, scoring="accuracy", cv=3)))
+        return float(np.mean(cv(rf, X=X_train, y=y_train, scoring="accuracy", cv=N_SPLITS)))
 
     return objective
 
@@ -63,7 +63,7 @@ def dtree_objective(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial],
             max_depth=trial.suggest_int("max_depth", 2, 50),
         )
         dt = DTreeClassifier(**args)
-        return float(np.mean(cv(dt, X=X_train, y=y_train, scoring="accuracy", cv=3)))
+        return float(np.mean(cv(dt, X=X_train, y=y_train, scoring="accuracy", cv=N_SPLITS)))
 
     return objective
 
@@ -76,7 +76,7 @@ def logistic_bagging_objective(X_train: DataFrame, y_train: DataFrame) -> Callab
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
         bc = BaggingClassifier(base_estimator=LR(solver=LR_SOLVER), random_state=SEED, **args)
-        return float(np.mean(cv(bc, X=X_train, y=y_train, scoring="accuracy", cv=3)))
+        return float(np.mean(cv(bc, X=X_train, y=y_train, scoring="accuracy", cv=N_SPLITS)))
 
     return objective
 
@@ -85,9 +85,11 @@ def logistic_bagging_objective(X_train: DataFrame, y_train: DataFrame) -> Callab
 def bagger(**kwargs) -> Any:
     return BaggingClassifier(base_estimator=LR(solver=LR_SOLVER), **kwargs)
 
+
 def mlp_layers(l1: int, l2: int, l3: int, l4: int, l5: int) -> Tuple[int, ...]:
     layers = [l1, l2, l3, l4, l5]
     return tuple([layer for layer in layers if layer > 0])
+
 
 def mlp_args_from_params(params: Dict) -> Dict:
     d = {**params}
@@ -100,10 +102,16 @@ def mlp_args_from_params(params: Dict) -> Dict:
     return d
 
 
-def mlp_objective(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], float]:
-    # df = X_train.copy()
-    # df["target"] = y_train
-    # X_train, X_test, y_train, y_test = train_val_splits(df)
+def mlp_objective(
+    X_train: DataFrame, y_train: DataFrame, val_size: float = VAL_SIZE
+) -> Callable[[Trial], float]:
+    if val_size > 0:
+        df = X_train.copy()
+        df["target"] = y_train
+        X_train, X_test, y_train, y_test = train_val_splits(df, val_size)
+    else:
+        X_test, y_test = X_train, y_train
+
     def objective(trial: Trial) -> float:
         l1 = trial.suggest_categorical("l1", choices=MLP_LAYER_SIZES)
         l2 = trial.suggest_categorical("l2", choices=MLP_LAYER_SIZES)
@@ -112,21 +120,22 @@ def mlp_objective(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], f
         l5 = trial.suggest_categorical("l5", choices=MLP_LAYER_SIZES)
         args: Dict = dict(
             hidden_layer_sizes=mlp_layers(l1, l2, l3, l4, l5),
-            activation="relu",
-            solver="adam",
+            activation=trial.suggest_categorical("activation", ["relu"]),
+            solver=trial.suggest_categorical("solver", ["adam"]),
             # alpha=trial.suggest_loguniform("alpha", 1e-8, 1e-1),
             alpha=trial.suggest_loguniform("alpha", 1e-6, 1e-1),
-            batch_size=trial.suggest_categorical("batch_size", choices=[8, 16, 32, 64]),
-            learning_rate=trial.suggest_categorical("learning_rate", choices=["constant", "adaptive"]),
+            batch_size=trial.suggest_categorical("batch_size", choices=[8, 16, 32]),
+            learning_rate=trial.suggest_categorical(
+                "learning_rate", choices=["constant", "adaptive"]
+            ),
             learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 5e-1),
-            max_iter=300,
-            early_stopping=True,
-            validation_fraction=0.3,
+            max_iter=trial.suggest_categorical("max_iter", [100]),
+            early_stopping=trial.suggest_categorical("early_stopping", [False]),
+            validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
         )
         mlp = MLP(**args)
         mlp.fit(X_train, y_train.astype(float))
-        # return float(mlp.score(X_test, y_test.astype(float)))
-        return float(mlp.score(X_train, y_train.astype(float)))
+        return float(mlp.score(X_test, y_test.astype(float)))
 
     return objective
 
@@ -138,13 +147,13 @@ def hypertune_classifier(
     X_test: DataFrame,
     y_test: DataFrame,
     n_trials: int = 100,
-    objective_args: Dict = {},
+    mlp_args: Dict = {},
 ) -> DataFrame:
     OBJECTIVES: Dict[str, Callable] = {
         "rf": rf_objective(X_train, y_train),
-        "svm": svm_objective(X_train, y_train, **objective_args),
+        "svm": svm_objective(X_train, y_train),
         "dtree": dtree_objective(X_train, y_train),
-        "mlp": mlp_objective(X_train, y_train),
+        "mlp": mlp_objective(X_train, y_train, **mlp_args),
         "bag": logistic_bagging_objective(X_train, y_train),
     }
     CLASSIFIERS: Dict[str, Callable[[Any], Any]] = {
@@ -163,7 +172,7 @@ def hypertune_classifier(
     study.optimize(objective, n_trials=n_trials)
     print("Best params:", study.best_params)
     if classifier != "mlp":
-        print("Best 3-Fold Accuracy on Training Set:", study.best_value)
+        print(f"Best {N_SPLITS}-Fold Accuracy on Training Set:", study.best_value)
     else:
         print("Best Accuracy on MLP Validation Set:", study.best_value)
     args = mlp_args_from_params(study.best_params) if classifier == "mlp" else study.best_params
@@ -174,9 +183,11 @@ def hypertune_classifier(
     print("Test Accuracy:", test_acc)
 
 
-def train_val_splits(df: DataFrame) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
+def train_val_splits(
+    df: DataFrame, val_size: float = VAL_SIZE
+) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
     train, val = train_test_split(
-        df, test_size=VAL_SIZE, random_state=SEED, shuffle=True, stratify=df.target
+        df, test_size=val_size, random_state=SEED, shuffle=True, stratify=df.target
     )
     X_train = train.drop(columns="target")
     X_val = val.drop(columns="target")
