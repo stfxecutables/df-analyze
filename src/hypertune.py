@@ -1,12 +1,14 @@
 import numpy as np
 import optuna
 
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Tuple, Union, Optional
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, Optional
 from typing_extensions import Literal
 
 from numpy import ndarray
 from optuna import Trial
+from optuna.study import Study
+from optuna.trial import FrozenTrial
 from pandas import DataFrame
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier as RF
@@ -16,7 +18,15 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.neural_network import MLPClassifier as MLP
 from sklearn.linear_model import LogisticRegression as LR
 from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier
-from sklearn.model_selection import train_test_split, cross_val_score as cv
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.model_selection import (
+    train_test_split,
+    cross_val_score as cvs,
+    cross_validate as cv,
+    LeaveOneOut,
+    StratifiedShuffleSplit,
+    BaseCrossValidator,
+)
 
 from src.cleaning import get_clean_data
 from src.constants import VAL_SIZE, SEED
@@ -24,29 +34,34 @@ from src.constants import VAL_SIZE, SEED
 Estimator = Union[RF, SVC, DTreeClassifier, MLP, BaggingClassifier]
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
 Kernel = Literal["rbf", "linear", "sigmoid"]
-CVMethod = Literal["cv", "loocv", "mc"]
+CVMethod = Union[int, float, Literal["loocv", "mc"]]
+Splits = Iterable[Tuple[ndarray, ndarray]]
 
 LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
 N_SPLITS = 5
+TEST_SCORES = ["accuracy", "roc_auc"]
 
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
 class HtuneResult:
-    classifier: str
+    classifier: Classifier
     n_trials: int
     cv_method: CVMethod
-    k: int
-    mean_acc: ndarray = np.nan
-    mean_auc: ndarray = np.nan
-    test_acc: ndarray = np.nan
-    test_auc: ndarray = np.nan
+    val_acc: float = np.nan
+    best_params: Dict = field(default_factory=dict)
 
 
 def train_val_splits(
     df: DataFrame, val_size: float = VAL_SIZE
 ) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
+    """Split data.
+
+    Returns
+    -------
+    X_train, X_val, y_train, y_val
+    """
     train, val = train_test_split(
         df, test_size=val_size, random_state=SEED, shuffle=True, stratify=df.target
     )
@@ -57,22 +72,44 @@ def train_val_splits(
     return X_train, X_val, y_train, y_val
 
 
+def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCrossValidator]:
+    if isinstance(cv_method, int):
+        return int(cv_method)
+    if isinstance(cv_method, float):  # stratified holdout
+        if cv_method <= 0 or cv_method >= 1:
+            raise ValueError("Holdout test_size must be in (0, 1)")
+        test_size = cv_method
+        y = np.array(y_train).ravel()
+        idx = np.arange(y.shape[0])
+        return [
+            train_test_split(idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y)
+        ]
+    cv_method = str(cv_method).lower()  # type: ignore
+    if cv_method == "loocv":
+        return LeaveOneOut()
+    if cv_method == "mc":
+        return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
+    raise ValueError("Invalid `cv_method`")
+
+
 def svm_objective(
-    X_train: DataFrame, y_train: DataFrame, k: int = N_SPLITS
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
         args: Dict = dict(
             kernel=trial.suggest_categorical("kernel", choices=["rbf"]),
             C=trial.suggest_loguniform("C", 1e-10, 1e10),
         )
-        svc = SVC(**args)
-        return float(np.mean(cv(svc, X=X_train, y=y_train, scoring="accuracy", cv=k)))
+        _cv = get_cv(y_train, cv_method)
+        estimator = SVC(**args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        return float(np.mean(scores["test_score"]))
 
     return objective
 
 
 def rf_objective(
-    X_train: DataFrame, y_train: DataFrame, k: int = N_SPLITS
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
         args: Dict = dict(
@@ -81,14 +118,16 @@ def rf_objective(
             max_depth=trial.suggest_int("max_depth", 2, 50),
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
-        rf = RF(**args, n_jobs=2)
-        return float(np.mean(cv(rf, X=X_train, y=y_train, scoring="accuracy", cv=k)))
+        _cv = get_cv(y_train, cv_method)
+        estimator = RF(**args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        return float(np.mean(scores["test_score"]))
 
     return objective
 
 
 def dtree_objective(
-    X_train: DataFrame, y_train: DataFrame, k: int = N_SPLITS
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
         args: Dict = dict(
@@ -96,14 +135,16 @@ def dtree_objective(
             splitter=trial.suggest_categorical("splitter", ["best", "random"]),
             max_depth=trial.suggest_int("max_depth", 2, 50),
         )
-        dt = DTreeClassifier(**args)
-        return float(np.mean(cv(dt, X=X_train, y=y_train, scoring="accuracy", cv=k)))
+        _cv = get_cv(y_train, cv_method)
+        estimator = DTreeClassifier(**args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        return float(np.mean(scores["test_score"]))
 
     return objective
 
 
 def logistic_bagging_objective(
-    X_train: DataFrame, y_train: DataFrame, k: int = N_SPLITS
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
         args: Dict = dict(
@@ -111,8 +152,12 @@ def logistic_bagging_objective(
             max_features=trial.suggest_uniform("max_features", 0, 1),
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
-        bc = BaggingClassifier(base_estimator=LR(solver=LR_SOLVER), random_state=SEED, **args)
-        return float(np.mean(cv(bc, X=X_train, y=y_train, scoring="accuracy", cv=k)))
+        _cv = get_cv(y_train, cv_method)
+        estimator = BaggingClassifier(
+            base_estimator=LR(solver=LR_SOLVER), random_state=SEED, **args
+        )
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        return float(np.mean(scores["test_score"]))
 
     return objective
 
@@ -139,7 +184,7 @@ def mlp_args_from_params(params: Dict) -> Dict:
 
 
 def mlp_objective(
-    X_train: DataFrame, y_train: DataFrame, val_size: float = VAL_SIZE, k: int = N_SPLITS
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5, val_size: float = VAL_SIZE
 ) -> Callable[[Trial], float]:
     if val_size > 0:
         df = X_train.copy()
@@ -171,6 +216,10 @@ def mlp_objective(
         )
         mlp = MLP(**args)
         mlp.fit(X_train, y_train.astype(float))
+        # y_pred = mlp.predict(X_test)
+        # acc = accuracy_score(y_test, y_pred)
+        # y_score = mlp.predict_proba(X_test)
+        # auc = roc_auc_score(y_test, y_score)
         return float(mlp.score(X_test, y_test.astype(float)))
 
     return objective
@@ -192,29 +241,40 @@ def hypertune_classifier(
     classifier: Classifier,
     X_train: DataFrame,
     y_train: DataFrame,
-    X_test: Optional[DataFrame],
-    y_test: Optional[DataFrame],
     n_trials: int = 200,
-    cv_method: CVMethod = "cv",
-    k: int = N_SPLITS,
+    cv_method: CVMethod = 5,
     mlp_args: Dict = {},
-) -> DataFrame:
+) -> HtuneResult:
     OBJECTIVES: Dict[str, Callable] = {
-        "rf": rf_objective(X_train, y_train, k),
-        "svm": svm_objective(X_train, y_train, k),
-        "dtree": dtree_objective(X_train, y_train, k),
-        "mlp": mlp_objective(X_train, y_train, k, **mlp_args),
-        "bag": logistic_bagging_objective(X_train, y_train, k),
+        "rf": rf_objective(X_train, y_train, cv_method),
+        "svm": svm_objective(X_train, y_train, cv_method),
+        "dtree": dtree_objective(X_train, y_train, cv_method),
+        "mlp": mlp_objective(X_train, y_train, cv_method, **mlp_args),
+        "bag": logistic_bagging_objective(X_train, y_train, cv_method),
     }
+    # HYPERTUNING
     objective = OBJECTIVES[classifier]
     constructor = get_classifier_constructor(name=classifier)
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
     study.optimize(objective, n_trials=n_trials)
+
+    # RESULTS
     print("Best params:", study.best_params)
+    acc = np.round(study.best_value, 3)
     if classifier != "mlp":
-        print(f"Best {k}-Fold Accuracy on Training Set:", study.best_value)
+        print(f"Best {cv_method}-Fold Accuracy on Training Set: {acc:0.3f}")
     else:
-        print("Best Accuracy on MLP Validation Set:", study.best_value)
+        print(f"Best Accuracy on MLP Validation Set: {acc:0.3f}")
+
+    return HtuneResult(
+        classifier=classifier,
+        n_trials=n_trials,
+        cv_method=cv_method,
+        val_acc=study.best_value,
+        best_params=study.best_params,
+    )
+
+    # TESTING
     args = mlp_args_from_params(study.best_params) if classifier == "mlp" else study.best_params
     estimator: Any = constructor(**args)
     X_test = X_train if X_test is None else X_test
@@ -223,3 +283,39 @@ def hypertune_classifier(
         print("Running final MLP test...")
     test_acc = estimator.fit(X_train, y_train).score(X_test, y_test)
     print("Test Accuracy:", test_acc)
+
+
+def evaluate_hypertuned(
+    htuned: HtuneResult,
+    cv_method: CVMethod,
+    X_train: DataFrame,
+    y_train: DataFrame,
+    X_test: Optional[DataFrame] = None,
+    y_test: Optional[DataFrame] = None,
+) -> Any:
+    classifier = htuned.classifier
+    estimator = get_classifier_constructor(classifier)(**htuned.best_params)
+    if (X_test is None) and (y_test is None):
+        _cv = get_cv(y_train, cv_method)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=TEST_SCORES, cv=_cv)
+        acc_mean = float(np.mean(scores["test_accuracy"]))
+        auc_mean = float(np.mean(scores["test_roc_auc"]))
+        acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
+        auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
+        print("Hypertuned model performance:")
+        print(f"  Accuracy: μ={np.round(acc_mean, 3):0.3f} ({np.round(acc_sd, 4):0.4f})")
+        print(f"  AUC:      μ={np.round(auc_mean, 3):0.3f} ({np.round(auc_sd, 4):0.4f})")
+    elif (X_test is not None) and (y_test is not None):
+        y_pred = estimator.fit(X_train, y_train).predict(X_test)
+        y_score = (
+            estimator.decision_function(X_test)
+            if classifier != "mlp"
+            else estimator.predict_proba(X_test)
+        )
+        acc = accuracy_score(y_test, y_pred)
+        auc = roc_auc_score(y_test, y_score)
+        percent = int(100 * float(cv_method))
+        print(f"Hypertuned model performance on final {percent}% holdout set:")
+        print(f"  Accuracy: μ={np.round(acc, 3):0.3f} ({np.round(acc, 4):0.4f})")
+        print(f"  AUC:      μ={np.round(auc, 3):0.3f} ({np.round(auc, 4):0.4f})")
+

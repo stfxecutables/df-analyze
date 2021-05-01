@@ -132,24 +132,32 @@ def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
     """Remove constant, low-information, and highly-correlated (> 0.95) features"""
     if UNCORRELATED.exists():
         return pd.read_json(UNCORRELATED)
-    print("Starting shape: ", df.shape)
-    df_v = remove_single_value_features(df)
-    print("Shape after removing constant features: ", df_v.shape)
-    df_i = remove_low_information_features(df_v)
-    print("Shape after removing low-information features: ", df_i.shape)
+
+    X = df.drop(columns="target")
+    y = df["target"].copy()
+
+    print("Starting shape: ", X.shape)
+    X_v = remove_single_value_features(X)
+    print("Shape after removing constant features: ", X_v.shape)
+    X_i = remove_low_information_features(X_v)
+    print("Shape after removing low-information features: ", X_i.shape)
     if not decorrelate:
-        return df_i
+        return X_i
     print(
         "Removing highly-correlated features."
         "NOTE: this could take a while when there are 1000+ features."
     )
-    df_c = remove_highly_correlated_features(df_i)
-    print("Shape after removing highly-correlated features: ", df_c.shape)
-    df_c.to_json(UNCORRELATED)
+    X_c = remove_highly_correlated_features(X_i)
+    print("Shape after removing highly-correlated features: ", X_c.shape)
+    X_c.to_json(UNCORRELATED)
     print(f"Saved uncorrelated features to {UNCORRELATED}")
+    ret = X_c.copy()
+    ret["target"] = y
+    return ret
+
 
 def select_features_by_univariate_rank(
-    df: DataFrame, metric: UnivariateMetric,
+    df: DataFrame, metric: UnivariateMetric, n_features: int = 10
 ) -> DataFrame:
     """Naively select features based on their univariate relation with the target variable.
 
@@ -169,6 +177,8 @@ def select_features_by_univariate_rank(
     reduced: DataFrame
         Data with reduced feature set.
     """
+    X = df.drop(columns="target")
+    y = df["target"].copy()
     importances = None
     if metric.lower() == "d":
         importances = cohens_d(df).sort_values(ascending=False)
@@ -179,7 +189,9 @@ def select_features_by_univariate_rank(
     else:
         raise ValueError("Invalid metric")
     strongest = importances[:n_features]
-    return df.loc[:, strongest.index]
+    reduced = df.loc[:, strongest.index]
+    reduced["target"] = y
+    return reduced
 
 
 def get_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
@@ -199,9 +211,14 @@ def get_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     reduced: DataFrame
         Feature-reduced DataFrame
     """
+    # if you make this a series assigning to re["target"] later CREATES A FUCKING NAN
+    y = df["target"].to_numpy()
+    X = df.drop(columns="target")
     pca = PCA(n_features, svd_solver="full", whiten=True)
-    reduced = pca.fit_transform(df)
-    return DataFrame(data=reduced, columns=[f"pca-{i}" for i in range(reduced.shape[1])])
+    reduced = pca.fit_transform(X)
+    ret = DataFrame(data=reduced, columns=[f"pca-{i}" for i in range(reduced.shape[1])])
+    ret["target"] = y
+    return ret
 
 
 def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
@@ -220,9 +237,13 @@ def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     reduced: DataFrame
         Feature-reduced DataFrame
     """
+    y = df["target"].to_numpy()
+    X = df.drop(columns="target")
     kpca = KernelPCA(n_features, kernel="rbf", random_state=SEED, n_jobs=-1)
-    reduced = kpca.fit_transform(df)
-    return DataFrame(data=reduced, columns=[f"kpca-{i}" for i in range(reduced.shape[1])])
+    reduced = kpca.fit_transform(X)
+    ret = DataFrame(data=reduced, columns=[f"kpca-{i}" for i in range(reduced.shape[1])])
+    ret["target"] = y
+    return ret
 
 
 def select_stepwise_features(
@@ -240,9 +261,7 @@ def select_stepwise_features(
         n_jobs=-1,
     )
     X = df.drop(columns="target")
-    y = (
-        df["target"].copy().astype(int)
-    )  # ensure cross-val uses stratified by making it int (see docs)
+    y = df["target"].to_numpy().astype(int)
     selector.fit(X, y)
     column_idx = selector.get_support()
     reduced = X.loc[:, column_idx].copy()
