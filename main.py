@@ -1,3 +1,5 @@
+import sys
+
 from typing import Callable
 import optuna
 import numpy as np
@@ -6,7 +8,7 @@ from optuna import Trial
 from pandas import DataFrame
 from sklearn.model_selection import train_test_split
 from src.cleaning import get_clean_data
-from src.hypertune import train_val_splits
+from src.hypertune import hypertune_classifier, train_val_splits
 from src.feature_selection import (
     auroc,
     cohens_d,
@@ -42,7 +44,8 @@ CLASSIFIERS = [
 def wrapper(X_train: DataFrame, y_train: DataFrame) -> Callable[[Trial], float]:
 
     def objective(trial: Trial) -> float:
-        kernel = trial.suggest_categorical("kernel", choices=["rbf", "linear", "sigmoid"])
+        # kernel = trial.suggest_categorical("kernel", choices=["rbf", "linear", "sigmoid"])
+        kernel = trial.suggest_categorical("kernel", choices=["rbf"])
         c = trial.suggest_loguniform("C", 1e-10, 1e10)
         svc = SVC(C=c, kernel=kernel)
         return np.mean(cross_val_score(svc, X=X_train, y=y_train, scoring="accuracy", cv=3))
@@ -71,7 +74,24 @@ if __name__ == "__main__":
     #     direction="forward"
     # )
     # print(reduced)
-    study = optuna.create_study(direction="maximize")
-    study.optimize(wrapper(X_train, y_train), n_trials=5)
+
+    # hypertune_classifier("svm", X_train, y_train, X_test, y_test, n_trials=100)
+    hypertune_classifier("mlp", X_train, y_train, X_test, y_test, n_trials=200)
+    sys.exit()
+
+
+
+
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(),
+    )
+    study.optimize(wrapper(X_train, y_train), n_trials=100)
+    print("Best params:", study.best_params)
+    print("Best 3-Fold Accuracy on Training Set:", study.best_value)
+    svc = SVC(**study.best_params)
+    test_acc = svc.fit(X_train, y_train).score(X_test, y_test)
+    print("Test Accuracy:", test_acc)
 
 
