@@ -1,4 +1,6 @@
 import sys
+from argparse import ArgumentParser
+from pathlib import Path
 from time import ctime
 from typing import Any, Dict
 
@@ -8,6 +10,7 @@ from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 from src.analyses import classifier_analysis_multitest
+from src.hypertune import Classifier
 
 TEST_ARG_OPTIONS = dict(
     classifier=["rf"],
@@ -42,8 +45,6 @@ FEATURE_SELECTION_ANALYSES = [
     "stewise_down",
 ]
 
-CLASSIFIERS = ["svm", "rf", "dtree", "lsq_bag", "ann-mlp"]
-
 
 def pbar_desc(args: Dict[str, Any]) -> str:
     classifier = args["classifier"]
@@ -61,7 +62,29 @@ def pbar_desc(args: Dict[str, Any]) -> str:
     return f"{classifier}|{selection}|{n_feat} features|htune_val={hv}"
 
 
+def get_classifier() -> Classifier:
+    CLASSIFIERS = ["svm", "rf", "dtree", "bag", "mlp"]
+    parser = ArgumentParser()
+    parser.add_argument("--classifier", choices=CLASSIFIERS, default="svm")
+    args = parser.parse_args()
+    return args.classifier
+
+
 if __name__ == "__main__":
+    # SVM - 20 minutes
+    # RF - 4-8 hours
+    # DTREE - 30 minutes
+    # BAG - 30 minutes
+    # MLP - 4 hours
+    classifier = get_classifier()
+    ARG_OPTIONS = dict(
+        classifier=[classifier],
+        # classifier=["mlp"],
+        feature_selection=["pca", "kpca", "d", "auc", "pearson"],
+        n_features=[20, 50, 100],
+        htune_validation=[5, 10],
+    )
+    ARGS = list(ParameterGrid(ARG_OPTIONS))
 
     # classifier_analysis(
     #     "bag",
@@ -84,11 +107,14 @@ if __name__ == "__main__":
         )
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
+    df.sort_values(by="acc", ascending=False, inplace=True)
     timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
+    json = Path(__file__).parent / f"results__{classifier}__{timestamp}.json"
+    csv = Path(__file__).parent / f"results__{classifier}__{timestamp}.csv"
     try:
-        df.to_json(f"results__{timestamp}.json")
+        df.to_json(json)
     except Exception:
         pass
-    df.to_csv(f"results__{timestamp}.csv")
-    print(df)
+    df.to_csv(csv)
+    print(df.sort_values(by="acc", ascending=False).to_markdown(tablefmt="simple", floatfmt="0.3f"))
     sys.exit()
