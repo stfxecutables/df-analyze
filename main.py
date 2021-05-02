@@ -1,3 +1,4 @@
+import os
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
@@ -109,8 +110,11 @@ if __name__ == "__main__":
     df = pd.concat(results, axis=0, ignore_index=True)
     df.sort_values(by="acc", ascending=False, inplace=True)
     timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    json = Path(__file__).parent / f"results__{classifier}__{timestamp}.json"
-    csv = Path(__file__).parent / f"results__{classifier}__{timestamp}.csv"
+    results_dir = Path(__file__).parent / "results"
+    if not results_dir.exists():
+        os.makedirs(results_dir, exist_ok=True)
+    json = results_dir / f"results__{classifier}__{timestamp}.json"
+    csv = results_dir / f"results__{classifier}__{timestamp}.csv"
     try:
         df.to_json(json)
     except Exception:
