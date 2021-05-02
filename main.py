@@ -33,13 +33,20 @@ from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 TEST_ARG_OPTIONS = dict(
-    classifier=["svm", "rf"],
+    classifier=["rf"],
     feature_selection=["pca", "d"],
     n_features=[10, 20],
     htune_validation=[5, "mc", 0.2],
 )
+
+# SVM - 20 minutes
+# RF - 4-8 hours
+# DTREE - 30 minutes
+# BAG - 30 minutes
+# MLP - 4 hours
 ARG_OPTIONS = dict(
     classifier=["svm", "rf", "dtree", "bag", "mlp"],
+    # classifier=["mlp"],
     feature_selection=["pca", "kpca", "d", "auc", "pearson"],
     n_features=[20, 50, 100],
     htune_validation=[5, 10],
@@ -94,10 +101,10 @@ if __name__ == "__main__":
     results = []
     pbar = tqdm(total=len(ARGS))
     for args in ARGS:
+        pbar.set_description(pbar_desc(args))
         results.append(
             classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **args)
         )
-        pbar.set_description(pbar_desc(args))
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
     timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")

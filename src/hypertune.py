@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import optuna
 
@@ -30,6 +31,7 @@ from sklearn.model_selection import (
     StratifiedShuffleSplit,
     BaseCrossValidator,
 )
+
 
 from src.cleaning import get_clean_data
 from src.constants import VAL_SIZE, SEED
@@ -120,8 +122,8 @@ def svm_objective(
             C=trial.suggest_loguniform("C", 1e-10, 1e10),
         )
         _cv = get_cv(y_train, cv_method)
-        estimator = SVC(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        estimator = SVC(cache_size=2000, **args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -138,8 +140,8 @@ def rf_objective(
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
         _cv = get_cv(y_train, cv_method)
-        estimator = RF(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        estimator = RF(n_jobs=2, **args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -156,7 +158,7 @@ def dtree_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = DTreeClassifier(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -173,9 +175,9 @@ def logistic_bagging_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = BaggingClassifier(
-            base_estimator=LR(solver=LR_SOLVER), random_state=SEED, **args
+            base_estimator=LR(solver=LR_SOLVER), random_state=SEED, n_jobs=2, **args
         )
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -229,7 +231,7 @@ def mlp_objective(
         mlp = MLP(**args)
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
-        scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv)
+        scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         acc = float(np.mean(scores["test_score"]))
         return acc
         # mlp.fit(X_train, y_train.astype(float))
@@ -269,7 +271,15 @@ def hypertune_classifier(
     objective = OBJECTIVES[classifier]
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
     optuna.logging.set_verbosity(verbosity)
+    if classifier == "mlp":
+        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
+        before = os.environ.get("PYTHONWARNINGS", "")
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+
     study.optimize(objective, n_trials=n_trials)
+
+    if classifier == "mlp":
+        os.environ["PYTHONWARNINGS"] = before
 
     val_method = cv_desc(cv_method)
     acc = np.round(study.best_value, 3)
