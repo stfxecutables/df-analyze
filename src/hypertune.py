@@ -206,12 +206,12 @@ def mlp_objective(
             activation=trial.suggest_categorical("activation", ["relu"]),
             solver=trial.suggest_categorical("solver", ["adam"]),
             # alpha=trial.suggest_loguniform("alpha", 1e-8, 1e-1),
-            alpha=trial.suggest_loguniform("alpha", 1e-6, 1e-1),
+            alpha=trial.suggest_loguniform("alpha", 1e-7, 1e-2),
             batch_size=trial.suggest_categorical("batch_size", choices=[8, 16, 32]),
             learning_rate=trial.suggest_categorical(
                 "learning_rate", choices=["constant", "adaptive"]
             ),
-            learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 5e-1),
+            learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 5e-2),
             max_iter=trial.suggest_categorical("max_iter", [100]),
             early_stopping=trial.suggest_categorical("early_stopping", [False]),
             validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
