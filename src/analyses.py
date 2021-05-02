@@ -1,32 +1,28 @@
-import pandas as pd
-import optuna
-from typing import Any, Optional, Union, List, Dict
-from typing_extensions import Literal
+from typing import Any, Dict, List, Optional, Union
 
+import optuna
+import pandas as pd
 from pandas import DataFrame
-from sklearn.model_selection import cross_validate
 from sklearn.preprocessing import StandardScaler
+from typing_extensions import Literal
 
 from src.cleaning import get_clean_data
 from src.feature_selection import (
-    remove_weak_features,
-    get_pca_features,
+    UnivariateMetric,
     get_kernel_pca_features,
+    get_pca_features,
+    remove_weak_features,
     select_features_by_univariate_rank,
     select_stepwise_features,
-    UnivariateMetric,
 )
 from src.hypertune import (
-    CVMethod,
     Classifier,
+    CVMethod,
     HtuneResult,
     evaluate_hypertuned,
-    get_classifier_constructor,
-    get_cv,
     hypertune_classifier,
     train_val_splits,
 )
-
 
 FeatureSelection = Union[
     Literal["minimal", "step-down", "step-up", "pca", "kpca"], UnivariateMetric

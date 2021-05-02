@@ -1,40 +1,28 @@
 import os
-import numpy as np
-import optuna
-
 from dataclasses import dataclass, field
 from pprint import pprint
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Union, Optional
-from typing_extensions import Literal
+from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 from warnings import filterwarnings
 
+import numpy as np
+import optuna
 from numpy import ndarray
 from optuna import Trial
-from optuna.study import Study
-from optuna.trial import FrozenTrial
 from pandas import DataFrame
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import BaggingClassifier
 from sklearn.ensemble import RandomForestClassifier as RF
-from sklearn.svm import SVC, LinearSVC
-from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
-from sklearn.ensemble import AdaBoostClassifier
-from sklearn.neural_network import MLPClassifier as MLP
-from sklearn.linear_model import LogisticRegression as LR
-from sklearn.ensemble import BaggingClassifier, GradientBoostingClassifier
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.linear_model import LogisticRegression as LR
 from sklearn.metrics import accuracy_score, roc_auc_score
-from sklearn.model_selection import (
-    train_test_split,
-    cross_val_score as cvs,
-    cross_validate as cv,
-    LeaveOneOut,
-    StratifiedShuffleSplit,
-    BaseCrossValidator,
-)
+from sklearn.model_selection import BaseCrossValidator, LeaveOneOut, StratifiedShuffleSplit
+from sklearn.model_selection import cross_validate as cv
+from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier as MLP
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
+from typing_extensions import Literal
 
-
-from src.cleaning import get_clean_data
-from src.constants import VAL_SIZE, SEED
+from src.constants import SEED, VAL_SIZE
 
 Estimator = Union[RF, SVC, DTreeClassifier, MLP, BaggingClassifier]
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
@@ -364,4 +352,3 @@ def evaluate_hypertuned(
         return result
     else:
         raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")
-

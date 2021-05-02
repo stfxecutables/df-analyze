@@ -11,39 +11,25 @@
 # contengent on the choice of regressor / classifier
 # correct way to frame this is as an overall derivative-free optimization problem where the
 # classifier choice is *just another hyperparameter*
-import sys
 
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from typing import cast, no_type_check
-from typing_extensions import Literal
+from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy import ndarray
-from pandas import DataFrame, Series
-
 from featuretools.selection import (
-    remove_single_value_features,
     remove_highly_correlated_features,
     remove_low_information_features,
+    remove_single_value_features,
 )
+from numpy import ndarray
+from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
-from sklearn.feature_selection import (
-    VarianceThreshold,
-    SelectPercentile,
-    GenericUnivariateSelect,
-    RFECV,
-    SelectFromModel,
-)
 from sklearn.metrics import roc_auc_score
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import LassoCV, LinearRegression
+from typing_extensions import Literal
 
+from src._sequential import SequentialFeatureSelector
 from src.constants import DATADIR, SEED, UNCORRELATED
 from src.hypertune import Classifier, get_classifier_constructor
-from src._sequential import SequentialFeatureSelector
 
 # see https://scikit-learn.org/stable/modules/feature_selection.html
 # for SVM-based feature selection, LASSO based feature selction, and RF-based feature-selection
@@ -282,8 +268,5 @@ def select_stepwise_features(
     if outfile.exists():
         return pd.read_json(outfile)
     return preselect_stepwise_features(
-        df=df,
-        classifier=classifier,
-        n_features=n_features,
-        direction=direction
+        df=df, classifier=classifier, n_features=n_features, direction=direction
     )

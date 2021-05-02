@@ -1,18 +1,12 @@
-from scipy.io import loadmat
+from os import PathLike
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
-from typing import cast, no_type_check
-from typing_extensions import Literal
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from numpy import ndarray
-from pandas import DataFrame, Series
+from pandas import DataFrame
+from scipy.io import loadmat
 
-from os import PathLike
-
-from src.constants import DATAFILE, DATA_JSON, CLEAN_JSON
+from src.constants import CLEAN_JSON, DATA_JSON, DATAFILE
 
 
 def clean_fs_label(s: str) -> str:
