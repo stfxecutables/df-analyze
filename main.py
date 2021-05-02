@@ -1,5 +1,6 @@
 import pandas as pd
 import sys
+from time import ctime
 
 from typing import Callable, Dict, Any, Optional
 import optuna
@@ -39,9 +40,9 @@ TEST_ARG_OPTIONS = dict(
 )
 ARG_OPTIONS = dict(
     classifier=["svm", "rf", "dtree", "bag", "mlp"],
-    feature_selection=["pca", "kpca", "d", "auc"],
+    feature_selection=["pca", "kpca", "d", "auc", "pearson"],
     n_features=[20, 50, 100],
-    htune_validation=[5, 10, "mc", 0.2],
+    htune_validation=[5, 10],
 )
 ARGS = list(ParameterGrid(ARG_OPTIONS))
 TEST_ARGS = list(ParameterGrid(TEST_ARG_OPTIONS))
@@ -78,28 +79,33 @@ def pbar_desc(args: Dict[str, Any]) -> str:
 
 if __name__ == "__main__":
 
-    classifier_analysis(
-        "svm",
-        feature_selection="step-down",
-        n_features=20,
-        htune_trials=20,
-        htune_validation=5,
-        test_validation=10,
-    )
-    sys.exit()
+    # classifier_analysis(
+    #     "bag",
+    #     feature_selection="pca",
+    #     n_features=20,
+    #     htune_trials=20,
+    #     htune_validation=5,
+    #     test_validation=10,
+    # )
+    # sys.exit()
 
-
-    ARGS = TEST_ARGS
+    # ARGS = TEST_ARGS
 
     results = []
     pbar = tqdm(total=len(ARGS))
     for args in ARGS:
         results.append(
-            classifier_analysis_multitest(htune_trials=20, verbosity=optuna.logging.INFO, **args)
+            classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **args)
         )
         pbar.set_description(pbar_desc(args))
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
+    timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
+    try:
+        df.to_json(f"results__{timestamp}.json")
+    except Exception:
+        pass
+    df.to_csv(f"results__{timestamp}.csv")
     print(df)
     sys.exit()
 
