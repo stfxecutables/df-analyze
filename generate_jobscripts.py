@@ -58,7 +58,7 @@ def generate_script(
     pythonfile = "main.py"
     stepup = " --step-up" if step_up else ""
     job_name = classifier if not step_up else f"{classifier}_step-up"
-    command = f"$PYTHON $PROJECT/analysis/{pythonfile} --classifier={classifier}{stepup}"
+    command = f"$PYTHON $PROJECT/{pythonfile} --classifier={classifier}{stepup}"
     header = HEADER.format(time=RUNTIMES[classifier], job_name=job_name)
 
     script = f"{header}{SCRIPT.format(command)}"
