@@ -122,7 +122,8 @@ def remove_correlated_custom(df: DataFrame, threshold: float = 0.95) -> DataFram
 def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
     """Remove constant, low-information, and highly-correlated (> 0.95) features"""
     if UNCORRELATED.exists():
-        return pd.read_json(UNCORRELATED)
+        cols = pd.read_json(UNCORRELATED, typ="series")
+        return df.loc[:, cols].copy()
 
     X = df.drop(columns="target")
     y = df["target"].copy()
@@ -140,8 +141,8 @@ def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
     )
     X_c = remove_highly_correlated_features(X_i)
     print("Shape after removing highly-correlated features: ", X_c.shape)
-    X_c.to_json(UNCORRELATED)
-    print(f"Saved uncorrelated features to {UNCORRELATED}")
+    X_c.columns.to_series().to_json(UNCORRELATED)
+    print(f"Saved uncorrelated feature names to {UNCORRELATED}")
     ret = X_c.copy()
     ret["target"] = y
     return ret
