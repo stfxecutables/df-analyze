@@ -21,7 +21,7 @@ HEADER = """#!/bin/bash
 #SBATCH --account=def-jlevman
 #SBATCH --time={time}
 #SBATCH --job-name={job_name}
-#SBATCH --output={job_name}%A_array%a__%j.out
+#SBATCH --output={job_name}__%j.out
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
@@ -55,7 +55,7 @@ def generate_script(
     lines: List[str]
     mlp_lines: List[str]
 
-    pythonfile = "main.py"
+    pythonfile = "run.py"
     stepup = " --step-up" if step_up else ""
     job_name = classifier if not step_up else f"{classifier}_step-up"
     command = f"$PYTHON $PROJECT/{pythonfile} --classifier={classifier}{stepup}"
