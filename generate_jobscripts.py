@@ -3,38 +3,24 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from analysis.constants import (
-    Analysis,
-    AnalysisType,
-    FEATURE_RESULTS_DIR,
-    KFOLD_REPS,
-    N_PERCENTS,
-    DOWNSAMPLE_RESULTS_DIR,
-)
-
-CLASSIFIER_CHOICES = ["knn1", "knn3", "knn5", "knn10", "lr", "svm", "rf", "ada", "mlp"]
-DATASET_CHOICES = ["diabetes", "park", "trans", "spect"]
+CLASSIFIER_CHOICES = ["svm", "dtree", "bag", "rf", "mlp"]
 SCRIPT_OUTDIR = Path(__file__).resolve().parent / "job_scripts"
 if not SCRIPT_OUTDIR.exists():
     os.makedirs(SCRIPT_OUTDIR, exist_ok=True)
 
 
 def generate_script(
-    analysis: AnalysisType = "downsample",
     time: str = "08:00:00",
     mlp_time: str = "4-00:00:00",
     kfold_reps: int = KFOLD_REPS,
-    n_percents: int = N_PERCENTS,
     cpus: int = 8,
     script_outdir: Path = SCRIPT_OUTDIR,
 ) -> Tuple[str, str]:
     lines: List[str]
     mlp_lines: List[str]
 
-    is_down = analysis is Analysis.downsample
-    pythonfile = "downsampling.py" if is_down else "feature_selection.py"
+    pythonfile = "main.py"
     job_name = "downsampling" if is_down else "feature"
     mlp_job_name = f"{job_name}_mlp"
     results_dir = DOWNSAMPLE_RESULTS_DIR if is_down else FEATURE_RESULTS_DIR
@@ -82,11 +68,11 @@ def generate_script(
     mlp_header = header.format(time=mlp_time, job_name=mlp_job_name, N=N_mlp)
 
     script = """
-PROJECT=$HOME/projects/def-jlevman/dberger/error-consistency
+PROJECT=$HOME/projects/def-jlevman/dberger/df-analyze
 
 module load python/3.8.2
 cd $SLURM_TMPDIR
-tar -xf $PROJECT/venv.tar .venv
+tar -xzf $PROJECT/venv.tar.gz .venv
 source .venv/bin/activate
 PYTHON=$(which python)
 
