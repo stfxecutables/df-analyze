@@ -49,11 +49,10 @@ def select_features(
             df_most, classifier=classifier, n_features=n_features, direction="backward"
         )
         raise NotImplementedError()
-    elif selection == "step-down":
+    elif selection == "step-up":
         df = select_stepwise_features(
             df_most, classifier=classifier, n_features=n_features, direction="forward"
         )
-        raise NotImplementedError()
     elif selection == "minimal":
         df = df_most
     elif selection == "none":
@@ -108,6 +107,7 @@ def classifier_analysis(
     htune_trials: int = 200,
     htune_validation: CVMethod = 5,
     test_validation: CVMethod = 10,
+    verbosity: int = optuna.logging.ERROR,
 ) -> None:
     """Summary
 
@@ -141,6 +141,7 @@ def classifier_analysis(
         y_train=y_train,
         n_trials=htune_trials,
         cv_method=htune_validation,
+        verbosity=verbosity,
     )
     print(f"\n{' Testing Results ':=^80}\n")
     evaluate_hypertuned(

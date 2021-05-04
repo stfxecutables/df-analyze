@@ -110,7 +110,7 @@ def svm_objective(
             C=trial.suggest_loguniform("C", 1e-10, 1e10),
         )
         _cv = get_cv(y_train, cv_method)
-        estimator = SVC(cache_size=2000, **args)
+        estimator = SVC(cache_size=500, **args)
         scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
@@ -217,9 +217,13 @@ def mlp_objective(
             validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
         )
         mlp = MLP(**args)
+        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
+        before = os.environ.get("PYTHONWARNINGS", "")
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
         scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        os.environ["PYTHONWARNINGS"] = before
         acc = float(np.mean(scores["test_score"]))
         return acc
         # mlp.fit(X_train, y_train.astype(float))

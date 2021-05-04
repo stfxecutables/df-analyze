@@ -3,14 +3,14 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 from time import ctime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import optuna
 import pandas as pd
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src.analyses import classifier_analysis_multitest
+from src.analyses import classifier_analysis, classifier_analysis_multitest
 from src.hypertune import Classifier
 
 TEST_ARG_OPTIONS = dict(
@@ -71,34 +71,7 @@ def get_classifier() -> Classifier:
     return args.classifier
 
 
-if __name__ == "__main__":
-    # SVM - 20 minutes
-    # RF - 4-8 hours
-    # DTREE - 30 minutes
-    # BAG - 30 minutes
-    # MLP - 4 hours
-    classifier = get_classifier()
-    ARG_OPTIONS = dict(
-        classifier=[classifier],
-        # classifier=["mlp"],
-        feature_selection=["pca", "kpca", "d", "auc", "pearson"],
-        n_features=[20, 50, 100],
-        htune_validation=[5, 10],
-    )
-    ARGS = list(ParameterGrid(ARG_OPTIONS))
-
-    # classifier_analysis(
-    #     "bag",
-    #     feature_selection="pca",
-    #     n_features=20,
-    #     htune_trials=20,
-    #     htune_validation=5,
-    #     test_validation=10,
-    # )
-    # sys.exit()
-
-    # ARGS = TEST_ARGS
-
+def run_analysis(args: List[Dict]) -> pd.DataFrame:
     results = []
     pbar = tqdm(total=len(ARGS))
     for args in ARGS:
@@ -121,4 +94,41 @@ if __name__ == "__main__":
         pass
     df.to_csv(csv)
     print(df.sort_values(by="acc", ascending=False).to_markdown(tablefmt="simple", floatfmt="0.3f"))
-    sys.exit()
+    return df
+
+
+if __name__ == "__main__":
+
+    # classifier_analysis(
+    #     "svm",
+    #     feature_selection="step-up",
+    #     n_features=2,
+    #     htune_trials=10,
+    #     htune_validation=5,
+    #     test_validation=10,
+    #     verbosity=optuna.logging.INFO,
+    # )
+    # sys.exit()
+
+    """
+    Runtime over-estimates for Compute Canada
+    SVM - 20 minutes
+    RF - 4-8 hours
+    DTREE - 30 minutes
+    BAG - 30 minutes
+    MLP - 4 hours
+    """
+    classifier = get_classifier()
+    ARG_OPTIONS = dict(
+        classifier=[classifier],
+        # classifier=["mlp"],
+        # feature_selection=["pca", "kpca", "d", "auc", "pearson"],
+        feature_selection=["step-up"],
+        n_features=[10, 50, 100],
+        # htune_validation=[5, 10],
+        htune_validation=[5],
+    )
+    ARGS = list(ParameterGrid(ARG_OPTIONS))
+    # ARGS = TEST_ARGS
+    run_analysis(ARGS)
+

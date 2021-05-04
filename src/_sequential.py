@@ -193,7 +193,7 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         )
 
         ddesc = "Step-up" if self.direction == "forward" else "Step-down"
-        for _ in tqdm(range(n_iterations), total=n_iterations, desc=f"{ddesc} feature selection: "):
+        for _ in tqdm(range(n_iterations), total=n_iterations, desc=f"{ddesc} feature selection: ", leave=True):
             new_feature_idx = self._get_best_new_feature(cloned_estimator, X, y, current_mask)
             current_mask[new_feature_idx] = True
 
@@ -209,7 +209,7 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         # selection (resp. backward selection)
         candidate_feature_indices = np.flatnonzero(~current_mask)
         scores = {}
-        for feature_idx in candidate_feature_indices:
+        for feature_idx in tqdm(candidate_feature_indices, total=len(candidate_feature_indices)):
             candidate_mask = current_mask.copy()
             candidate_mask[feature_idx] = True
             if self.direction == "backward":

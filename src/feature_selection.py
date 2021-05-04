@@ -12,7 +12,9 @@
 # correct way to frame this is as an overall derivative-free optimization problem where the
 # classifier choice is *just another hyperparameter*
 
+import os
 from typing import Union
+from warnings import filterwarnings
 
 import numpy as np
 import pandas as pd
@@ -24,7 +26,9 @@ from featuretools.selection import (
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
 from src._sequential import SequentialFeatureSelector
@@ -248,9 +252,17 @@ def preselect_stepwise_features(
         cv=5,
         n_jobs=-1,
     )
-    X = df.drop(columns="target")
+    X_raw = df.drop(columns="target")
     y = df["target"].to_numpy().astype(int)
+    X_arr = StandardScaler().fit_transform(X_raw)
+    X = DataFrame(data=X_arr, columns=X_raw.columns, index=X_raw.index)
+    if classifier == "mlp":
+        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
+        before = os.environ.get("PYTHONWARNINGS", "")
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
     selector.fit(X, y)
+    if classifier == "mlp":
+        os.environ["PYTHONWARNINGS"] = before
     column_idx = selector.get_support()
     reduced = X.loc[:, column_idx].copy()
     reduced["target"] = y
