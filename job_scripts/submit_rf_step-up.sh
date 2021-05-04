@@ -2,7 +2,7 @@
 #SBATCH --account=def-jlevman
 #SBATCH --time=24:00:00
 #SBATCH --job-name=rf_step-up
-#SBATCH --output=rf_step-up%A_array%a__%j.out
+#SBATCH --output=rf_step-up__%j.out
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
@@ -24,4 +24,4 @@ PYTHON=$(which python)
 # pip install --no-index --upgrade pip
 # pip install --no-index -r $PROJECT/requirements.txt
 
-$PYTHON $PROJECT/main.py --classifier=rf --step-up
+$PYTHON $PROJECT/run.py --classifier=rf --step-up
