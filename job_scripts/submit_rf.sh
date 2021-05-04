@@ -24,4 +24,4 @@ PYTHON=$(which python)
 # pip install --no-index --upgrade pip
 # pip install --no-index -r $PROJECT/requirements.txt
 
-$PYTHON $PROJECT/analysis/main.py --classifier=rf
+$PYTHON $PROJECT/main.py --classifier=rf
