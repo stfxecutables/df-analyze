@@ -82,7 +82,7 @@ def load_data() -> DataFrame:
 
 def remove_nan_features(df: DataFrame) -> DataFrame:
     """Remove columns (features) that are ALL NaN"""
-    return df.dropna(axis=1, how="all").dropna(axis=1, how="all")
+    return df.dropna(axis=1, how="any").dropna(axis=1, how="any")
 
 
 def remove_nan_samples(df: DataFrame) -> DataFrame:
