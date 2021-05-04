@@ -90,16 +90,29 @@ if __name__ == "__main__":
            svm          10      5:00      x1   (10/5)**1.55 = 2.92
            svm          50     35:00      x7   (50/5)**1.55 = 35.5
            svm         100   2:30:00     x15  (100/5)**1.55 = 103.9
-           mlp          10      ?:00      x1
+           mlp          10   2-3h:00      x1
            mlp          50     ??:00      x7
            mlp         100   ?:??:00     x15
+            rf          10   2-3h:00      x1
+            rf          50     ??:00      x7
+            rf         100   ?:??:00     x15
+           bag          10     20:00      x1
+           bag          50   ?:??:00      x7  -> estimated 2:00:00
+           bag         100   ?:??:00     x15  -> estimated 5:00:00
+         dtree          10      5:00      x1
+         dtree          50     40:00      x7
+         dtree         100   ?:??:00     x15  -> estimated 5:00:00
     """
 
     classifier, stepup = get_options()
+    n_features = [10, 50, 100]
+    if stepup and classifier == "mlp":
+        n_features = [10, 50]  # 100 features will probably take about 30 hours
+
     ARG_OPTIONS = dict(
         classifier=[classifier],
         feature_selection=["step-up"] if stepup else SELECTIONS,
-        n_features=[10, 50, 100],
+        n_features=n_features,
         htune_validation=[5],
     )
     ARGS = list(ParameterGrid(ARG_OPTIONS))
