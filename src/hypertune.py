@@ -315,7 +315,7 @@ def evaluate_hypertuned(
         desc = cv_desc(cv_method)
         result = dict(
             htuned=htuned,
-            cv_method=cv_method,
+            cv_method=htuned.cv_method,
             acc=np.mean(scores["test_accuracy"]),
             auc=np.mean(scores["test_roc_auc"]),
             acc_sd=np.std(scores["test_accuracy"], ddof=1),
