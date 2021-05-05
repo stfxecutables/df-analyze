@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 from src.hypertune import Classifier
-
 
 CLASSIFIER_CHOICES = ["svm", "dtree", "bag", "rf", "mlp"]
 RUNTIMES = {

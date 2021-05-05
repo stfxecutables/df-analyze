@@ -21,9 +21,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
-from src.sklearn_pasta._sequential import SequentialFeatureSelector
 from src.constants import DATADIR, SEED, UNCORRELATED
 from src.hypertune import Classifier, get_classifier_constructor
+from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
 FlatArray = Union[DataFrame, Series, ndarray]
 UnivariateMetric = Literal["d", "auc", "pearson", "spearman"]

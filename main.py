@@ -1,5 +1,4 @@
 import os
-import sys
 from argparse import ArgumentParser
 from pathlib import Path
 from time import ctime
@@ -10,7 +9,7 @@ import pandas as pd
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src.analyses import classifier_analysis, classifier_analysis_multitest
+from src.analyses import classifier_analysis_multitest
 from src.hypertune import Classifier
 
 TEST_ARG_OPTIONS = dict(
@@ -131,4 +130,3 @@ if __name__ == "__main__":
     ARGS = list(ParameterGrid(ARG_OPTIONS))
     # ARGS = TEST_ARGS
     run_analysis(ARGS)
-

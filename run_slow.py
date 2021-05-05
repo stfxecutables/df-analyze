@@ -12,7 +12,6 @@ from tqdm import tqdm
 from src.analyses import classifier_analysis_multitest
 from src.hypertune import Classifier
 
-
 CLASSIFIERS = ["svm", "rf", "dtree", "bag", "mlp"]
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None
@@ -115,4 +114,3 @@ if __name__ == "__main__":
     )
     ARGS = list(ParameterGrid(ARG_OPTIONS))
     run_analysis(ARGS, classifier, stepup)
-
