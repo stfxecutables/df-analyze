@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=def-jlevman
-#SBATCH --time=48:00:00
+#SBATCH --time=72:00:00
 #SBATCH --job-name=rf_step-up
 #SBATCH --output=rf_step-up__%j.out
 #SBATCH --ntasks-per-node=1
