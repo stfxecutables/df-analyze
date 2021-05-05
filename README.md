@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/364694785.svg)](https://zenodo.org/badge/latestdoi/364694785)
+
 # Setup
 
 This project uses Poetry to manage dependencies, so if you want to reproduce the results you should
