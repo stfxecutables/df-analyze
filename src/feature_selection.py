@@ -1,20 +1,11 @@
-# TODO
-# - implement step-up feature selection
-# - implement step-down feature selection
-# - extract N largest PCA components as features
-# - choose features with largest univariate separation in classes (d, AUC)
-# - smarter methods
-#   - remove correlated features
-#   - remove constant features (no variance)
-
 # NOTE: feature selection is PRIOR to hypertuning, but "what features are best" is of course
-# contengent on the choice of regressor / classifier
-# correct way to frame this is as an overall derivative-free optimization problem where the
-# classifier choice is *just another hyperparameter*
+# contengent on the choice of regressor / classifier. The correct way to frame this is as an overall
+# derivative-free optimization problem where the classifier choice is *just another hyperparameter*.
+# However, this is not possible for stepwise selection methods, which already take 5-20 hours even
+# without incorporating any tuning.
 
 import os
 from typing import Union
-from warnings import filterwarnings
 
 import numpy as np
 import pandas as pd
@@ -26,30 +17,31 @@ from featuretools.selection import (
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
-from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
-from src._sequential import SequentialFeatureSelector
+from src.sklearn_pasta._sequential import SequentialFeatureSelector
 from src.constants import DATADIR, SEED, UNCORRELATED
 from src.hypertune import Classifier, get_classifier_constructor
 
-# see https://scikit-learn.org/stable/modules/feature_selection.html
-# for SVM-based feature selection, LASSO based feature selction, and RF-based feature-selection
-# using SelectFromModel
 FlatArray = Union[DataFrame, Series, ndarray]
 UnivariateMetric = Literal["d", "auc", "pearson", "spearman"]
 CorrMethod = Literal["pearson", "spearman"]
 
 
 def cohens_d(df: DataFrame) -> Series:
-    """For each feature in `df`, compute the absolute Cohen's d values
+    """For each feature in `df`, compute the absolute Cohen's d values.
 
     Parameters
     ----------
     df: DataFrame
         DataFrame with shape (n_samples, n_features + 1) and target variable in column "target"
+
+    Returns
+    -------
+    ds: Series
+        Cohen's d values for each feature, as a Pandas Series.
     """
     X = df.drop(columns="target")
     y = df["target"].copy()
@@ -70,6 +62,11 @@ def auroc(df: DataFrame) -> Series:
     ----------
     df: DataFrame
         DataFrame with shape (n_samples, n_features + 1) and target variable in column "target"
+
+    Returns
+    -------
+    rescaled_aucs: Series
+        The rescaled AUC values (see notes) for each feature.
 
     Notes
     -----
@@ -102,6 +99,13 @@ def correlations(df: DataFrame, method: CorrMethod = "pearson") -> Series:
     df: DataFrame
         DataFrame with shape (n_samples, n_features + 1) and target variable in column "target"
 
+    method: "pearson" | "spearman" | "kendall"
+        How to correlate.
+
+    Returns
+    -------
+    corrs: Series
+        Correlations for each feature.
     """
     X = df.drop(columns="target")
     y = df["target"].copy()
@@ -109,18 +113,36 @@ def correlations(df: DataFrame, method: CorrMethod = "pearson") -> Series:
 
 
 def remove_correlated_custom(df: DataFrame, threshold: float = 0.95) -> DataFrame:
-    """TODO: implement this to greedily combine highly-correlated features instead of just dropping"""
+    """TODO: implement this to greedily combine highly-correlated features instead of just
+    dropping"""
     # corrs = np.corrcoef(df, rowvar=False)
     # rows, cols = np.where(corrs > threshold)
-    # correlated_feature_pairs = [(df.columns[i], df.columns[j]) for i, j in zip(rows, cols) if i < j]
-    # for pair in correlated_feature_pairs[:10]:
+    # correlated_pairs = [(df.columns[i], df.columns[j]) for i, j in zip(rows, cols) if i < j]
+    # for pair in correlated_pairs[:10]:
     #     print(pair)
-    # print(f"{len(correlated_feature_pairs)} correlated feature pairs total")
+    # print(f"{len(correlated_pairs)} correlated feature pairs total")
     raise NotImplementedError()
 
 
 def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
-    """Remove constant, low-information, and highly-correlated (> 0.95) features"""
+    """Remove constant, low-information, and highly-correlated (> 0.95) features using the
+    featuretools (https://www.featuretools.com/) Python API.
+
+    Parameters
+    ----------
+    df: DataFrame The DataFrame with all the original features that you desire to perform feature
+        selection on. Should have a column named "target" which contains the value to be classified
+        / predicted.
+
+    decorrelate: bool = True
+        If True, use `featuretools.remove_highly_correlated_features` to eliminate features
+        correlated at over 0.95. NOTE: this process can be quite slow.
+
+    Returns
+    -------
+    df_selected: DataFrame
+        Copy of data with selected columns. Also still includes the "target" column.
+    """
     if UNCORRELATED.exists():
         cols = pd.read_json(UNCORRELATED, typ="series")
         return df.loc[:, cols].copy()
@@ -159,7 +181,7 @@ def select_features_by_univariate_rank(
         Data with target in column named "target".
 
     metric: "d" | "auc" | "pearson" | "spearman"
-        Metric to compute for each feature
+        Metric to compute for each feature, between that feature and the target.
 
     n_features: int = 10
         How many features to select
@@ -169,7 +191,6 @@ def select_features_by_univariate_rank(
     reduced: DataFrame
         Data with reduced feature set.
     """
-    X = df.drop(columns="target")
     y = df["target"].to_numpy()
     importances = None
     if metric.lower() == "d":
@@ -177,7 +198,7 @@ def select_features_by_univariate_rank(
     elif metric.lower() == "auc":
         importances = auroc(df).sort_values(ascending=False)
     elif metric.lower() in ["pearson", "spearman"]:
-        importances = correlations(df, method=metric).sort_values(ascending=False)
+        importances = correlations(df, method=metric).sort_values(ascending=False)  # type: ignore
     else:
         raise ValueError("Invalid metric")
     strongest = importances[:n_features]
@@ -228,6 +249,11 @@ def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     -------
     reduced: DataFrame
         Feature-reduced DataFrame
+
+    Notes
+    -----
+    This seemed to result in some *very* poor classifier performance so the hyperparams here likely
+    ought to be tuned and/or selected much more carefully (TODO).
     """
     y = df["target"].to_numpy()
     X = df.drop(columns="target")
@@ -244,6 +270,8 @@ def preselect_stepwise_features(
     n_features: int = 100,
     direction: Literal["forward", "backward"] = "forward",
 ) -> DataFrame:
+    """Perform stepwise feature selection (which takes HOURS) and save the selected features in a
+    DataFrame so that subsequent runs do not need to do this again."""
     outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
     selector = SequentialFeatureSelector(
         estimator=get_classifier_constructor(classifier)(),

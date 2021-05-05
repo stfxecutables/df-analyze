@@ -10,12 +10,17 @@ from src.constants import CLEAN_JSON, DATA_JSON, DATAFILE
 
 
 def clean_fs_label(s: str) -> str:
-    """
+    """Clean the FreeSurfer column labels to ensure brevity.
+
+    Notes
+    -----
     The strings are labels of the form:
 
-    "\\stats\\wmparc.stats XXXX XXXX                        "
-    "\\stats\\aseg.stats XXXX XXXX                        "
+        "\\stats\\wmparc.stats XXXX XXXX                        "
+        "\\stats\\aseg.stats XXXX XXXX                        "
 
+    i.e. there are large amounts of trailing spaces and there may or may not be
+    a comma preceding those trailing spaces.
     """
     # get to e.g. 'aseg Brain Segmentation Volume, '
     shorter = s.replace("\\stats\\", "").replace(".stats", "").replace("  ", "")
@@ -25,7 +30,8 @@ def clean_fs_label(s: str) -> str:
 
 
 def reformat_matlab_schizo(path: PathLike) -> DataFrame:
-    """
+    """Generate a clean DataFrame from the .mat data
+
     Notes
     -----
     The data saved in the .mat file looks like this:
@@ -40,7 +46,8 @@ def reformat_matlab_schizo(path: PathLike) -> DataFrame:
         [7] HealthyAges                         (77, 1)     dtype=float64
         [8] HealthyGender                       (77, 1)     dtype=uint8
 
-    Gender variables are all either 0 or 1 only.
+    Gender variables are all either 0 or 1 only. Two healthy subjects are missing
+    age information.
     """
     p = Path(path)
     file = str(p.resolve())
@@ -94,13 +101,12 @@ def get_clean_data() -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
     if CLEAN_JSON.exists():
         return pd.read_json(CLEAN_JSON)
-
     df = load_data()
-    print(f"Shape before dropping:", df.shape)
+    print("Shape before dropping:", df.shape)
     inspect_data(df)
     df = remove_nan_features(df)
     df = remove_nan_samples(df)
-    print(f"Shape after dropping:", df.shape)
+    print("Shape after dropping:", df.shape)
     inspect_data(df)
     df.to_json(CLEAN_JSON)
     return df

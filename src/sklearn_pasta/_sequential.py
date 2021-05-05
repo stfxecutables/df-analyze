@@ -11,7 +11,7 @@ import numpy as np
 from sklearn.feature_selection._base import SelectorMixin
 from sklearn.base import BaseEstimator, MetaEstimatorMixin, clone
 # from sklearn.utils._tags import _safe_tags
-from src._tags import _safe_tags
+from src.sklearn_pasta._tags import _safe_tags
 from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import cross_val_score
 from tqdm import tqdm

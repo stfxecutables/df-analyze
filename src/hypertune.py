@@ -49,11 +49,20 @@ class HtuneResult:
 def train_val_splits(
     df: DataFrame, val_size: float = VAL_SIZE
 ) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
-    """Split data.
+    """Wrapper around `sklearn.model_selection.train_test_split` to return splits as `DataFrame`s
+    instead of numpy arrays.
+
+    Parameters
+    ----------
+    df: DataFrame
+        Data with target in column named "target".
+
+    val_size: float = 0.2
+        Percent of data to reserve for validation
 
     Returns
     -------
-    X_train, X_val, y_train, y_val
+    splits: [X_train, X_val, y_train, y_val]
     """
     train, val = train_test_split(
         df, test_size=val_size, random_state=SEED, shuffle=True, stratify=df.target
@@ -66,6 +75,22 @@ def train_val_splits(
 
 
 def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCrossValidator]:
+    """Helper to construct an object that `sklearn.model_selection.cross_validate` will accept in
+    its `cv` argument
+
+    Parameters
+    ----------
+    y_train: DataFrame
+        Needed for stratification.
+
+    cv_method: CVMethod
+        Method to create object for.
+
+    Returns
+    -------
+    cv: Union[int, Splits, BaseCrossValidator]
+        The object that can be passed into the `cross_validate` function
+    """
     if isinstance(cv_method, int):
         return int(cv_method)
     if isinstance(cv_method, float):  # stratified holdout
@@ -86,6 +111,7 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
 
 
 def cv_desc(cv_method: CVMethod) -> str:
+    """Helper for logging a readable description of the CVMethod to stdout"""
     if isinstance(cv_method, int):
         return f"stratified {cv_method}-fold"
     if isinstance(cv_method, float):  # stratified holdout
@@ -99,6 +125,12 @@ def cv_desc(cv_method: CVMethod) -> str:
     if cv_method == "mc":
         return "stratified Monte-Carlo (20 random 20%-sized test sets)"
     raise ValueError("Invalid `cv_method`")
+
+
+"""See Optuna docs (https://optuna.org/#code_ScikitLearn) for the motivation behond the closures
+below. Currently I am using closures, but this might be a BAD IDEA in parallel contexts. In any
+case, they do seem to suggest this is OK https://optuna.readthedocs.io/en/stable/faq.html
+#how-to-define-objective-functions-that-have-own-arguments, albeit by using classes or lambdas. """
 
 
 def svm_objective(
@@ -171,17 +203,25 @@ def logistic_bagging_objective(
     return objective
 
 
-# needed for uniform interface only
 def bagger(**kwargs: Any) -> Callable:
+    """Helper for uniform interface only"""
     return BaggingClassifier(base_estimator=LR(solver=LR_SOLVER), **kwargs)  # type: ignore
 
 
 def mlp_layers(l1: int, l2: int, l3: int, l4: int, l5: int) -> Tuple[int, ...]:
+    """
+    Needed for converting randomly generated layer sizes into an argument the MLP classifier can
+    understand. I strongly suspect this method mucks up Optuna's Bayesian optimization though if we
+    allow and layer to have a size zero, since this would effectively be changing the meaning of
+    that hyperparam.
+    """
     layers = [l1, l2, l3, l4, l5]
     return tuple([layer for layer in layers if layer > 0])
 
 
 def mlp_args_from_params(params: Dict) -> Dict:
+    """Convert the params returned from trial.best_params into a form that can be used by
+    MLPClassifier"""
     d = {**params}
     l1 = d.pop("l1")
     l2 = d.pop("l2")
@@ -226,8 +266,6 @@ def mlp_objective(
         os.environ["PYTHONWARNINGS"] = before
         acc = float(np.mean(scores["test_score"]))
         return acc
-        # mlp.fit(X_train, y_train.astype(float))
-        # return float(mlp.score(X_test, y_test.astype(float)))
 
     return objective
 
@@ -252,6 +290,36 @@ def hypertune_classifier(
     cv_method: CVMethod = 5,
     verbosity: int = optuna.logging.ERROR,
 ) -> HtuneResult:
+    """Core function. Uses Optuna base TPESampler (Tree-Parzen Estimator Sampler) to perform
+    Bayesian hyperparameter optimization via Gaussian processes on the classifier specified in
+    `classifier`.
+
+    Parameters
+    ----------
+    classifier: Classifier
+        Classifier to tune.
+
+    X_train: DataFrame
+        DataFrame with no target value (features only). Shape (n_samples, n_features)
+
+    y_train: DataFrame
+        Target values. Shape (n_samples,).
+
+    n_trials: int = 200
+        Number of trials to use with Optuna.
+
+    cv_method: CVMethod = 5
+        How to evaluate accuracy during tuning.
+
+    verbosity: int = optuna.logging.ERROR
+        See https://optuna.readthedocs.io/en/stable/reference/logging.html. Most useful other option
+        is `optuna.logging.INFO`.
+
+    Returns
+    -------
+    htuned: HtuneResult
+        See top of this file.
+    """
     OBJECTIVES: Dict[str, Callable] = {
         "rf": rf_objective(X_train, y_train, cv_method),
         "svm": svm_objective(X_train, y_train, cv_method),
@@ -301,6 +369,46 @@ def evaluate_hypertuned(
     y_test: Optional[DataFrame] = None,
     log: bool = True,
 ) -> Dict[str, Any]:
+    """Core function. Given teh result of hypertuning, evaluate the final parameters.
+
+    Parameters
+    ----------
+    htuned: HtuneResult
+        Results from `src.hypertune.hypertune_classifier`.
+
+    cv_method: CVMethod = 5
+        How to evaluate accuracy during tuning.
+
+    X_train: DataFrame
+        DataFrame with no target value (features only). Shape (n_samples, n_features)
+
+    y_train: DataFrame
+        Target values. Shape (n_samples,).
+
+    X_test: DataFrame = None
+        DataFrame with no target value (features only). Shape (n_test_samples, n_features), if using
+        a test sample held out during hyperparameter tuning.
+
+    y_test: DataFrame = None
+        Target values. Shape (n_test_samples,), corresponding to X_test.
+
+    log: bool = True
+        If True, print results to console.
+
+    Returns
+    -------
+    result: Dict[str, Any]
+        A dict with structure:
+
+            {
+                htuned: HtuneResult,
+                cv_method: CVMethod,  # The method used during hypertuning
+                acc: float  # mean accuracy across folds
+                auc: float  # mean AUC across folds
+                acc_sd: float  # sd of accuracy across folds
+                auc_sd: float  # sd of AUC across folds
+            }
+    """
     classifier = htuned.classifier
     params = htuned.best_params
     args = mlp_args_from_params(params) if classifier == "mlp" else params
