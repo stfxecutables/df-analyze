@@ -1,33 +1,20 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import optuna
 import pandas as pd
 from pandas import DataFrame
 from sklearn.preprocessing import StandardScaler
-from typing_extensions import Literal
 
+from src._types import Classifier, CVMethod, FeatureSelection, MultiTestCVMethod
 from src.cleaning import get_clean_data
 from src.feature_selection import (
-    UnivariateMetric,
     get_kernel_pca_features,
     get_pca_features,
     remove_weak_features,
     select_features_by_univariate_rank,
     select_stepwise_features,
 )
-from src.hypertune import (
-    Classifier,
-    CVMethod,
-    HtuneResult,
-    evaluate_hypertuned,
-    hypertune_classifier,
-    train_val_splits,
-)
-
-FeatureSelection = Union[
-    Literal["minimal", "step-down", "step-up", "pca", "kpca"], UnivariateMetric
-]
-MultiTestCVMethod = Union[int, Literal["mc"]]
+from src.hypertune import HtuneResult, evaluate_hypertuned, hypertune_classifier, train_val_splits
 
 
 def select_features(

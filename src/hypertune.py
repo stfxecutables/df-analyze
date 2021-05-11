@@ -20,14 +20,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier as MLP
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
-from typing_extensions import Literal
 
-from src.constants import SEED, VAL_SIZE
+from src._constants import SEED, VAL_SIZE
+from src._types import Classifier, CVMethod
 
-Estimator = Union[RF, SVC, DTreeClassifier, MLP, BaggingClassifier]
-Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
-Kernel = Literal["rbf", "linear", "sigmoid"]
-CVMethod = Union[int, float, Literal["loocv", "mc"]]
 Splits = Iterable[Tuple[ndarray, ndarray]]
 
 LR_SOLVER = "liblinear"

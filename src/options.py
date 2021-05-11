@@ -3,7 +3,7 @@ File for defining all options passed to `df-analyze.py`.
 """
 from argparse import ArgumentParser, Namespace, ArgumentError
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from typing import cast, no_type_check
 from typing_extensions import Literal
 from warnings import warn
@@ -11,13 +11,12 @@ from warnings import warn
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
-import seaborn as sbn
 from numpy import ndarray
 from pandas import DataFrame, Series
 
-from src.constants import CLASSIFIERS, FEATURE_CLEANINGS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
-from src.hypertune import CVMethod
+from src._constants import CLASSIFIERS, FEATURE_CLEANINGS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
+from src._types import FeatureSelection
+from src.hypertune import CVMethod, Classifier
 
 DF_HELP_STR = """
 The dataframe to analyze.
@@ -36,6 +35,10 @@ The dataframe to analyze.
     `(n_samples, n_features + 1)` where the last column is the target for either
     classification or prediction.
 """
+DFNAME_HELP_STR = """
+A unique identifier for your DataFrame to use when saving outputs. If unspecified,
+a name will be generated based on the filename passed to `--df`.
+"""
 
 Y_HELP_STR = """
 The location of the target variable for either regression or classification.
@@ -52,6 +55,23 @@ HTUNEVAL_HELP_STR = """
 If an
 """
 
+class ProgramOptions:
+    def __init__(self, cli_args: Namespace) -> None:
+        self.datapath: Path
+        self.target: str
+        self.classifiers: Set[Classifier]
+        self.feat_select: Set[FeatureSelection]
+        self.feat_clean:
+        self.drop_nan:
+        self.n_feat:
+        self.htune:
+        self.htune_val:
+        self.htune_val_size:
+        self.htune_trials:
+        self.test_val:
+        self.test_val_size:
+        self.outdir:
+        pass
 
 def resolved_path(p: str) -> Path:
     return Path(p).resolve()
@@ -73,9 +93,12 @@ def cv_size(cv_str: str) -> float:
     return cv
 
 
-def get_args() -> Namespace:
+def get_cli_args() -> Namespace:
+    """parse command line arguments"""
     parser = ArgumentParser()
     parser.add_argument("--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR)
+    # just use existing pathname instead
+    # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
     parser.add_argument(
         "--target", "-y", action="store", type=str, default="target", help=Y_HELP_STR
     )
@@ -91,7 +114,7 @@ def get_args() -> Namespace:
     parser.add_argument("--htune-trials", type=int, default=100)
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
     parser.add_argument("--test-val-size", type=cv_size, default=5)
-    parser.add_argument("--outdir", type=resolved_path, default=Path.cwd().resolve() / "df-analyze_results")
-
-
+    parser.add_argument(
+        "--outdir", type=resolved_path, default=Path.cwd().resolve() / "df-analyze_results"
+    )
     return parser.parse_args()

@@ -5,7 +5,6 @@
 # without incorporating any tuning.
 
 import os
-from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -14,20 +13,16 @@ from featuretools.selection import (
     remove_low_information_features,
     remove_single_value_features,
 )
-from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
-from src.constants import DATADIR, SEED, UNCORRELATED
+from src._constants import DATADIR, SEED, UNCORRELATED
+from src._types import CorrMethod, UnivariateMetric
 from src.hypertune import Classifier, get_classifier_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
-
-FlatArray = Union[DataFrame, Series, ndarray]
-UnivariateMetric = Literal["d", "auc", "pearson", "spearman"]
-CorrMethod = Literal["pearson", "spearman"]
 
 
 def cohens_d(df: DataFrame) -> Series:
