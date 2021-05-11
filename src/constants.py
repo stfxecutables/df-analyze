@@ -11,4 +11,5 @@ UNCORRELATED = DATADIR / "mcic_uncorrelated_cols.json"
 
 CLASSIFIERS = ["rf", "svm", "dtree", "mlp", "bag"]
 FEATURE_SELECTIONS = ["step-up", "pca", "kpca", "d", "auc", "pearson"]
+FEATURE_CLEANINGS = ["decorrelate", "constant"]
 HTUNE_VAL_METHODS = ["holdout", "kfold", "k-fold", "loocv", "mc", "none"]

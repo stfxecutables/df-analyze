@@ -16,7 +16,7 @@ import seaborn as sbn
 from numpy import ndarray
 from pandas import DataFrame, Series
 
-from src.constants import CLASSIFIERS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
+from src.constants import CLASSIFIERS, FEATURE_CLEANINGS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
 from src.hypertune import CVMethod
 
 DF_HELP_STR = """
@@ -79,15 +79,19 @@ def get_args() -> Namespace:
     parser.add_argument(
         "--target", "-y", action="store", type=str, default="target", help=Y_HELP_STR
     )
-    # below allows repeats, must be removed after
-    parser.add_argument("--classifiers", "-c", nargs="+", type=str, choices=CLASSIFIERS)
+    # NOTE: `nargs="+"` allows repeats, must be removed after
+    parser.add_argument("--classifiers", "-C", nargs="+", type=str, choices=CLASSIFIERS)
     parser.add_argument("--feat-select", "-F", nargs="+", type=str, choices=FEATURE_SELECTIONS)
-    parser.add_argument("--n-feat", "-f", type=int, default=-1)
+    parser.add_argument("--feat-clean", "-f", nargs="+", type=str, choices=FEATURE_CLEANINGS)
+    parser.add_argument("--drop-nan", "-d", choices=["all", "rows", "cols"], default="all")
+    parser.add_argument("--n-feat", type=int, default=-1)
     parser.add_argument("--htune", action="store_true")
     parser.add_argument("--htune-val", "-H", type=str, choices=HTUNE_VAL_METHODS, default="none")
     parser.add_argument("--htune-val-size", type=cv_size, default=0)
     parser.add_argument("--htune-trials", type=int, default=100)
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
     parser.add_argument("--test-val-size", type=cv_size, default=5)
+    parser.add_argument("--outdir", type=resolved_path, default=Path.cwd().resolve() / "df-analyze_results")
+
 
     return parser.parse_args()
