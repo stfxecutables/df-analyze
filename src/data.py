@@ -1,6 +1,7 @@
 import os
 
 from dataclasses import dataclass
+from hashlib import md5
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 from typing import cast, no_type_check
@@ -25,15 +26,19 @@ class Paths:
         self.selected: Path
         self.results: Path
         self.outdir: Path
+        self.cachedir: Path
 
         self.raw = options.datapath
         self.outdir = options.outdir
+        self.cachedir = self.outdir / "cached"
+        self.cleaned = self.cleaned_path(options)
 
-    def cleaning_path(self, options: ProgramOptions) -> Path:
+
+    def cleaned_path(self, options: ProgramOptions) -> Path:
         mapping = dict(zip(FEATURE_CLEANINGS, CLEANINGS_SHORT))
-        opts = sorted(map(lambda o: mapping[o], options.feat_clean))
-        label = "_".join(opts) + "_clean" if opts != [] else "clean"
-        return self.outdir / f"{label}.json"
+        opts = tuple(sorted(map(lambda o: mapping[o], options.feat_clean)))
+        hexlabel = md5(str(opts).encode()).hexdigest()
+        return self.cachedir / f"{hexlabel}.json"
 
 
 class DataResource:
@@ -41,28 +46,8 @@ class DataResource:
 
     def __init__(self, options: ProgramOptions) -> None:
         self.options: ProgramOptions = options
-        self.paths = Paths(raw=options.datapath)
-        datapath = datapath.resolve()
-        if not datapath.exists():
-            raise FileNotFoundError(f"The specified file {datapath} does not exist.")
-        if not datapath.is_file():
-            raise FileNotFoundError(f"The object at {datapath} is not a file.")
+        self.paths = Paths(options)
 
-        if outdir is None:
-            out = f"df-analyze-results__{datapath.stem}"
-            outdir = datapath.parent / out
-        outdir = outdir.resolve()
-        if outdir.exists():
-            if not outdir.is_dir():
-                raise FileExistsError(
-                    f"The specified output directory {outdir} already exists and is not a directory."
-                )
-        else:
-            os.makedirs(outdir, exist_ok=True)
-
-        self.datapath: Path = datapath
-        self.outdir: Path = outdir
-        self.cleanpath: Path = self.outdir / f"{self.id}_clean.json"
         self.id: str = datapath.stem
 
         self.raw: Optional[DataFrame] = None
