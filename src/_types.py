@@ -14,6 +14,7 @@ CorrMethod = Literal["pearson", "spearman"]
 UnivariateMetric = Literal["d", "auc", CorrMethod]
 FeatureSelection = Literal["minimal", "step-down", "step-up", "pca", "kpca", UnivariateMetric]  # noqa
 FeatureCleaning = Literal["constant", "correlated", "lowinfo"]
+DropNan = Literal["all", "rows", "cols", "columns"]
 
 # classifier-related types
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
