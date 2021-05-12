@@ -13,16 +13,21 @@ from featuretools.selection import (
     remove_low_information_features,
     remove_single_value_features,
 )
+from joblib import Memory
 from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
-from src._constants import DATADIR, SEED, UNCORRELATED
+from src._constants import DATADIR, SEED, UNCORRELATED, JOBLIB_CACHE_DIR
 from src._types import CorrMethod, UnivariateMetric
 from src.hypertune import Classifier, get_classifier_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
+
+
+FEATURE_CACHE = JOBLIB_CACHE_DIR / "__features__"
+MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
 
 
 def cohens_d(df: DataFrame) -> Series:

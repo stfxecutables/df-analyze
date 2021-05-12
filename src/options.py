@@ -4,6 +4,7 @@ File for defining all options passed to `df-analyze.py`.
 import os
 
 from argparse import ArgumentParser, Namespace, ArgumentError
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from typing import cast, no_type_check
@@ -57,19 +58,59 @@ If an
 """
 
 
+@dataclass
+class CleaningOptions:
+    """Container for HASHABLE arguments used to check whether a memoized cleaning
+    function needs to be re-computed or not. Because a change in the source file
+    results in a change in the results, that file path must be duplicated here.
+    """
+
+    datapath: Path
+    target: str
+    feat_clean: Tuple[FeatureCleaning, ...]
+    drop_nan: DropNan
+
+
+@dataclass
+class SelectionOptions:
+    """Container for HASHABLE arguments used to check whether a memoized feature selection
+    function needs to be re-computed or not. Because a change in the source file results
+    in a change in the results, that file path must be duplicated here.
+
+    Also, since feature selection depends on the cleaning choices, those must be included
+    here as well. Note that *nesting does work* with immutable dataclasses and
+    `joblib.Memory`.
+
+    However, the reason we have separate classes from ProgramOptions is also that we don't
+    want to e.g. recompute an expensive feature cleaning step (like removing correlated
+    features), just because some set of arguments *later* in the pipeline changed.
+    """
+
+    cleaning: CleaningOptions
+    classifiers: Tuple[Classifier, ...]
+    feat_select: Tuple[FeatureSelection, ...]
+    n_feat: int
+
+
 class ProgramOptions:
     """Just a container for handling CLI options and default logic (while also providing better
     typing than just using the `Namespace` from the `ArgumentParser`).
+
+    Notes
+    -----
+    For `joblib.Memory` to cache properly, we need all arguments to be hashable. This means
+    immutable (among other things) so we use `Tuple` types for arguments or options where there are
+    multiple steps to go through, e.g. feature selection.
     """
 
     def __init__(self, cli_args: Namespace) -> None:
+        # memoization-related
+        self.cleaning_options: CleaningOptions
+        self.selection_options: SelectionOptions
+        # other
         self.datapath: Path
         self.target: str
-        self.classifiers: Set[Classifier]
-        self.feat_select: Set[FeatureSelection]
-        self.feat_clean: Set[FeatureCleaning]
-        self.drop_nan: DropNan
-        self.n_feat: int
+        self.classifiers: Tuple[Classifier, ...]
         self.htune: bool
         self.htune_val: ValMethod
         self.htune_val_size: float
@@ -78,34 +119,45 @@ class ProgramOptions:
         self.test_val_size: float
         self.outdir: Path
 
+        self.datapath = self.validate_datapath(cli_args.df)
+        self.outdir = self.ensure_outdir(self.datapath, cli_args.outdir)
         self.target = cli_args.target
-        self.classifiers = set(cli_args.classifiers)
-        self.feat_select = set(cli_args.feat_select)
-        self.drop_nan = cli_args.drop_nan
-        self.n_feat = cli_args.n_feat
+        self.classifiers = tuple(sorted(set(cli_args.classifiers)))
+
+        self.cleaning_options = CleaningOptions(
+            datapath=self.datapath,
+            target=self.target,
+            feat_clean=tuple(sorted(set(cli_args.feat_clean))),
+            drop_nan=cli_args.drop_nan,
+        )
+        self.selection_options = SelectionOptions(
+            cleaning=self.cleaning_options,
+            classifiers=self.classifiers,
+            feat_select=tuple(sorted(set(cli_args.feat_select))),
+            n_feat=cli_args.n_feat,
+        )
+
         self.htune = cli_args.htune
         self.htune_val = cli_args.htune_val
         self.htune_val_size = cli_args.htune_val_size
         self.htune_trials = cli_args.htune_trials
         self.test_val = cli_args.test_val
         self.test_val_size = cli_args.test_val_size
-        self.datapath = self.validate_datapath(cli_args)
-        self.outdir = self.ensure_outdir(cli_args)
 
-    def validate_datapath(self, cli_args: Namespace) -> Path:
-        datapath = cli_args.df
+    @staticmethod
+    def validate_datapath(df_path: Path) -> Path:
+        datapath = df_path
         if not datapath.exists():
             raise FileNotFoundError(f"The specified file {datapath} does not exist.")
         if not datapath.is_file():
             raise FileNotFoundError(f"The object at {datapath} is not a file.")
         return Path(datapath).resolve()
 
-    def ensure_outdir(self, cli_args: Namespace) -> Path:
-        if cli_args.outdir is None:
-            out = f"df-analyze-results__{self.datapath.stem}"
-            outdir = self.datapath.parent / out
-        else:
-            outdir = cli_args.outdir
+    @staticmethod
+    def ensure_outdir(datapath: Path, outdir: Optional[Path]) -> Path:
+        if outdir is None:
+            out = f"df-analyze-results__{datapath.stem}"
+            outdir = datapath.parent / out
         if outdir.exists():
             if not outdir.is_dir():
                 raise FileExistsError(

@@ -1,15 +1,21 @@
 from os import PathLike
 from pathlib import Path
 from typing import Union
+from warnings import warn
 
 import numpy as np
 import pandas as pd
+import traceback
+from joblib import Memory
 from numpy import ndarray
 from pandas import DataFrame
 from scipy.io import loadmat
 
-from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE
-from src.data import DataResource
+from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE, JOBLIB_CACHE_DIR
+from src.options import CleaningOptions
+
+CLEAN_CACHE = JOBLIB_CACHE_DIR / "__cleaning__"
+MEMOIZER = Memory(location=CLEAN_CACHE, backend="local", compress=9)
 
 
 class MCIC:
@@ -135,29 +141,22 @@ def load_as_df(path: Path) -> Union[DataFrame, ndarray]:
     return df
 
 
-def remove_nan_features(df: DataFrame) -> DataFrame:
+def remove_nan_features(df: DataFrame, target: str) -> DataFrame:
     """Remove columns (features) that are ALL NaN"""
-    return df.dropna(axis=1, how="any").dropna(axis=1, how="any")
+    try:
+        y = df[target].to_numpy()
+    except Exception as e:
+        trace = traceback.format_exc()
+        raise ValueError(f"Could not convert target column to NumPy:\n{trace}") from e
+    df = df.drop(columns=target, inplace=True)
+    df.dropna(axis=1, how="any", inplace=True)
+    df[target] = y
+    return df
 
 
 def remove_nan_samples(df: DataFrame) -> DataFrame:
     """Remove rows (samples) that have ANY NaN"""
     return df.dropna(axis=0, how="any").dropna(axis=0, how="any")
-
-
-def get_clean_data(resource: DataResource) -> DataFrame:
-    """Perform minimal cleaning, like removing NaN features"""
-    if CLEAN_JSON.exists():
-        return pd.read_json(CLEAN_JSON)
-    df = load_as_df(path)
-    print("Shape before dropping:", df.shape)
-    inspect_data(df)
-    df = remove_nan_features(df)
-    df = remove_nan_samples(df)
-    print("Shape after dropping:", df.shape)
-    inspect_data(df)
-    df.to_json(CLEAN_JSON)
-    return df
 
 
 def inspect_data(df: DataFrame) -> DataFrame:
@@ -173,6 +172,26 @@ def inspect_data(df: DataFrame) -> DataFrame:
     for idx, count in nan_cols.items():
         print(f"{idx}: {count}", end=", ")
     print("")
+
+
+@MEMOIZER.cache
+def get_clean_data(options: CleaningOptions) -> DataFrame:
+    """Perform minimal cleaning, like removing NaN features"""
+    df = load_as_df(options.datapath)
+    print("Shape before dropping:", df.shape)
+    inspect_data(df)
+    if options.drop_nan in ["all", "rows"]:
+        df = remove_nan_samples(df)
+    if options.drop_nan in ["all", "cols"]:
+        df = remove_nan_features(df, target=options.target)
+    print("Shape after dropping:", df.shape)
+    if df[options.target].isnull().any():
+        warn(
+            f"DataFrame has NaN values in target variable: {options.target}. "
+            "Currently, most/all classifiers and regressors do not support this. ",
+            category=UserWarning,
+        )
+    return df
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+"""DEPRECATE: This entire file is probably unnecessary with `joblib.Memory` caching."""
 import os
 
 from dataclasses import dataclass
