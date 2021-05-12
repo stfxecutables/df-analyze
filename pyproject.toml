@@ -26,6 +26,7 @@ typing-extensions = "^3.7.4"
 featuretools = "^0.23.3"
 optuna = "^2.7.0"
 tabulate = "^0.8.9"
+joblib = "^1.0.1"
 
 [tool.poetry.dev-dependencies]
 

@@ -665,7 +665,7 @@ heapdict = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<3.10"
-content-hash = "2d5241353f1e4850b57f90e47f88042ea62c0468be412863a3718975edc0b482"
+content-hash = "c0bad61688b7a61b771c43349a3239a54a3c68f6d13efbd8051c3bf16c5d17ab"
 
 [metadata.files]
 alembic = [
