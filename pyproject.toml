@@ -27,6 +27,8 @@ featuretools = "^0.23.3"
 optuna = "^2.7.0"
 tabulate = "^0.8.9"
 joblib = "^1.0.1"
+pytest = "^6.2.4"
+coverage = "^5.5"
 
 [tool.poetry.dev-dependencies]
 
