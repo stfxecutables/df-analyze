@@ -23,6 +23,7 @@ from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 
 from src._constants import SEED, VAL_SIZE
 from src._types import Classifier, CVMethod
+from src.classifiers import get_classifier_constructor
 
 Splits = Iterable[Tuple[ndarray, ndarray]]
 
@@ -199,11 +200,6 @@ def logistic_bagging_objective(
     return objective
 
 
-def bagger(**kwargs: Any) -> Callable:
-    """Helper for uniform interface only"""
-    return BaggingClassifier(base_estimator=LR(solver=LR_SOLVER), **kwargs)  # type: ignore
-
-
 def mlp_layers(l1: int, l2: int, l3: int, l4: int, l5: int) -> Tuple[int, ...]:
     """
     Needed for converting randomly generated layer sizes into an argument the MLP classifier can
@@ -264,18 +260,6 @@ def mlp_objective(
         return acc
 
     return objective
-
-
-def get_classifier_constructor(name: Classifier) -> Callable:
-    CLASSIFIERS: Dict[str, Callable] = {
-        "rf": RF,
-        "svm": SVC,
-        "dtree": DTreeClassifier,
-        "mlp": MLP,
-        "bag": bagger,
-    }
-    constructor = CLASSIFIERS[name]
-    return constructor
 
 
 def hypertune_classifier(

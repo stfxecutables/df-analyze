@@ -18,11 +18,14 @@ from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
+from typing import List, Optional
 from typing_extensions import Literal
 
 from src._constants import DATADIR, SEED, UNCORRELATED, JOBLIB_CACHE_DIR
-from src._types import CorrMethod, UnivariateMetric
-from src.hypertune import Classifier, get_classifier_constructor
+from src._types import CorrMethod, UnivariateMetric, FeatureSelection, Classifier
+from src.classifiers import get_classifier_constructor
+from src.cleaning import get_clean_data
+from src.options import CleaningOptions, SelectionOptions
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
 
@@ -36,7 +39,8 @@ def cohens_d(df: DataFrame) -> Series:
     Parameters
     ----------
     df: DataFrame
-        DataFrame with shape (n_samples, n_features + 1) and target variable in column "target"
+        DataFrame with shape (n_samples, n_features + 1) and target variable in column
+        "target"
 
     Returns
     -------
@@ -55,13 +59,15 @@ def cohens_d(df: DataFrame) -> Series:
 
 
 def auroc(df: DataFrame) -> Series:
-    """For each feature in `df` compute rho, the common-language effect size (see Notes) via the
-    area-under-the-ROC curve (AUC), and rescale this effect size to allow sorting across features.
+    """For each feature in `df` compute rho, the common-language effect size (see Notes)
+    via the area-under-the-ROC curve (AUC), and rescale this effect size to allow sorting
+    across features.
 
     Parameters
     ----------
     df: DataFrame
-        DataFrame with shape (n_samples, n_features + 1) and target variable in column "target"
+        DataFrame with shape (n_samples, n_features + 1) and target variable in column
+        "target"
 
     Returns
     -------
@@ -70,18 +76,19 @@ def auroc(df: DataFrame) -> Series:
 
     Notes
     -----
-    This is equivalent to calculating U / abs(y1*y2), where `y1` and `y2` are the subgroup sizes,
-    and U is the Mann-Whitney U, and is also sometimes referred to as Herrnstein's rho [1] or "f",
-    the "common-language effect size" [2].
+    This is equivalent to calculating U / abs(y1*y2), where `y1` and `y2` are the subgroup
+    sizes, and U is the Mann-Whitney U, and is also sometimes referred to as Herrnstein's
+    rho [1] or "f", the "common-language effect size" [2].
 
-    Note we also *must* rescale as rho is implicity "signed", with values above 0.5 indicating
-    separation in one direction, and values below 0.5 indicating separation in the other.
+    Note we also *must* rescale as rho is implicity "signed", with values above 0.5
+    indicating separation in one direction, and values below 0.5 indicating separation in
+    the other.
 
-    [1] Herrnstein, R. J., Loveland, D. H., & Cable, C. (1976). Natural concepts in pigeons.
-        Journal of Experimental Psychology: Animal Behavior Processes, 2, 285-302
+    [1] Herrnstein, R. J., Loveland, D. H., & Cable, C. (1976). Natural concepts in
+        pigeons. Journal of Experimental Psychology: Animal Behavior Processes, 2, 285-302
 
-    [2] McGraw, K.O.; Wong, J.J. (1992). "A common language effect size statistic". Psychological
-        Bulletin. 111 (2): 361–365. doi:10.1037/0033-2909.111.2.361.
+    [2] McGraw, K.O.; Wong, J.J. (1992). "A common language effect size statistic".
+        Psychological Bulletin. 111 (2): 361–365. doi:10.1037/0033-2909.111.2.361.
     """
     X = df.drop(columns="target")
     y = df["target"].copy()
@@ -124,9 +131,11 @@ def remove_correlated_custom(df: DataFrame, threshold: float = 0.95) -> DataFram
     raise NotImplementedError()
 
 
-def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
+@MEMOIZER.cache
+def remove_weak_features(options: CleaningOptions) -> DataFrame:
     """Remove constant, low-information, and highly-correlated (> 0.95) features using the
-    featuretools (https://www.featuretools.com/) Python API.
+    featuretools (https://www.featuretools.com/) Python API. This should be run *first*
+    before other feature selection method.
 
     Parameters
     ----------
@@ -143,36 +152,31 @@ def remove_weak_features(df: DataFrame, decorrelate: bool = True) -> DataFrame:
     df_selected: DataFrame
         Copy of data with selected columns. Also still includes the "target" column.
     """
-    if UNCORRELATED.exists():
-        cols = pd.read_json(UNCORRELATED, typ="series")
-        return df.loc[:, cols].copy()
-
+    df = get_clean_data(options)
     X = df.drop(columns="target")
-    y = df["target"].copy()
+    y_orig = df["target"].to_numpy()
 
     print("Starting shape: ", X.shape)
-    X_v = remove_single_value_features(X)
-    print("Shape after removing constant features: ", X_v.shape)
-    X_i = remove_low_information_features(X_v)
-    print("Shape after removing low-information features: ", X_i.shape)
-    if not decorrelate:
-        return X_i
-    print(
-        "Removing highly-correlated features."
-        "NOTE: this could take a while when there are 1000+ features."
-    )
-    X_c = remove_highly_correlated_features(X_i)
-    print("Shape after removing highly-correlated features: ", X_c.shape)
-    X_c.columns.to_series().to_json(UNCORRELATED)
-    print(f"Saved uncorrelated feature names to {UNCORRELATED}")
-    ret = X_c.copy()
-    ret["target"] = y
-    return ret
+    if "constant" in options.feat_clean:
+        X = remove_single_value_features(X)
+        print("Shape after removing constant features: ", X.shape)
+    if "lowinfo" in options.feat_clean:
+        X = remove_low_information_features(X)
+        print("Shape after removing low-information features: ", X.shape)
+    if "correlated" in options.feat_clean:
+        print(
+            "Removing highly-correlated features."
+            "NOTE: this could take a while when there are 1000+ features."
+        )
+        X = remove_highly_correlated_features(X)
+    print("Shape after removing highly-correlated features: ", X.shape)
+    X["target"] = y_orig
+    return X
 
 
 def select_features_by_univariate_rank(
-    df: DataFrame, metric: UnivariateMetric, n_features: int = 10
-) -> DataFrame:
+    df: DataFrame, metric: UnivariateMetric, n_feat: int
+) -> Series:
     """Naively select features based on their univariate relation with the target variable.
 
     Parameters
@@ -183,7 +187,7 @@ def select_features_by_univariate_rank(
     metric: "d" | "auc" | "pearson" | "spearman"
         Metric to compute for each feature, between that feature and the target.
 
-    n_features: int = 10
+    n_feat: int = 10
         How many features to select
 
     Returns
@@ -191,7 +195,7 @@ def select_features_by_univariate_rank(
     reduced: DataFrame
         Data with reduced feature set.
     """
-    y = df["target"].to_numpy()
+    # y = df["target"].to_numpy()
     importances = None
     if metric.lower() == "d":
         importances = cohens_d(df).sort_values(ascending=False)
@@ -201,13 +205,14 @@ def select_features_by_univariate_rank(
         importances = correlations(df, method=metric).sort_values(ascending=False)  # type: ignore
     else:
         raise ValueError("Invalid metric")
-    strongest = importances[:n_features]
-    reduced = df.loc[:, strongest.index]
-    reduced["target"] = y
-    return reduced
+    strongest = importances[:n_feat]
+    # reduced = df.loc[:, strongest.index]
+    # reduced["target"] = y
+    # return reduced
+    return strongest
 
 
-def get_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
+def pca_reduce(df: DataFrame, n_features: int = 10) -> DataFrame:
     """Return a DataFrame that is the original DataFrame projected onto the space described by first
     `n_features` principal components
 
@@ -234,7 +239,7 @@ def get_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     return ret
 
 
-def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
+def kernel_pca_reduce(df: DataFrame, n_features: int = 10) -> DataFrame:
     """Return a DataFrame that is reduced via KernelPCA to `n_features` principal components.
 
     Parameters
@@ -264,15 +269,16 @@ def get_kernel_pca_features(df: DataFrame, n_features: int = 10) -> DataFrame:
     return ret
 
 
+@MEMOIZER.cache
 def preselect_stepwise_features(
     df: DataFrame,
     classifier: Classifier,
-    n_features: int = 100,
+    n_features: int,
     direction: Literal["forward", "backward"] = "forward",
 ) -> DataFrame:
     """Perform stepwise feature selection (which takes HOURS) and save the selected features in a
     DataFrame so that subsequent runs do not need to do this again."""
-    outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
+    # outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
     selector = SequentialFeatureSelector(
         estimator=get_classifier_constructor(classifier)(),
         n_features_to_select=n_features,
@@ -293,10 +299,11 @@ def preselect_stepwise_features(
     if classifier == "mlp":
         os.environ["PYTHONWARNINGS"] = before
     column_idx = selector.get_support()
-    reduced = X.loc[:, column_idx].copy()
-    reduced["target"] = y
-    reduced.to_json(outfile)
-    return reduced
+    # reduced = X.loc[:, column_idx].copy()
+    # reduced["target"] = y
+    # reduced.to_json(outfile)
+    # return reduced
+    return column_idx
 
 
 def select_stepwise_features(
@@ -311,3 +318,68 @@ def select_stepwise_features(
     return preselect_stepwise_features(
         df=df, classifier=classifier, n_features=n_features, direction=direction
     )
+
+
+def select_features(options: SelectionOptions) -> DataFrame:
+    df = remove_weak_features(options.cleaning)
+    features = select_features_by_univariate_rank(df)
+
+
+# DO NOT MEMOIZE
+def select_features(
+    options: SelectionOptions, feature_selection: Optional[FeatureSelection], classifier: Classifier
+) -> DataFrame:
+    """Dispatch function to handle executing a single feature selection option
+
+    Parameters
+    ----------
+    df_all: DataFrame
+        The DataFrame with all the original features that you desire to perform feature selection
+        on. Should have a column named "target" which contains the value to be classified /
+        predicted.
+
+    feature_selection: Optional[FeatureSelection]
+        How to select features.
+
+    n_features: int
+        Number of features (columns) to select.
+
+    classifier: Classifier
+        Classifier to use during selection. Only currently relevant if `feature_selection` is
+        stepwise.
+
+    Returns
+    -------
+    df_selected: DataFrame
+        Copy of data with selected columns. Also still includes the "target" column.
+    """
+    df = remove_weak_features(options.cleaning)
+    target = options.cleaning.target
+    y = df[options.cleaning.target].to_numpy()
+
+    n_feat = options.n_feat
+    method = str(feature_selection).lower()
+    if method == "pca":
+        df_selected = pca_reduce(df, n_feat)
+    elif method == "kpca":
+        df_selected = kernel_pca_reduce(df, n_feat)
+    elif method in ["d", "auc", "pearson", "spearman"]:
+        features = select_features_by_univariate_rank(df, metric=method, n_feat=n_feat)
+        df_selected = df.loc[:, features.index]
+        df_selected[target] = y
+    elif method == "step-down":
+        raise NotImplementedError()
+        df_selected = select_stepwise_features(
+            df, classifier=classifier, n_features=n_feat, direction="backward"
+        )
+    elif method == "step-up":
+        column_idx = select_stepwise_features(
+            df, classifier=classifier, n_features=n_feat, direction="forward"
+        )
+        df_selected = df.loc[:, column_idx]
+        df_selected[target] = y
+    elif method in ["minimal", "none"]:
+        df_selected = df
+    else:
+        raise ValueError("Invalid feature selection method")
+    return df_selected

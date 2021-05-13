@@ -174,7 +174,8 @@ def inspect_data(df: DataFrame) -> DataFrame:
     print("")
 
 
-@MEMOIZER.cache
+# this is usually really fast, no real need to memoize probably
+# @MEMOIZER.cache
 def get_clean_data(options: CleaningOptions) -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
     df = load_as_df(options.datapath)
