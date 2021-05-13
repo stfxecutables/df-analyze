@@ -5,6 +5,7 @@
 # without incorporating any tuning.
 
 import os
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -18,16 +19,14 @@ from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
-from typing import List, Optional
 from typing_extensions import Literal
 
-from src._constants import DATADIR, SEED, UNCORRELATED, JOBLIB_CACHE_DIR
-from src._types import CorrMethod, UnivariateMetric, FeatureSelection, Classifier
+from src._constants import DATADIR, JOBLIB_CACHE_DIR, SEED, UNCORRELATED
+from src._types import Classifier, CorrMethod, FeatureSelection, UnivariateMetric
 from src.classifiers import get_classifier_constructor
 from src.cleaning import get_clean_data
 from src.options import CleaningOptions, SelectionOptions
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
-
 
 FEATURE_CACHE = JOBLIB_CACHE_DIR / "__features__"
 MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
@@ -318,11 +317,6 @@ def select_stepwise_features(
     return preselect_stepwise_features(
         df=df, classifier=classifier, n_features=n_features, direction=direction
     )
-
-
-def select_features(options: SelectionOptions) -> DataFrame:
-    df = remove_weak_features(options.cleaning)
-    features = select_features_by_univariate_rank(df)
 
 
 # DO NOT MEMOIZE

@@ -2,13 +2,11 @@
 File for defining all options passed to `df-analyze.py`.
 """
 import os
-
-from argparse import ArgumentParser, Namespace, ArgumentError
+from argparse import ArgumentError, ArgumentParser, Namespace
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
-from typing import cast, no_type_check
-from typing_extensions import Literal
+from pprint import pformat
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, cast, no_type_check
 from warnings import warn
 
 import matplotlib.pyplot as plt
@@ -16,9 +14,10 @@ import numpy as np
 import pandas as pd
 from numpy import ndarray
 from pandas import DataFrame, Series
+from typing_extensions import Literal
 
 from src._constants import CLASSIFIERS, FEATURE_CLEANINGS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
-from src._types import Classifier, FeatureSelection, FeatureCleaning, DropNan, ValMethod
+from src._types import Classifier, DropNan, FeatureCleaning, FeatureSelection, ValMethod
 
 DF_HELP_STR = """
 The dataframe to analyze.
@@ -58,8 +57,15 @@ If an
 """
 
 
+class Debug:
+    def __repr__(self) -> str:
+
+        """Just a debug printer"""
+        return "".join(pformat(self.__dict__, indent=2, width=80, compact=False))
+
+
 @dataclass
-class CleaningOptions:
+class CleaningOptions(Debug):
     """Container for HASHABLE arguments used to check whether a memoized cleaning
     function needs to be re-computed or not. Because a change in the source file
     results in a change in the results, that file path must be duplicated here.
@@ -72,7 +78,7 @@ class CleaningOptions:
 
 
 @dataclass
-class SelectionOptions:
+class SelectionOptions(Debug):
     """Container for HASHABLE arguments used to check whether a memoized feature selection
     function needs to be re-computed or not. Because a change in the source file results
     in a change in the results, that file path must be duplicated here.
@@ -92,7 +98,7 @@ class SelectionOptions:
     n_feat: int
 
 
-class ProgramOptions:
+class ProgramOptions(Debug):
     """Just a container for handling CLI options and default logic (while also providing better
     typing than just using the `Namespace` from the `ArgumentParser`).
 
@@ -199,11 +205,17 @@ def get_options() -> ProgramOptions:
         "--target", "-y", action="store", type=str, default="target", help=Y_HELP_STR
     )
     # NOTE: `nargs="+"` allows repeats, must be removed after
-    parser.add_argument("--classifiers", "-C", nargs="+", type=str, choices=CLASSIFIERS)
-    parser.add_argument("--feat-select", "-F", nargs="+", type=str, choices=FEATURE_SELECTIONS)
-    parser.add_argument("--feat-clean", "-f", nargs="+", type=str, choices=FEATURE_CLEANINGS)
+    parser.add_argument(
+        "--classifiers", "-C", nargs="+", type=str, choices=CLASSIFIERS, default=["svm"]
+    )
+    parser.add_argument(
+        "--feat-select", "-F", nargs="+", type=str, choices=FEATURE_SELECTIONS, default=["pca"]
+    )
+    parser.add_argument(
+        "--feat-clean", "-f", nargs="+", type=str, choices=FEATURE_CLEANINGS, default=["constant"]
+    )
     parser.add_argument("--drop-nan", "-d", choices=["all", "rows", "cols"], default="rows")
-    parser.add_argument("--n-feat", type=int, default=-1)
+    parser.add_argument("--n-feat", type=int, default=10)
     parser.add_argument("--htune", action="store_true")
     parser.add_argument("--htune-val", "-H", type=str, choices=HTUNE_VAL_METHODS, default="none")
     parser.add_argument("--htune-val-size", type=cv_size, default=0)

@@ -1,17 +1,13 @@
-import os
-from argparse import ArgumentParser
 from pathlib import Path
-from time import ctime
-from typing import Any, Dict, List
-from pprint import pprint
+from pprint import pformat, pprint
 
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import ParameterGrid
-from tqdm import tqdm
+from pandas import DataFrame
+from scipy.io.arff import loadarff
 
-from src.options import get_cli_args
-
+from src.options import get_options
 
 if __name__ == "__main__":
-    args = get_cli_args()
-    pprint(args.__dict__, indent=2, width=80)
+    options = get_options()
+    print(options)

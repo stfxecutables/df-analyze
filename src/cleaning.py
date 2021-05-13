@@ -138,7 +138,9 @@ def load_as_df(path: Path) -> Union[DataFrame, ndarray]:
         df = DataFrame(data=arr, columns=cols)
     else:
         raise RuntimeError("Unreachable!")
-    return df
+    # pd.get_dummies is idempotent-ish so below is safe-ish
+    dummified = pd.get_dummies(df, drop_first=False)
+    return dummified
 
 
 def remove_nan_features(df: DataFrame, target: str) -> DataFrame:
