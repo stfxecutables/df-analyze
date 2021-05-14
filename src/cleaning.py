@@ -1,3 +1,4 @@
+import traceback
 from os import PathLike
 from pathlib import Path
 from typing import Union
@@ -5,7 +6,6 @@ from warnings import warn
 
 import numpy as np
 import pandas as pd
-import traceback
 from joblib import Memory
 from numpy import ndarray
 from pandas import DataFrame
@@ -111,7 +111,6 @@ class MCIC:
             return pd.read_json(CLEAN_JSON)
         df = MCIC.load_data()
         print("Shape before dropping:", df.shape)
-        inspect_data(df)
         df = remove_nan_features(df)
         df = remove_nan_samples(df)
         print("Shape after dropping:", df.shape)
@@ -150,7 +149,7 @@ def remove_nan_features(df: DataFrame, target: str) -> DataFrame:
     except Exception as e:
         trace = traceback.format_exc()
         raise ValueError(f"Could not convert target column to NumPy:\n{trace}") from e
-    df = df.drop(columns=target, inplace=True)
+    df.drop(columns=target, inplace=True)
     df.dropna(axis=1, how="any", inplace=True)
     df[target] = y
     return df
@@ -161,28 +160,12 @@ def remove_nan_samples(df: DataFrame) -> DataFrame:
     return df.dropna(axis=0, how="any").dropna(axis=0, how="any")
 
 
-def inspect_data(df: DataFrame) -> DataFrame:
-    A = df.to_numpy()
-    nan_rows = [i for i in range(A.shape[0]) if np.sum(np.isnan(A[i])) > 0]
-    print("NaN rows:\n", nan_rows)
-    nan_cols = {}
-    for i in range(A.shape[1]):
-        nan_count = np.sum(np.isnan(A[:, i]))
-        if nan_count > 0:
-            nan_cols[i] = nan_count
-    print("NaN cols:")
-    for idx, count in nan_cols.items():
-        print(f"{idx}: {count}", end=", ")
-    print("")
-
-
 # this is usually really fast, no real need to memoize probably
 # @MEMOIZER.cache
 def get_clean_data(options: CleaningOptions) -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
     df = load_as_df(options.datapath)
     print("Shape before dropping:", df.shape)
-    inspect_data(df)
     if options.drop_nan in ["all", "rows"]:
         df = remove_nan_samples(df)
     if options.drop_nan in ["all", "cols"]:
@@ -195,7 +178,3 @@ def get_clean_data(options: CleaningOptions) -> DataFrame:
             category=UserWarning,
         )
     return df
-
-
-if __name__ == "__main__":
-    df = get_clean_data()

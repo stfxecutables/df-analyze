@@ -58,9 +58,9 @@ If an
 
 
 class Debug:
-    def __repr__(self) -> str:
+    """Printing mixin a la https://doc.rust-lang.org/std/fmt/trait.Debug.html"""
 
-        """Just a debug printer"""
+    def __repr__(self) -> str:
         return "".join(pformat(self.__dict__, indent=2, width=80, compact=False))
 
 
@@ -92,7 +92,7 @@ class SelectionOptions(Debug):
     features), just because some set of arguments *later* in the pipeline changed.
     """
 
-    cleaning: CleaningOptions
+    cleaning_options: CleaningOptions
     classifiers: Tuple[Classifier, ...]
     feat_select: Tuple[FeatureSelection, ...]
     n_feat: int
@@ -137,7 +137,7 @@ class ProgramOptions(Debug):
             drop_nan=cli_args.drop_nan,
         )
         self.selection_options = SelectionOptions(
-            cleaning=self.cleaning_options,
+            cleaning_options=self.cleaning_options,
             classifiers=self.classifiers,
             feat_select=tuple(sorted(set(cli_args.feat_select))),
             n_feat=cli_args.n_feat,
@@ -195,7 +195,7 @@ def cv_size(cv_str: str) -> float:
     return cv
 
 
-def get_options() -> ProgramOptions:
+def get_options(args: str = None) -> ProgramOptions:
     """parse command line arguments"""
     parser = ArgumentParser()
     parser.add_argument("--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR)
@@ -214,7 +214,7 @@ def get_options() -> ProgramOptions:
     parser.add_argument(
         "--feat-clean", "-f", nargs="+", type=str, choices=FEATURE_CLEANINGS, default=["constant"]
     )
-    parser.add_argument("--drop-nan", "-d", choices=["all", "rows", "cols"], default="rows")
+    parser.add_argument("--drop-nan", "-d", choices=["all", "rows", "cols", "none"], default="none")
     parser.add_argument("--n-feat", type=int, default=10)
     parser.add_argument("--htune", action="store_true")
     parser.add_argument("--htune-val", "-H", type=str, choices=HTUNE_VAL_METHODS, default="none")
@@ -223,5 +223,5 @@ def get_options() -> ProgramOptions:
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
     parser.add_argument("--test-val-size", type=cv_size, default=5)
     parser.add_argument("--outdir", type=resolved_path, default=None)
-    cli_args = parser.parse_args()
+    cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)
