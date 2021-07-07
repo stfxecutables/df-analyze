@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import optuna
 import pandas as pd
 from pandas import DataFrame
+from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
 from src._types import Classifier, CVMethod, FeatureSelection, MultiTestCVMethod
