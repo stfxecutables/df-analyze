@@ -23,6 +23,14 @@ from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 from typing_extensions import Literal
 
 from src.constants import SEED, VAL_SIZE
+from src.scoring import (
+    accuracy_scorer,
+    auc_scorer,
+    sensitivity,
+    sensitivity_scorer,
+    specificity,
+    specificity_scorer,
+)
 
 Estimator = Union[RF, SVC, DTreeClassifier, MLP, BaggingClassifier]
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
@@ -34,7 +42,12 @@ LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
 N_SPLITS = 5
-TEST_SCORES = ["accuracy", "roc_auc"]
+TEST_SCORES = dict(
+    accuracy=accuracy_scorer,
+    roc_auc=auc_scorer,
+    sensitivity=sensitivity_scorer,
+    specificity=specificity_scorer,
+)
 
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
@@ -418,16 +431,24 @@ def evaluate_hypertuned(
         scores = cv(estimator, X=X_train, y=y_train, scoring=TEST_SCORES, cv=_cv)
         acc_mean = float(np.mean(scores["test_accuracy"]))
         auc_mean = float(np.mean(scores["test_roc_auc"]))
+        sens_mean = float(np.mean(scores["test_sensitivity"]))
+        spec_mean = float(np.mean(scores["test_specificity"]))
         acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
         auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
+        sens_sd = float(np.std(scores["test_sensitivity"], ddof=1))
+        spec_sd = float(np.std(scores["test_specificity"], ddof=1))
         desc = cv_desc(cv_method)
         result = dict(
             htuned=htuned,
             cv_method=htuned.cv_method,
             acc=np.mean(scores["test_accuracy"]),
             auc=np.mean(scores["test_roc_auc"]),
+            sens=np.mean(scores["test_sensitivity"]),
+            spec=np.mean(scores["test_specificity"]),
             acc_sd=np.std(scores["test_accuracy"], ddof=1),
             auc_sd=np.std(scores["test_roc_auc"], ddof=1),
+            sens_sd=np.std(scores["test_sensitivity"], ddof=1),
+            spec_sd=np.std(scores["test_specificity"], ddof=1),
         )
         if not log:
             return result
@@ -435,6 +456,8 @@ def evaluate_hypertuned(
         print(f"Testing validation: {desc}")
         print(f"Accuracy:           μ = {np.round(acc_mean, 3):0.3f} (sd = {np.round(acc_sd, 4):0.4f})")  # noqa
         print(f"AUC:                μ = {np.round(auc_mean, 3):0.3f} (sd = {np.round(auc_sd, 4):0.4f})")  # noqa
+        print(f"Sensitivity:        μ = {np.round(sens_mean, 3):0.3f} (sd = {np.round(sens_sd, 4):0.4f})")  # noqa
+        print(f"Specificity:        μ = {np.round(spec_mean, 3):0.3f} (sd = {np.round(spec_sd, 4):0.4f})")  # noqa
         # fmt: on
         return result
     elif (X_test is not None) and (y_test is not None):
@@ -446,6 +469,8 @@ def evaluate_hypertuned(
         )
         acc = accuracy_score(y_test, y_pred)
         auc = roc_auc_score(y_test, y_score)
+        sens = sensitivity(y_test, y_pred)
+        spec = specificity(y_test, y_pred)
         percent = int(100 * float(cv_method))
         scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
         result = dict(
@@ -453,8 +478,12 @@ def evaluate_hypertuned(
             cv_method=cv_method,
             acc=np.mean(scores["test_accuracy"]),
             auc=np.mean(scores["test_roc_auc"]),
+            sens=sens,
+            spec=spec,
             acc_sd=np.nan,
             auc_sd=np.nan,
+            sens_sd=np.nan,
+            spec_sd=np.nan,
         )
         if not log:
             return result

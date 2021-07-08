@@ -143,6 +143,10 @@ def results_df(
         acc_sd=result["acc_sd"],
         auc=result["auc"],
         auc_sd=result["auc_sd"],
+        sens=result["sens"],
+        sens_sd=result["sens_sd"],
+        spec=result["spec"],
+        spec_sd=result["spec_sd"],
         htune_val=htune_val,
         htune_trials=trials,
     )

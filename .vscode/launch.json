@@ -10,6 +10,14 @@
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Arg Debug ",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "args": ["--classifier", "dtree", "--step-up"],
     }
   ]
 }
