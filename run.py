@@ -9,8 +9,8 @@ import pandas as pd
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src.analyses import classifier_analysis_multitest
 from src._constants import CLASSIFIERS
+from src.analyses import classifier_analysis_multitest
 from src.hypertune import Classifier
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
@@ -46,11 +46,11 @@ def get_options() -> Tuple[Classifier, bool]:
 
 def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -> pd.DataFrame:
     results = []
-    pbar = tqdm(total=len(ARGS))
-    for args in ARGS:
-        pbar.set_description(pbar_desc(args))
+    pbar = tqdm(total=len(args))
+    for arg in args:
+        pbar.set_description(pbar_desc(arg))
         results.append(
-            classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **args)
+            classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **arg)
         )
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
