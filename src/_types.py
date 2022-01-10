@@ -18,6 +18,7 @@ DropNan = Literal["all", "rows", "cols"]
 # Model-related types
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
 Regressor = Literal["linear", "rf", "svm", "adaboost", "gboost", "mlp", "knn"]
+Estimator = Union[Classifier, Regressor]
 EstimationMode = Literal["classify", "regress"]
 Kernel = Literal["rbf", "linear", "sigmoid"]
 

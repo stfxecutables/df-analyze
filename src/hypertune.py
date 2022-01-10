@@ -32,7 +32,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 
 from src._constants import SEED, VAL_SIZE
-from src._types import Classifier, CVMethod, EstimationMode, Regressor
+from src._types import Classifier, CVMethod, EstimationMode, Estimator, Regressor
 from src.classifiers import get_classifier_constructor
 from src.objectives import (
     adaboost_regressor_objective,
@@ -90,7 +90,7 @@ REGRESSION_TEST_SCORERS = {
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
 class HtuneResult:
-    estimator: Union[Classifier, Regressor]
+    estimator: Estimator
     mode: EstimationMode
     n_trials: int
     cv_method: CVMethod

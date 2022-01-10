@@ -22,7 +22,14 @@ from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
 from src._constants import DATADIR, JOBLIB_CACHE_DIR, SEED, UNCORRELATED
-from src._types import Classifier, CorrMethod, FeatureSelection, Regressor, UnivariateMetric
+from src._types import (
+    Classifier,
+    CorrMethod,
+    Estimator,
+    FeatureSelection,
+    Regressor,
+    UnivariateMetric,
+)
 from src.classifiers import get_classifier_constructor
 from src.cleaning import get_clean_data
 from src.options import CleaningOptions, SelectionOptions
@@ -275,7 +282,7 @@ def select_stepwise_features(
     df: DataFrame,
     target: str,
     mode: Literal["classify", "regress"],
-    estimator: Union[Classifier, Regressor],
+    estimator: Estimator,
     n_features: int,
     direction: Literal["forward", "backward"] = "forward",
 ) -> DataFrame:

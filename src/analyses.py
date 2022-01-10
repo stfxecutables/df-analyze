@@ -6,10 +6,23 @@ from pandas import DataFrame
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
-from src._types import Classifier, CVMethod, FeatureSelection, MultiTestCVMethod, Regressor
+from src._types import (
+    Classifier,
+    CVMethod,
+    Estimator,
+    FeatureSelection,
+    MultiTestCVMethod,
+    Regressor,
+)
 from src.cleaning import get_clean_data
 from src.feature_selection import select_features
-from src.hypertune import HtuneResult, evaluate_hypertuned, hypertune_classifier, train_val_splits
+from src.hypertune import (
+    HtuneResult,
+    evaluate_hypertuned,
+    hypertune_classifier,
+    hypertune_regressor,
+    train_val_splits,
+)
 from src.options import ProgramOptions
 
 
@@ -156,9 +169,9 @@ def classifier_analysis(
     )
 
 
-def classifier_analysis_multitest(
+def full_estimator_analysis(
     options: ProgramOptions,
-    estimator: Union[Classifier, Regressor] = "svm",
+    estimator: Estimator = "svm",
     feature_selection: Optional[FeatureSelection] = "pca",
     verbosity: int = optuna.logging.ERROR,
 ) -> DataFrame:
@@ -168,8 +181,13 @@ def classifier_analysis_multitest(
 
     Parameters
     ----------
-    estimator: Union[Classifier, Regressor] = "svm"
-        The classifier or regressor to evaluate.
+    options: ProgramOptions
+        See `src.options.ProgramOptions` for details. Options are created by the
+        CLI options, documented by running `python df-analyze.py --help`.
+
+    estimator: Estimator = "svm"
+        The classifier or regressor to evaluate. Default is either `sklearn.svm.svc`
+        or `sklearn.svm.svr`.
 
     feature_selection: Optional[FeatureSelection] = "pca"
         If "step-up" or "step-down", perform forward or backward stepwise feature selection with
@@ -180,26 +198,6 @@ def classifier_analysis_multitest(
         If "d", "auc", "pearson", or "spearman", use Cohen's d, the AUC, or correlations to select
         the features with the strongest univariate relationship to the target.
         If None or "minimal", perform only basic cleaning and no feature selection.
-
-    n_features: int = 20
-        Number of features (columns) to select.
-
-    htune_trials: int = 100
-        Number of trials to run with Optuna to optimize hyperparameters.
-
-    htune_validation: Union[int, float, Literal["loocv", "mc"]] = 5
-        How to validate / compute scores during hyperparameter optimization.
-        If an `int`, specifies k-fold and the value of `k`.
-        If a float in (0, 1), specifies holdout validation with test_size=`htune_validation`.
-        If "loocv", specifies LOOCV validation.
-        If "mc", specifies Monte-Carlo validation with 20 random 10% holdouts.
-
-    test_validations: List[MultiTestCVMethod] = [5, 10, "mc"]
-        How to validate / compute scores after hyperparameter optimization.
-        If an `int`, specifies k-fold and the value of `k`.
-        If a float in (0, 1), specifies holdout validation with test_size=`htune_validation`.
-        If "loocv", specifies LOOCV validation.
-        If "mc", specifies Monte-Carlo validation with 20 random 10% holdouts.
 
     verbosity: int = optuna.logging.ERROR
         Controls the amount of console spam produced by Optuna, as well as tqdm progress bars.
@@ -221,10 +219,12 @@ def classifier_analysis_multitest(
     X_raw = df.drop(columns="target")
     X_train = StandardScaler().fit_transform(X_raw)
     y_train = df["target"].to_numpy()
+    hypertune_estimator = hypertune_regressor
     if options.mode == "classify":
         y_train = y_train.astype(int)
-    htuned = hypertune_classifier(
-        classifier=estimator,
+        hypertune_estimator = hypertune_classifier
+    htuned = hypertune_estimator(
+        estimator,
         X_train=X_train,
         y_train=y_train,
         n_trials=htune_trials,

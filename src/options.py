@@ -5,7 +5,6 @@ import os
 from argparse import ArgumentError, ArgumentParser, Namespace, RawTextHelpFormatter
 from dataclasses import dataclass
 from pathlib import Path
-from pprint import pformat
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, cast, no_type_check
 from warnings import warn
 
@@ -32,6 +31,7 @@ from src._types import (
     Regressor,
     ValMethod,
 )
+from src.utils import Debug
 
 DF_HELP_STR = """
 The dataframe to analyze.
@@ -140,13 +140,6 @@ DESC = f"""
 {TARGET_HELP_STR}
 {CLS_HELP_STR}
 """
-
-
-class Debug:
-    """Printing mixin a la https://doc.rust-lang.org/std/fmt/trait.Debug.html"""
-
-    def __repr__(self) -> str:
-        return "".join(pformat(self.__dict__, indent=2, width=80, compact=False))
 
 
 @dataclass
