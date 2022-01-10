@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import optuna
 import pandas as pd
@@ -6,7 +6,7 @@ from pandas import DataFrame
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
-from src._types import Classifier, CVMethod, FeatureSelection, MultiTestCVMethod
+from src._types import Classifier, CVMethod, FeatureSelection, MultiTestCVMethod, Regressor
 from src.cleaning import get_clean_data
 from src.feature_selection import select_features
 from src.hypertune import HtuneResult, evaluate_hypertuned, hypertune_classifier, train_val_splits
@@ -61,7 +61,7 @@ def results_df(
     test_val = val_method_short(test_validation)
     htune_val = val_method_short(result["cv_method"])
     row = dict(
-        model=htuned.model,
+        model=htuned.estimator,
         feat_select=feature_selection,
         n_feat=options.selection_options.n_feat,
         test_val=test_val,
@@ -158,18 +158,18 @@ def classifier_analysis(
 
 def classifier_analysis_multitest(
     options: ProgramOptions,
-    classifier: Classifier = "svm",
+    estimator: Union[Classifier, Regressor] = "svm",
     feature_selection: Optional[FeatureSelection] = "pca",
     verbosity: int = optuna.logging.ERROR,
 ) -> DataFrame:
-    """Run a full analysis of a classifier and return a summary of the results. All listed options
-    in `test_validations` (see below) will be performed efficiently without requiring hypertuning
-    each time.
+    """Run a full analysis of a classifier or regressor and return a summary of the
+    results. All listed options in `test_validations` (see below) will be performed
+    efficiently without requiring hypertuning each time.
 
     Parameters
     ----------
-    classifier: Classifier = "svm"
-        The classifier to evaluate.
+    estimator: Union[Classifier, Regressor] = "svm"
+        The classifier or regressor to evaluate.
 
     feature_selection: Optional[FeatureSelection] = "pca"
         If "step-up" or "step-down", perform forward or backward stepwise feature selection with
@@ -217,14 +217,14 @@ def classifier_analysis_multitest(
     htune_trials = options.htune_trials
     htune_val = options.htune_val
 
-    df = select_features(selection_options, feature_selection, classifier)
+    df = select_features(selection_options, feature_selection, estimator)
     X_raw = df.drop(columns="target")
     X_train = StandardScaler().fit_transform(X_raw)
     y_train = df["target"].to_numpy()
     if options.mode == "classify":
         y_train = y_train.astype(int)
     htuned = hypertune_classifier(
-        classifier=classifier,
+        classifier=estimator,
         X_train=X_train,
         y_train=y_train,
         n_trials=htune_trials,

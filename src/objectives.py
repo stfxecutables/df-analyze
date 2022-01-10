@@ -113,6 +113,13 @@ def mlp_layers_from_sizes(depth: int, breadth: int) -> Dict:
     return dict(hidden_layer_sizes=[breadth for _ in range(depth)])
 
 
+def mlp_args_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    depth = params["depth"]
+    width = params["width"]
+    layer_args = mlp_layers_from_sizes(depth, width)
+    return {**layer_args, **params}
+
+
 """See Optuna docs (https://optuna.org/#code_ScikitLearn) for the motivation behond the closures
 below. Currently I am using closures, but this might be a BAD IDEA in parallel contexts. In any
 case, they do seem to suggest this is OK https://optuna.readthedocs.io/en/stable/faq.html

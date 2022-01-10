@@ -1,8 +1,9 @@
 import os
+import warnings
 from dataclasses import dataclass, field
 from pprint import pprint
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
-from warnings import filterwarnings
+from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import optuna
@@ -13,7 +14,16 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.ensemble import RandomForestClassifier as RF
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression as LR
-from sklearn.metrics import accuracy_score, confusion_matrix, make_scorer, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    explained_variance_score,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+    median_absolute_error,
+    r2_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import BaseCrossValidator, LeaveOneOut, StratifiedShuffleSplit
 from sklearn.model_selection import cross_validate as cv
 from sklearn.model_selection import train_test_split
@@ -25,15 +35,31 @@ from src._constants import SEED, VAL_SIZE
 from src._types import Classifier, CVMethod, EstimationMode, Regressor
 from src.classifiers import get_classifier_constructor
 from src.objectives import (
-    dtree_classifier_objective,
+    adaboost_regressor_objective,
     bagging_classifier_objective,
+    dtree_classifier_objective,
+    get_cv,
+    gradboost_regressor_objective,
+    knn_regressor_objective,
+    linear_regressor_objective,
+    mlp_args_from_params,
     mlp_classifier_objective,
+    mlp_regressor_objective,
     rf_classifier_objective,
+    rf_regressor_objective,
     svm_classifier_objective,
+    svm_regressor_objective,
 )
+from src.regressors import get_regressor_constructor
 from src.scoring import (
     accuracy_scorer,
     auc_scorer,
+    expl_var_scorer,
+    mae_scorer,
+    mape_scorer,
+    mdae_scorer,
+    mse_scorer,
+    r2_scorer,
     sensitivity,
     sensitivity_scorer,
     specificity,
@@ -46,17 +72,25 @@ LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
 N_SPLITS = 5
-TEST_SCORES = dict(
+CLASSIFIER_TEST_SCORERS = dict(
     accuracy=accuracy_scorer,
     roc_auc=auc_scorer,
     sensitivity=sensitivity_scorer,
     specificity=specificity_scorer,
 )
+REGRESSION_TEST_SCORERS = {
+    "MAE": mae_scorer,
+    "MSqE": mse_scorer,
+    "MdAE": mdae_scorer,
+    "MAPE": mape_scorer,
+    "R2": r2_scorer,
+    "Var exp": expl_var_scorer,
+}
 
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
 class HtuneResult:
-    model: Union[Classifier, Regressor]
+    estimator: Union[Classifier, Regressor]
     mode: EstimationMode
     n_trials: int
     cv_method: CVMethod
@@ -113,6 +147,151 @@ def cv_desc(cv_method: CVMethod) -> str:
     if cv_method == "mc":
         return "stratified Monte-Carlo (20 random 20%-sized test sets)"
     raise ValueError("Invalid `cv_method`")
+
+
+def package_classifier_cv_scores(
+    scores: Dict[str, ndarray], htuned: HtuneResult, cv_method: CVMethod, log: bool = False
+) -> Dict[str, Any]:
+    result = dict(
+        htuned=htuned,
+        cv_method=htuned.cv_method,
+        acc=np.mean(scores["test_accuracy"]),
+        auc=np.mean(scores["test_roc_auc"]),
+        sens=np.mean(scores["test_sensitivity"]),
+        spec=np.mean(scores["test_specificity"]),
+        acc_sd=np.std(scores["test_accuracy"], ddof=1),
+        auc_sd=np.std(scores["test_roc_auc"], ddof=1),
+        sens_sd=np.std(scores["test_sensitivity"], ddof=1),
+        spec_sd=np.std(scores["test_specificity"], ddof=1),
+    )
+    if not log:
+        return result
+
+    acc_mean = float(np.mean(scores["test_accuracy"]))
+    auc_mean = float(np.mean(scores["test_roc_auc"]))
+    sens_mean = float(np.mean(scores["test_sensitivity"]))
+    spec_mean = float(np.mean(scores["test_specificity"]))
+    acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
+    auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
+    sens_sd = float(np.std(scores["test_sensitivity"], ddof=1))
+    spec_sd = float(np.std(scores["test_specificity"], ddof=1))
+    desc = cv_desc(cv_method)
+    # fmt: off
+    print(f"Testing validation: {desc}")
+    print(f"Accuracy:           μ = {np.round(acc_mean, 3):0.3f} (sd = {np.round(acc_sd, 4):0.4f})")  # noqa
+    print(f"AUC:                μ = {np.round(auc_mean, 3):0.3f} (sd = {np.round(auc_sd, 4):0.4f})")  # noqa
+    print(f"Sensitivity:        μ = {np.round(sens_mean, 3):0.3f} (sd = {np.round(sens_sd, 4):0.4f})")  # noqa
+    print(f"Specificity:        μ = {np.round(spec_mean, 3):0.3f} (sd = {np.round(spec_sd, 4):0.4f})")  # noqa
+    # fmt: on
+    return result
+
+
+def package_classifier_scores(
+    y_test: ndarray,
+    y_pred: ndarray,
+    y_score: ndarray,
+    htuned: HtuneResult,
+    cv_method: CVMethod,
+    log: bool = False,
+) -> Dict[str, Any]:
+    acc = accuracy_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_score)
+    sens = sensitivity(y_test, y_pred)
+    spec = specificity(y_test, y_pred)
+    percent = int(100 * float(cv_method))
+    scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
+    result = dict(
+        htuned=htuned,
+        cv_method=cv_method,
+        acc=np.mean(scores["test_accuracy"]),
+        auc=np.mean(scores["test_roc_auc"]),
+        sens=sens,
+        spec=spec,
+        acc_sd=np.nan,
+        auc_sd=np.nan,
+        sens_sd=np.nan,
+        spec_sd=np.nan,
+    )
+    if not log:
+        return result
+    print(f"Testing validation: {percent}% holdout")
+    print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
+    print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
+    return result
+
+
+def package_regressor_cv_scores(
+    scores: Dict[str, ndarray], htuned: HtuneResult, cv_method: CVMethod, log: bool = False
+) -> Dict[str, Any]:
+    result = dict(
+        htuned=htuned,
+        cv_method=htuned.cv_method,
+        mae=np.mean(scores["MAE"]),
+        msqe=np.mean(scores["MSqE"]),
+        mdae=np.mean(scores["MdAE"]),
+        mape=np.mean(scores["MAPE"]),
+        r2=np.mean(scores["R2"]),
+        var_exp=np.mean(scores["Var exp"]),
+        mae_sd=np.std(scores["MAE"], ddof=1),
+        msqe_sd=np.std(scores["MSqE"], ddof=1),
+        mdae_sd=np.std(scores["MdAE"], ddof=1),
+        mape_sd=np.std(scores["MAPE"], ddof=1),
+        r2_sd=np.std(scores["R2"], ddof=1),
+        var_exp_sd=np.std(scores["Var exp"], ddof=1),
+    )
+    if not log:
+        return result
+
+    mae = np.mean(scores["MAE"])
+    msqe = np.mean(scores["MSqE"])
+    mdae = np.mean(scores["MdAE"])
+    mape = np.mean(scores["MAPE"])
+    r2 = np.mean(scores["R2"])
+    var_exp = np.mean(scores["Var exp"])
+    mae_sd = np.std(scores["MAE"], ddof=1)
+    msqe_sd = np.std(scores["MSqE"], ddof=1)
+    mdae_sd = np.std(scores["MdAE"], ddof=1)
+    mape_sd = np.std(scores["MAPE"], ddof=1)
+    r2_sd = np.std(scores["R2"], ddof=1)
+    var_exp_sd = np.std(scores["Var exp"], ddof=1)
+
+    desc = cv_desc(cv_method)
+    # fmt: off
+    print(f"Testing validation: {desc}")
+    print(f"MAE             μ = {np.round(mae, 3):0.3f} (sd = {np.round(mae_sd, 4):0.4f})")  # noqa
+    print(f"MSqE:           μ = {np.round(msqe, 3):0.3f} (sd = {np.round(msqe_sd, 4):0.4f})")  # noqa
+    print(f"Median Abs Err: μ = {np.round(mdae, 3):0.3f} (sd = {np.round(mdae_sd, 4):0.4f})")  # noqa
+    print(f"MAPE:           μ = {np.round(mape, 3):0.3f} (sd = {np.round(mape_sd, 4):0.4f})")  # noqa
+    print(f"R-squared:      μ = {np.round(r2, 3):0.3f} (sd = {np.round(r2_sd, 4):0.4f})")  # noqa
+    print(f"Var explained:  μ = {np.round(var_exp, 3):0.3f} (sd = {np.round(var_exp_sd, 4):0.4f})")  # noqa
+    # fmt: on
+    return result
+
+
+def package_regressor_scores(
+    y_test: ndarray,
+    y_pred: ndarray,
+    htuned: HtuneResult,
+    cv_method: CVMethod,
+    log: bool = False,
+) -> Dict[str, Any]:
+    scores = {
+        "MAE": mean_absolute_error(y_test, y_pred),
+        "MSqE": mean_squared_error(y_test, y_pred),
+        "MdAE": median_absolute_error(y_test, y_pred),
+        "MAPE": mean_absolute_percentage_error(y_test, y_pred),
+        "R2": r2_score(y_test, y_pred),
+        "Var exp": explained_variance_score(y_test, y_pred),
+    }
+    if log:
+        percent = int(100 * float(cv_method))
+        print(f"Testing validation: {percent}% holdout")
+    with warnings.catch_warnings():
+        # suppress warnings for taking std of length 1 ndarray:
+        # RuntimeWarning: Degrees of freedom <= 0 for slice
+        # RuntimeWarning: invalid value encountered in double_scalars
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return package_regressor_cv_scores(scores, htuned, cv_method, log)
 
 
 """See Optuna docs (https://optuna.org/#code_ScikitLearn) for the motivation behond the closures
@@ -191,7 +370,8 @@ def hypertune_classifier(
         # print("=" * 80, end="\n")
 
     return HtuneResult(
-        model=classifier,
+        estimator=classifier,
+        mode="classify",
         n_trials=n_trials,
         cv_method=cv_method,
         val_acc=study.best_value,
@@ -238,24 +418,26 @@ def hypertune_regressor(
         See top of this file.
     """
     OBJECTIVES: Dict[str, Callable] = {
-        "rf": rf_classifier_objective(X_train, y_train, cv_method),
-        "svm": svm_classifier_objective(X_train, y_train, cv_method),
-        "dtree": dtree_classifier_objective(X_train, y_train, cv_method),
-        "mlp": mlp_classifier_objective(X_train, y_train, cv_method),
-        "bag": bagging_classifier_objective(X_train, y_train, cv_method),
+        "linear": linear_regressor_objective(X_train, y_train, cv_method),
+        "rf": rf_regressor_objective(X_train, y_train, cv_method),
+        "adaboost": adaboost_regressor_objective(X_train, y_train, cv_method),
+        "gboost": gradboost_regressor_objective(X_train, y_train, cv_method),
+        "svm": svm_regressor_objective(X_train, y_train, cv_method),
+        "knn": knn_regressor_objective(X_train, y_train, cv_method),
+        "mlp": mlp_regressor_objective(X_train, y_train, cv_method),
     }
     # HYPERTUNING
-    objective = OBJECTIVES[classifier]
+    objective = OBJECTIVES[regressor]
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
     optuna.logging.set_verbosity(verbosity)
-    if classifier == "mlp":
+    if regressor == "mlp":
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
         os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
 
     study.optimize(objective, n_trials=n_trials)
 
-    if classifier == "mlp":
+    if regressor == "mlp":
         os.environ["PYTHONWARNINGS"] = before
 
     val_method = cv_desc(cv_method)
@@ -269,7 +451,8 @@ def hypertune_regressor(
         # print("=" * 80, end="\n")
 
     return HtuneResult(
-        model=classifier,
+        mode="regress",
+        estimator=regressor,
         n_trials=n_trials,
         cv_method=cv_method,
         val_acc=study.best_value,
@@ -326,74 +509,38 @@ def evaluate_hypertuned(
                 auc_sd: float  # sd of AUC across folds
             }
     """
-    classifier = htuned.model
+    model = htuned.estimator
     params = htuned.best_params
-    args = mlp_args_from_params(params) if classifier == "mlp" else params
-    estimator = get_classifier_constructor(classifier)(**args)
+    args = mlp_args_from_params(params) if model == "mlp" else params
+    if htuned.mode == "classify":
+        estimator = get_classifier_constructor(model)(**args)
+    else:
+        estimator = get_regressor_constructor(model)(**args)
+    SCORERS = CLASSIFIER_TEST_SCORERS if htuned.mode == "classify" else REGRESSION_TEST_SCORERS
     if (X_test is None) and (y_test is None):
         _cv = get_cv(y_train, cv_method)
-        scores = cv(estimator, X=X_train, y=y_train, scoring=TEST_SCORES, cv=_cv)
-        acc_mean = float(np.mean(scores["test_accuracy"]))
-        auc_mean = float(np.mean(scores["test_roc_auc"]))
-        sens_mean = float(np.mean(scores["test_sensitivity"]))
-        spec_mean = float(np.mean(scores["test_specificity"]))
-        acc_sd = float(np.std(scores["test_accuracy"], ddof=1))
-        auc_sd = float(np.std(scores["test_roc_auc"], ddof=1))
-        sens_sd = float(np.std(scores["test_sensitivity"], ddof=1))
-        spec_sd = float(np.std(scores["test_specificity"], ddof=1))
-        desc = cv_desc(cv_method)
-        result = dict(
-            htuned=htuned,
-            cv_method=htuned.cv_method,
-            acc=np.mean(scores["test_accuracy"]),
-            auc=np.mean(scores["test_roc_auc"]),
-            sens=np.mean(scores["test_sensitivity"]),
-            spec=np.mean(scores["test_specificity"]),
-            acc_sd=np.std(scores["test_accuracy"], ddof=1),
-            auc_sd=np.std(scores["test_roc_auc"], ddof=1),
-            sens_sd=np.std(scores["test_sensitivity"], ddof=1),
-            spec_sd=np.std(scores["test_specificity"], ddof=1),
-        )
-        if not log:
-            return result
-        # fmt: off
-        print(f"Testing validation: {desc}")
-        print(f"Accuracy:           μ = {np.round(acc_mean, 3):0.3f} (sd = {np.round(acc_sd, 4):0.4f})")  # noqa
-        print(f"AUC:                μ = {np.round(auc_mean, 3):0.3f} (sd = {np.round(auc_sd, 4):0.4f})")  # noqa
-        print(f"Sensitivity:        μ = {np.round(sens_mean, 3):0.3f} (sd = {np.round(sens_sd, 4):0.4f})")  # noqa
-        print(f"Specificity:        μ = {np.round(spec_mean, 3):0.3f} (sd = {np.round(spec_sd, 4):0.4f})")  # noqa
-        # fmt: on
-        return result
+        scores = cv(estimator, X=X_train, y=y_train, scoring=SCORERS, cv=_cv)
+        if htuned.mode == "classify":
+            return package_classifier_cv_scores(scores, htuned, cv_method, log)
+        else:
+            return package_regressor_cv_scores(scores, htuned, cv_method, log)
     elif (X_test is not None) and (y_test is not None):
         y_pred = estimator.fit(X_train, y_train).predict(X_test)
-        y_score = (
-            estimator.decision_function(X_test)
-            if classifier != "mlp"
-            else estimator.predict_proba(X_test)
-        )
-        acc = accuracy_score(y_test, y_pred)
-        auc = roc_auc_score(y_test, y_score)
-        sens = sensitivity(y_test, y_pred)
-        spec = specificity(y_test, y_pred)
-        percent = int(100 * float(cv_method))
-        scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
-        result = dict(
-            htuned=htuned,
-            cv_method=cv_method,
-            acc=np.mean(scores["test_accuracy"]),
-            auc=np.mean(scores["test_roc_auc"]),
-            sens=sens,
-            spec=spec,
-            acc_sd=np.nan,
-            auc_sd=np.nan,
-            sens_sd=np.nan,
-            spec_sd=np.nan,
-        )
-        if not log:
-            return result
-        print(f"Testing validation: {percent}% holdout")
-        print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
-        print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
-        return result
+        if htuned.mode == "classify":
+            y_score = (
+                estimator.decision_function(X_test)
+                if model != "mlp"
+                else estimator.predict_proba(X_test)
+            )
+            return package_classifier_scores(
+                y_test=y_test,
+                y_pred=y_pred,
+                y_score=y_score,
+                htuned=htuned,
+                cv_method=cv_method,
+                log=log,
+            )
+        else:
+            return package_regressor_scores(y_test, y_pred, htuned, cv_method, log)
     else:
         raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")
