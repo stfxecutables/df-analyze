@@ -1,9 +1,8 @@
 from typing import Union
-from typing_extensions import Literal
 
 from numpy import ndarray
 from pandas import DataFrame, Series
-
+from typing_extensions import Literal
 
 # fmt: off
 # Data types
@@ -16,8 +15,10 @@ FeatureSelection = Literal["minimal", "step-down", "step-up", "pca", "kpca", Uni
 FeatureCleaning = Literal["constant", "correlated", "lowinfo"]
 DropNan = Literal["all", "rows", "cols"]
 
-# classifier-related types
+# Model-related types
 Classifier = Literal["rf", "svm", "dtree", "mlp", "bag"]
+Regressor = Literal["linear", "rf", "svm", "adaboost", "gboost", "mlp", "knn"]
+EstimationMode = Literal["classify", "regress"]
 Kernel = Literal["rbf", "linear", "sigmoid"]
 
 # validation- and testing-related types

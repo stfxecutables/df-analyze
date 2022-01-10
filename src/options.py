@@ -2,7 +2,7 @@
 File for defining all options passed to `df-analyze.py`.
 """
 import os
-from argparse import ArgumentError, ArgumentParser, Namespace
+from argparse import ArgumentError, ArgumentParser, Namespace, RawTextHelpFormatter
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
@@ -16,44 +16,129 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from typing_extensions import Literal
 
-from src._constants import CLASSIFIERS, FEATURE_CLEANINGS, FEATURE_SELECTIONS, HTUNE_VAL_METHODS
-from src._types import Classifier, DropNan, FeatureCleaning, FeatureSelection, ValMethod
+from src._constants import (
+    CLASSIFIERS,
+    FEATURE_CLEANINGS,
+    FEATURE_SELECTIONS,
+    HTUNE_VAL_METHODS,
+    REGRESSORS,
+)
+from src._types import (
+    Classifier,
+    DropNan,
+    EstimationMode,
+    FeatureCleaning,
+    FeatureSelection,
+    Regressor,
+    ValMethod,
+)
 
 DF_HELP_STR = """
 The dataframe to analyze.
 
-    Currently only Pandas `DataFrame` objects saved as either `.json` or `.csv`,
-    or NumPy `ndarray`s saved as "<filename>.npy" are supported, but a Pandas
-    `DataFrame` is recommended.
+Currently only Pandas `DataFrame` objects saved as either `.json` or `.csv`, or
+NumPy `ndarray`s saved as "<filename>.npy" are supported, but a Pandas
+`DataFrame` is recommended.
 
-    If your data is saved as a Pandas `DataFrame`, it must have shape
-    `(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
-    column holding the target variable (or feature) can be specified by the
-    `--target` / `-y` argument, but is "target" by default if such a column name
-    exists, or the last column if it does not.
+If your data is saved as a Pandas `DataFrame`, it must have shape
+`(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
+column holding the target variable (or feature) can be specified by the
+`--target` / `-y` argument, but is "target" by default if such a column name
+exists, or the last column if it does not.
 
-    If your data is in a NumPy array, the array must have the shape
-    `(n_samples, n_features + 1)` where the last column is the target for either
-    classification or prediction.
-"""
-DFNAME_HELP_STR = """
-A unique identifier for your DataFrame to use when saving outputs. If unspecified,
-a name will be generated based on the filename passed to `--df`.
+If your data is in a NumPy array, the array must have the shape
+`(n_samples, n_features + 1)` where the last column is the target for either
+classification or prediction.
 """
 
-Y_HELP_STR = """
+TARGET_HELP_STR = """
 The location of the target variable for either regression or classification.
 
-    If a string, then `--df` must be a Pandas `DataFrame` and the string passed
-    in here specifies the name of the column holding the targer variable.
+If a string, then `--df` must be a Pandas `DataFrame` and the string passed in
+here specifies the name of the column holding the targer variable.
 
-    If an integer, and `--df` is a NumPy array only, specifies the column index.
+If an integer, and `--df` is a NumPy array only, specifies the column index.
+"""
 
-    (default: %(default))
+MODE_HELP_STR = """
+If "classify", do classification. If "regress", do regression.
+"""
+
+# DEPRECATE
+DFNAME_HELP_STR = """
+A unique identifier for your DataFrame to use when saving outputs. If
+unspecified, a name will be generated based on the filename passed to `--df`.
+"""
+
+
+CLS_HELP_STR = f"""
+The list of classifiers to use when comparing classification performance.
+Can be a list of elements from {sorted(CLASSIFIERS)}.
+"""
+
+REG_HELP_STR = f"""
+The list of regressors to use when comparing regression model performance.
+Can be a list of elements from {sorted(REGRESSORS)}.
+"""
+
+FEAT_SELECT_HELP = """
+The feature selection methods to use. Available options are:
+
+auc:        Select features with largest AUC values relative to the two classes
+            (classification only).
+
+d:          Select features with largest Cohen's d values relative to the two
+            classes (classification only).
+
+kpca:       Generate features by using largest components of kernel PCA.
+
+pca:        Generate features by using largest components from a PCA.
+
+pearson:    Select features with largest Pearson correlations with target.
+
+step-up:    Use step-up features selection. Costly.
+"""
+
+FEAT_CLEAN_HELP = """
+If specified, which feature cleaning methods to use prior to feature selection.
+Makes use of the featuretools library (featuretools.com). Options are:
+
+correlated: remove highly correlated features using featuretools.
+
+constant:   remove constant (zero-variance) features. Default.
+
+lowinfo:    remove "low information" features via featuretools.
+"""
+
+NAN_HELP = """
+How to drop NaN values. Uses Pandas options.
+
+none:       Do not remove NaNs. Will cause errors for most algorithms. Default.
+
+all:        Remove the sample and feature both (row and column) for any NaN.
+
+rows:       Drop samples (rows) that contain one or more NaN values.
+
+cols:       Drop features (columns) that contain one or more NaN values.
+"""
+
+N_FEAT_HELP = """
+Number of features to select using method specified by --feat-select. NOTE:
+specifying values greater than e.g. 10-50 with --feat-select=step-up and slower
+algorithms can easily result in compute times of many hours.
+"""
+
+HTUNE_HELP = """
 """
 
 HTUNEVAL_HELP_STR = """
 If an
+"""
+
+DESC = f"""
+{DF_HELP_STR}
+{TARGET_HELP_STR}
+{CLS_HELP_STR}
 """
 
 
@@ -93,7 +178,9 @@ class SelectionOptions(Debug):
     """
 
     cleaning_options: CleaningOptions
+    mode: EstimationMode
     classifiers: Tuple[Classifier, ...]
+    regressors: Tuple[Regressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
     n_feat: int
 
@@ -116,7 +203,9 @@ class ProgramOptions(Debug):
         # other
         self.datapath: Path
         self.target: str
+        self.mode: EstimationMode
         self.classifiers: Tuple[Classifier, ...]
+        self.regressors: Tuple[Regressor, ...]
         self.htune: bool
         self.htune_val: ValMethod
         self.htune_val_size: float
@@ -128,18 +217,32 @@ class ProgramOptions(Debug):
         self.datapath = self.validate_datapath(cli_args.df)
         self.outdir = self.ensure_outdir(self.datapath, cli_args.outdir)
         self.target = cli_args.target
+        self.mode = cli_args.mode
+        # remove duplicates
         self.classifiers = tuple(sorted(set(cli_args.classifiers)))
+        self.regressors = tuple(sorted(set(cli_args.classifiers)))
+        self.feat_select = tuple(sorted(set(cli_args.feat_select)))
+        self.feat_clean = tuple(sorted(set(cli_args.feat_clean)))
+
+        if ("step-up" in self.feat_select) or ("step-down" in self.feat_select):
+            warn(
+                "Step-up and step-down feature selection have very high time-complexity. "
+                "It is strongly recommended to run these selection procedures in isolation, "
+                "and not in the same process as all other feature selection procedures."
+            )
 
         self.cleaning_options = CleaningOptions(
             datapath=self.datapath,
             target=self.target,
-            feat_clean=tuple(sorted(set(cli_args.feat_clean))),
+            feat_clean=self.feat_clean,
             drop_nan=cli_args.drop_nan,
         )
         self.selection_options = SelectionOptions(
             cleaning_options=self.cleaning_options,
+            mode=self.mode,
             classifiers=self.classifiers,
-            feat_select=tuple(sorted(set(cli_args.feat_select))),
+            regressors=self.regressors,
+            feat_select=self.feat_select,
             n_feat=cli_args.n_feat,
         )
 
@@ -197,27 +300,72 @@ def cv_size(cv_str: str) -> float:
 
 def get_options(args: str = None) -> ProgramOptions:
     """parse command line arguments"""
-    parser = ArgumentParser()
+    # parser = ArgumentParser(description=DESC)
+    parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
     parser.add_argument("--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR)
     # just use existing pathname instead
     # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
     parser.add_argument(
-        "--target", "-y", action="store", type=str, default="target", help=Y_HELP_STR
+        "--target", "-y", action="store", type=str, default="target", help=TARGET_HELP_STR
+    )
+    parser.add_argument(
+        "--mode",
+        "-m",
+        action="store",
+        choices=["classify", "regress"],
+        default="classify",
+        help=MODE_HELP_STR,
     )
     # NOTE: `nargs="+"` allows repeats, must be removed after
     parser.add_argument(
-        "--classifiers", "-C", nargs="+", type=str, choices=CLASSIFIERS, default=["svm"]
+        "--classifiers",
+        "-C",
+        nargs="+",
+        type=str,
+        choices=CLASSIFIERS,
+        default=["svm"],
+        help=CLS_HELP_STR,
     )
     parser.add_argument(
-        "--feat-select", "-F", nargs="+", type=str, choices=FEATURE_SELECTIONS, default=["pca"]
+        "--regressors",
+        "-R",
+        nargs="+",
+        type=str,
+        choices=REGRESSORS,
+        default=["linear"],
+        help=REG_HELP_STR,
     )
     parser.add_argument(
-        "--feat-clean", "-f", nargs="+", type=str, choices=FEATURE_CLEANINGS, default=["constant"]
+        "--feat-select",
+        "-F",
+        nargs="+",
+        type=str,
+        choices=FEATURE_SELECTIONS,
+        default=["pca"],
+        help=FEAT_SELECT_HELP,
     )
-    parser.add_argument("--drop-nan", "-d", choices=["all", "rows", "cols", "none"], default="none")
-    parser.add_argument("--n-feat", type=int, default=10)
-    parser.add_argument("--htune", action="store_true")
-    parser.add_argument("--htune-val", "-H", type=str, choices=HTUNE_VAL_METHODS, default="none")
+    parser.add_argument(
+        "--feat-clean",
+        "-f",
+        nargs="+",
+        type=str,
+        choices=FEATURE_CLEANINGS,
+        default=["constant"],
+        help=FEAT_CLEAN_HELP,
+    )
+    parser.add_argument(
+        "--drop-nan", "-d", choices=["all", "rows", "cols", "none"], default="none", help=NAN_HELP
+    )
+    parser.add_argument("--n-feat", type=int, default=10, help=N_FEAT_HELP)
+    parser.add_argument("--htune", action="store_true", help=HTUNE_HELP)
+    parser.add_argument(
+        "--htune-val",
+        "-H",
+        type=str,
+        choices=HTUNE_VAL_METHODS,
+        default="none",
+        help=HTUNEVAL_HELP_STR,
+    )
     parser.add_argument("--htune-val-size", type=cv_size, default=0)
     parser.add_argument("--htune-trials", type=int, default=100)
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")

@@ -22,15 +22,22 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 
 from src._constants import SEED, VAL_SIZE
-from src._types import Classifier, CVMethod
+from src._types import Classifier, CVMethod, EstimationMode, Regressor
 from src.classifiers import get_classifier_constructor
+from src.objectives import (
+    dtree_classifier_objective,
+    bagging_classifier_objective,
+    mlp_classifier_objective,
+    rf_classifier_objective,
+    svm_classifier_objective,
+)
 from src.scoring import (
     accuracy_scorer,
     auc_scorer,
-    sensitivity_scorer,
-    specificity_scorer,
     sensitivity,
+    sensitivity_scorer,
     specificity,
+    specificity_scorer,
 )
 
 Splits = Iterable[Tuple[ndarray, ndarray]]
@@ -49,7 +56,8 @@ TEST_SCORES = dict(
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
 class HtuneResult:
-    classifier: Classifier
+    model: Union[Classifier, Regressor]
+    mode: EstimationMode
     n_trials: int
     cv_method: CVMethod
     val_acc: float = np.nan
@@ -57,7 +65,7 @@ class HtuneResult:
 
 
 def train_val_splits(
-    df: DataFrame, val_size: float = VAL_SIZE
+    df: DataFrame, mode: EstimationMode, val_size: float = VAL_SIZE
 ) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
     """Wrapper around `sklearn.model_selection.train_test_split` to return splits as `DataFrame`s
     instead of numpy arrays.
@@ -66,6 +74,9 @@ def train_val_splits(
     ----------
     df: DataFrame
         Data with target in column named "target".
+
+    mode: Literal["classify", "regress"]
+        What kind of model we are running.
 
     val_size: float = 0.2
         Percent of data to reserve for validation
@@ -79,45 +90,12 @@ def train_val_splits(
     )
     X_train = train.drop(columns="target")
     X_val = val.drop(columns="target")
-    y_train = train.target.astype(int)
-    y_val = val.target.astype(int)
+    y_train = train.target
+    y_val = val.target
+    if mode == "classify":
+        y_train = y_train.astype(int)
+        y_val = y_val.astype(int)
     return X_train, X_val, y_train, y_val
-
-
-def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCrossValidator]:
-    """Helper to construct an object that `sklearn.model_selection.cross_validate` will accept in
-    its `cv` argument
-
-    Parameters
-    ----------
-    y_train: DataFrame
-        Needed for stratification.
-
-    cv_method: CVMethod
-        Method to create object for.
-
-    Returns
-    -------
-    cv: Union[int, Splits, BaseCrossValidator]
-        The object that can be passed into the `cross_validate` function
-    """
-    if isinstance(cv_method, int):
-        return int(cv_method)
-    if isinstance(cv_method, float):  # stratified holdout
-        if cv_method <= 0 or cv_method >= 1:
-            raise ValueError("Holdout test_size must be in (0, 1)")
-        test_size = cv_method
-        y = np.array(y_train).ravel()
-        idx = np.arange(y.shape[0])
-        return [
-            train_test_split(idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y)
-        ]
-    cv_method = str(cv_method).lower()  # type: ignore
-    if cv_method == "loocv":
-        return LeaveOneOut()
-    if cv_method == "mc":
-        return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
-    raise ValueError("Invalid `cv_method`")
 
 
 def cv_desc(cv_method: CVMethod) -> str:
@@ -141,138 +119,6 @@ def cv_desc(cv_method: CVMethod) -> str:
 below. Currently I am using closures, but this might be a BAD IDEA in parallel contexts. In any
 case, they do seem to suggest this is OK https://optuna.readthedocs.io/en/stable/faq.html
 #how-to-define-objective-functions-that-have-own-arguments, albeit by using classes or lambdas. """
-
-
-def svm_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
-) -> Callable[[Trial], float]:
-    def objective(trial: Trial) -> float:
-        args: Dict = dict(
-            kernel=trial.suggest_categorical("kernel", choices=["rbf"]),
-            C=trial.suggest_loguniform("C", 1e-10, 1e10),
-        )
-        _cv = get_cv(y_train, cv_method)
-        estimator = SVC(cache_size=500, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
-        return float(np.mean(scores["test_score"]))
-
-    return objective
-
-
-def rf_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
-) -> Callable[[Trial], float]:
-    def objective(trial: Trial) -> float:
-        args: Dict = dict(
-            n_estimators=trial.suggest_int("n_estimators", 5, 500),
-            criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
-            max_depth=trial.suggest_int("max_depth", 2, 50),
-            bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
-        )
-        _cv = get_cv(y_train, cv_method)
-        estimator = RF(n_jobs=2, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
-        return float(np.mean(scores["test_score"]))
-
-    return objective
-
-
-def dtree_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
-) -> Callable[[Trial], float]:
-    def objective(trial: Trial) -> float:
-        args: Dict = dict(
-            criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
-            splitter=trial.suggest_categorical("splitter", ["best", "random"]),
-            max_depth=trial.suggest_int("max_depth", 2, 50),
-        )
-        _cv = get_cv(y_train, cv_method)
-        estimator = DTreeClassifier(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
-        return float(np.mean(scores["test_score"]))
-
-    return objective
-
-
-def logistic_bagging_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
-) -> Callable[[Trial], float]:
-    def objective(trial: Trial) -> float:
-        args: Dict = dict(
-            n_estimators=trial.suggest_int("n_estimators", 5, 23, 2),
-            max_features=trial.suggest_uniform("max_features", 0, 1),
-            bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
-        )
-        _cv = get_cv(y_train, cv_method)
-        estimator = BaggingClassifier(
-            base_estimator=LR(solver=LR_SOLVER), random_state=SEED, n_jobs=2, **args
-        )
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
-        return float(np.mean(scores["test_score"]))
-
-    return objective
-
-
-def mlp_layers(l1: int, l2: int, l3: int, l4: int, l5: int) -> Tuple[int, ...]:
-    """
-    Needed for converting randomly generated layer sizes into an argument the MLP classifier can
-    understand. I strongly suspect this method mucks up Optuna's Bayesian optimization though if we
-    allow and layer to have a size zero, since this would effectively be changing the meaning of
-    that hyperparam.
-    """
-    layers = [l1, l2, l3, l4, l5]
-    return tuple([layer for layer in layers if layer > 0])
-
-
-def mlp_args_from_params(params: Dict) -> Dict:
-    """Convert the params returned from trial.best_params into a form that can be used by
-    MLPClassifier"""
-    d = {**params}
-    l1 = d.pop("l1")
-    l2 = d.pop("l2")
-    l3 = d.pop("l3")
-    l4 = d.pop("l4")
-    l5 = d.pop("l5")
-    d["hidden_layer_sizes"] = mlp_layers(l1, l2, l3, l4, l5)
-    return d
-
-
-def mlp_objective(
-    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
-) -> Callable[[Trial], float]:
-    def objective(trial: Trial) -> float:
-        l1 = trial.suggest_categorical("l1", choices=MLP_LAYER_SIZES)
-        l2 = trial.suggest_categorical("l2", choices=MLP_LAYER_SIZES)
-        l3 = trial.suggest_categorical("l3", choices=MLP_LAYER_SIZES)
-        l4 = trial.suggest_categorical("l4", choices=MLP_LAYER_SIZES)
-        l5 = trial.suggest_categorical("l5", choices=MLP_LAYER_SIZES)
-        args: Dict = dict(
-            hidden_layer_sizes=mlp_layers(l1, l2, l3, l4, l5),
-            activation=trial.suggest_categorical("activation", ["relu"]),
-            solver=trial.suggest_categorical("solver", ["adam"]),
-            # alpha=trial.suggest_loguniform("alpha", 1e-8, 1e-1),
-            alpha=trial.suggest_loguniform("alpha", 1e-7, 1e-2),
-            batch_size=trial.suggest_categorical("batch_size", choices=[8, 16, 32]),
-            learning_rate=trial.suggest_categorical(
-                "learning_rate", choices=["constant", "adaptive"]
-            ),
-            learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 5e-2),
-            max_iter=trial.suggest_categorical("max_iter", [100]),
-            early_stopping=trial.suggest_categorical("early_stopping", [False]),
-            validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
-        )
-        mlp = MLP(**args)
-        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
-        before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
-        filterwarnings("ignore", category=ConvergenceWarning)
-        _cv = get_cv(y_train, cv_method)
-        scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
-        os.environ["PYTHONWARNINGS"] = before
-        acc = float(np.mean(scores["test_score"]))
-        return acc
-
-    return objective
 
 
 def hypertune_classifier(
@@ -314,11 +160,11 @@ def hypertune_classifier(
         See top of this file.
     """
     OBJECTIVES: Dict[str, Callable] = {
-        "rf": rf_objective(X_train, y_train, cv_method),
-        "svm": svm_objective(X_train, y_train, cv_method),
-        "dtree": dtree_objective(X_train, y_train, cv_method),
-        "mlp": mlp_objective(X_train, y_train, cv_method),
-        "bag": logistic_bagging_objective(X_train, y_train, cv_method),
+        "rf": rf_classifier_objective(X_train, y_train, cv_method),
+        "svm": svm_classifier_objective(X_train, y_train, cv_method),
+        "dtree": dtree_classifier_objective(X_train, y_train, cv_method),
+        "mlp": mlp_classifier_objective(X_train, y_train, cv_method),
+        "bag": bagging_classifier_objective(X_train, y_train, cv_method),
     }
     # HYPERTUNING
     objective = OBJECTIVES[classifier]
@@ -345,7 +191,85 @@ def hypertune_classifier(
         # print("=" * 80, end="\n")
 
     return HtuneResult(
-        classifier=classifier,
+        model=classifier,
+        n_trials=n_trials,
+        cv_method=cv_method,
+        val_acc=study.best_value,
+        best_params=study.best_params,
+    )
+
+
+def hypertune_regressor(
+    regressor: Regressor,
+    X_train: DataFrame,
+    y_train: DataFrame,
+    n_trials: int = 200,
+    cv_method: CVMethod = 5,
+    verbosity: int = optuna.logging.ERROR,
+) -> HtuneResult:
+    """Core function. Uses Optuna base TPESampler (Tree-Parzen Estimator Sampler) to perform
+    Bayesian hyperparameter optimization via Gaussian processes on the classifier specified in
+    `classifier`.
+
+    Parameters
+    ----------
+    regressor: Regressor
+        Regressor to tune.
+
+    X_train: DataFrame
+        DataFrame with no target value (features only). Shape (n_samples, n_features)
+
+    y_train: DataFrame
+        Target values. Shape (n_samples,).
+
+    n_trials: int = 200
+        Number of trials to use with Optuna.
+
+    cv_method: CVMethod = 5
+        How to evaluate accuracy during tuning.
+
+    verbosity: int = optuna.logging.ERROR
+        See https://optuna.readthedocs.io/en/stable/reference/logging.html. Most useful other option
+        is `optuna.logging.INFO`.
+
+    Returns
+    -------
+    htuned: HtuneResult
+        See top of this file.
+    """
+    OBJECTIVES: Dict[str, Callable] = {
+        "rf": rf_classifier_objective(X_train, y_train, cv_method),
+        "svm": svm_classifier_objective(X_train, y_train, cv_method),
+        "dtree": dtree_classifier_objective(X_train, y_train, cv_method),
+        "mlp": mlp_classifier_objective(X_train, y_train, cv_method),
+        "bag": bagging_classifier_objective(X_train, y_train, cv_method),
+    }
+    # HYPERTUNING
+    objective = OBJECTIVES[classifier]
+    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    optuna.logging.set_verbosity(verbosity)
+    if classifier == "mlp":
+        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
+        before = os.environ.get("PYTHONWARNINGS", "")
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+
+    study.optimize(objective, n_trials=n_trials)
+
+    if classifier == "mlp":
+        os.environ["PYTHONWARNINGS"] = before
+
+    val_method = cv_desc(cv_method)
+    acc = np.round(study.best_value, 3)
+    if verbosity != optuna.logging.ERROR:
+        print(f"\n{' Tuning Results ':=^80}")
+        print("Best params:")
+        pprint(study.best_params, indent=4, width=80)
+        print(f"\nTuning validation: {val_method}")
+        print(f"Best accuracy:      μ = {acc:0.3f}")
+        # print("=" * 80, end="\n")
+
+    return HtuneResult(
+        model=classifier,
         n_trials=n_trials,
         cv_method=cv_method,
         val_acc=study.best_value,
@@ -402,7 +326,7 @@ def evaluate_hypertuned(
                 auc_sd: float  # sd of AUC across folds
             }
     """
-    classifier = htuned.classifier
+    classifier = htuned.model
     params = htuned.best_params
     args = mlp_args_from_params(params) if classifier == "mlp" else params
     estimator = get_classifier_constructor(classifier)(**args)

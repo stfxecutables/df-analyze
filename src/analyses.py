@@ -61,7 +61,7 @@ def results_df(
     test_val = val_method_short(test_validation)
     htune_val = val_method_short(result["cv_method"])
     row = dict(
-        model=htuned.classifier,
+        model=htuned.model,
         feat_select=feature_selection,
         n_feat=options.selection_options.n_feat,
         test_val=test_val,
@@ -131,7 +131,7 @@ def classifier_analysis(
     if isinstance(test_val, float):  # set aside data for final test
         if test_val <= 0 or test_val >= 1:
             raise ValueError("`--test-val` must be in (0, 1)")
-        X_train, X_test, y_train, y_test = train_val_splits(df, test_val)
+        X_train, X_test, y_train, y_test = train_val_splits(df, options.mode, test_val)
     else:
         X_train = df.drop(columns="target")
         X_test = None
@@ -216,10 +216,13 @@ def classifier_analysis_multitest(
     test_val = options.test_val
     htune_trials = options.htune_trials
     htune_val = options.htune_val
+
     df = select_features(selection_options, feature_selection, classifier)
     X_raw = df.drop(columns="target")
     X_train = StandardScaler().fit_transform(X_raw)
-    y_train = df["target"].to_numpy().astype(int)
+    y_train = df["target"].to_numpy()
+    if options.mode == "classify":
+        y_train = y_train.astype(int)
     htuned = hypertune_classifier(
         classifier=classifier,
         X_train=X_train,

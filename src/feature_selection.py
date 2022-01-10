@@ -5,7 +5,7 @@
 # without incorporating any tuning.
 
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -22,10 +22,11 @@ from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
 from src._constants import DATADIR, JOBLIB_CACHE_DIR, SEED, UNCORRELATED
-from src._types import Classifier, CorrMethod, FeatureSelection, UnivariateMetric
+from src._types import Classifier, CorrMethod, FeatureSelection, Regressor, UnivariateMetric
 from src.classifiers import get_classifier_constructor
 from src.cleaning import get_clean_data
 from src.options import CleaningOptions, SelectionOptions
+from src.regressors import get_regressor_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
 FEATURE_CACHE = JOBLIB_CACHE_DIR / "__features__"
@@ -273,31 +274,35 @@ def kernel_pca_reduce(df: DataFrame, target: str, n_features: int = 10) -> DataF
 def select_stepwise_features(
     df: DataFrame,
     target: str,
-    classifier: Classifier,
+    mode: Literal["classify", "regress"],
+    estimator: Union[Classifier, Regressor],
     n_features: int,
     direction: Literal["forward", "backward"] = "forward",
 ) -> DataFrame:
     """Perform stepwise feature selection (which takes HOURS) and save the selected features in a
     DataFrame so that subsequent runs do not need to do this again."""
     # outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
+    get_model = get_classifier_constructor if mode == "classify" else get_regressor_constructor
     selector = SequentialFeatureSelector(
-        estimator=get_classifier_constructor(classifier)(),
+        estimator=get_model(estimator)(),
         n_features_to_select=n_features,
         direction=direction,
-        scoring="accuracy",
+        scoring="accuracy" if mode == "classify" else "neg_mean_absolute_error",
         cv=5,
         n_jobs=-1,
     )
     X_raw = df.drop(columns=target)
-    y = df[target].to_numpy().astype(int)
+    y = df[target].to_numpy()
+    if mode == "classify":
+        y = y.astype(int)
     X_arr = StandardScaler().fit_transform(X_raw)
     X = DataFrame(data=X_arr, columns=X_raw.columns, index=X_raw.index)
-    if classifier == "mlp":
+    if estimator == "mlp":
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
         os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
     selector.fit(X, y)
-    if classifier == "mlp":
+    if estimator == "mlp":
         os.environ["PYTHONWARNINGS"] = before
     column_idx = selector.get_support()
     # reduced = X.loc[:, column_idx].copy()
@@ -356,7 +361,12 @@ def select_features(
         )
     elif method == "step-up":
         column_idx = select_stepwise_features(
-            df, target, classifier=classifier, n_features=n_feat, direction="forward"
+            df,
+            target,
+            mode=options.mode,
+            estimator=classifier,
+            n_features=n_feat,
+            direction="forward",
         )
         df_selected = df.loc[:, column_idx]
         df_selected[target] = y

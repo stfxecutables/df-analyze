@@ -12,6 +12,7 @@ from tqdm import tqdm
 from src._constants import CLASSIFIERS
 from src.analyses import classifier_analysis_multitest
 from src.hypertune import Classifier
+from src.options import get_options
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None
@@ -36,12 +37,12 @@ def pbar_desc(args: Dict[str, Any]) -> str:
     return f"{classifier}|{selection}|{n_feat} features|htune_val={hv}"
 
 
-def get_options() -> Tuple[Classifier, bool]:
-    parser = ArgumentParser()
-    parser.add_argument("--classifier", choices=CLASSIFIERS, default="svm")
-    parser.add_argument("--step-up", action="store_true")
-    args = parser.parse_args()
-    return args.classifier, args.step_up
+# def get_options() -> Tuple[Classifier, bool]:
+#     parser = ArgumentParser()
+#     parser.add_argument("--classifier", choices=CLASSIFIERS, default="svm")
+#     parser.add_argument("--step-up", action="store_true")
+#     args = parser.parse_args()
+#     return args.classifier, args.step_up
 
 
 def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -> pd.DataFrame:
