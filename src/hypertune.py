@@ -146,7 +146,7 @@ def cv_desc(cv_method: CVMethod) -> str:
         return "LOOCV"
     if cv_method == "mc":
         return "stratified Monte-Carlo (20 random 20%-sized test sets)"
-    raise ValueError("Invalid `cv_method`")
+    raise ValueError(f"Invalid `cv_method`: {cv_method}")
 
 
 def package_classifier_cv_scores(
@@ -226,34 +226,34 @@ def package_regressor_cv_scores(
     result = dict(
         htuned=htuned,
         cv_method=htuned.cv_method,
-        mae=np.mean(scores["MAE"]),
-        msqe=np.mean(scores["MSqE"]),
-        mdae=np.mean(scores["MdAE"]),
-        mape=np.mean(scores["MAPE"]),
-        r2=np.mean(scores["R2"]),
-        var_exp=np.mean(scores["Var exp"]),
-        mae_sd=np.std(scores["MAE"], ddof=1),
-        msqe_sd=np.std(scores["MSqE"], ddof=1),
-        mdae_sd=np.std(scores["MdAE"], ddof=1),
-        mape_sd=np.std(scores["MAPE"], ddof=1),
-        r2_sd=np.std(scores["R2"], ddof=1),
-        var_exp_sd=np.std(scores["Var exp"], ddof=1),
+        mae=np.mean(scores["test_MAE"]),
+        msqe=np.mean(scores["test_MSqE"]),
+        mdae=np.mean(scores["test_MdAE"]),
+        mape=np.mean(scores["test_MAPE"]),
+        r2=np.mean(scores["test_R2"]),
+        var_exp=np.mean(scores["test_Var exp"]),
+        mae_sd=np.std(scores["test_MAE"], ddof=1),
+        msqe_sd=np.std(scores["test_MSqE"], ddof=1),
+        mdae_sd=np.std(scores["test_MdAE"], ddof=1),
+        mape_sd=np.std(scores["test_MAPE"], ddof=1),
+        r2_sd=np.std(scores["test_R2"], ddof=1),
+        var_exp_sd=np.std(scores["test_Var exp"], ddof=1),
     )
     if not log:
         return result
 
-    mae = np.mean(scores["MAE"])
-    msqe = np.mean(scores["MSqE"])
-    mdae = np.mean(scores["MdAE"])
-    mape = np.mean(scores["MAPE"])
-    r2 = np.mean(scores["R2"])
-    var_exp = np.mean(scores["Var exp"])
-    mae_sd = np.std(scores["MAE"], ddof=1)
-    msqe_sd = np.std(scores["MSqE"], ddof=1)
-    mdae_sd = np.std(scores["MdAE"], ddof=1)
-    mape_sd = np.std(scores["MAPE"], ddof=1)
-    r2_sd = np.std(scores["R2"], ddof=1)
-    var_exp_sd = np.std(scores["Var exp"], ddof=1)
+    mae = np.mean(scores["test_MAE"])
+    msqe = np.mean(scores["test_MSqE"])
+    mdae = np.mean(scores["test_MdAE"])
+    mape = np.mean(scores["test_MAPE"])
+    r2 = np.mean(scores["test_R2"])
+    var_exp = np.mean(scores["test_Var exp"])
+    mae_sd = np.std(scores["test_MAE"], ddof=1)
+    msqe_sd = np.std(scores["test_MSqE"], ddof=1)
+    mdae_sd = np.std(scores["test_MdAE"], ddof=1)
+    mape_sd = np.std(scores["test_MAPE"], ddof=1)
+    r2_sd = np.std(scores["test_R2"], ddof=1)
+    var_exp_sd = np.std(scores["test_Var exp"], ddof=1)
 
     desc = cv_desc(cv_method)
     # fmt: off
@@ -276,12 +276,12 @@ def package_regressor_scores(
     log: bool = False,
 ) -> Dict[str, Any]:
     scores = {
-        "MAE": mean_absolute_error(y_test, y_pred),
-        "MSqE": mean_squared_error(y_test, y_pred),
-        "MdAE": median_absolute_error(y_test, y_pred),
-        "MAPE": mean_absolute_percentage_error(y_test, y_pred),
-        "R2": r2_score(y_test, y_pred),
-        "Var exp": explained_variance_score(y_test, y_pred),
+        "test_MAE": mean_absolute_error(y_test, y_pred),
+        "test_MSqE": mean_squared_error(y_test, y_pred),
+        "test_MdAE": median_absolute_error(y_test, y_pred),
+        "test_MAPE": mean_absolute_percentage_error(y_test, y_pred),
+        "test_R2": r2_score(y_test, y_pred),
+        "test_Var exp": explained_variance_score(y_test, y_pred),
     }
     if log:
         percent = int(100 * float(cv_method))

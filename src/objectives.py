@@ -1,24 +1,25 @@
 import os
-from dataclasses import dataclass, field
-from pprint import pprint
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 from warnings import filterwarnings
 
 import numpy as np
-import optuna
 from numpy import ndarray
 from optuna import Trial
 from pandas import DataFrame
+from sklearn.ensemble import AdaBoostRegressor as AdaReg
 from sklearn.ensemble import BaggingClassifier
-from sklearn.ensemble import RandomForestClassifier as RF, RandomForestRegressor as RFR, GradientBoostingRegressor as GBR, AdaBoostRegressor as AdaReg
+from sklearn.ensemble import GradientBoostingRegressor as GBR
+from sklearn.ensemble import RandomForestClassifier as RF
+from sklearn.ensemble import RandomForestRegressor as RFR
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.linear_model import LogisticRegression as LR, ElasticNet
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.metrics import accuracy_score, confusion_matrix, make_scorer, roc_auc_score
+from sklearn.linear_model import ElasticNet
+from sklearn.linear_model import LogisticRegression as LR
 from sklearn.model_selection import BaseCrossValidator, LeaveOneOut, StratifiedShuffleSplit
 from sklearn.model_selection import cross_validate as cv
 from sklearn.model_selection import train_test_split
-from sklearn.neural_network import MLPClassifier as MLP, MLPRegressor as MLPR
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neural_network import MLPClassifier as MLP
+from sklearn.neural_network import MLPRegressor as MLPR
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 
@@ -50,6 +51,7 @@ TEST_SCORES = dict(
     sensitivity=sensitivity_scorer,
     specificity=specificity_scorer,
 )
+NEG_MAE = "neg_mean_absolute_error"
 
 
 def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCrossValidator]:
@@ -68,6 +70,14 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
     -------
     cv: Union[int, Splits, BaseCrossValidator]
         The object that can be passed into the `cross_validate` function
+
+    Notes
+    -----
+    If cv_method is an `int`, then it specifies k-fold with the `int` for `k`.
+
+    If cv_method is a `float`, then it specifies holdout where the float is
+    the percentage of samples heldout for testing.
+
     """
     if isinstance(cv_method, int):
         return int(cv_method)
@@ -85,7 +95,7 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
         return LeaveOneOut()
     if cv_method == "mc":
         return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
-    raise ValueError("Invalid `cv_method`")
+    raise ValueError(f"Invalid `cv_method`: {cv_method}")
 
 
 def mlp_args(trial: Trial) -> Dict[str, Any]:
@@ -216,6 +226,7 @@ def mlp_classifier_objective(
 
 # REGRESSORS
 
+
 def linear_regressor_objective(
     X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
 ) -> Callable[[Trial], float]:
@@ -226,10 +237,11 @@ def linear_regressor_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = ElasticNet(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
+
 
 def svm_regressor_objective(
     X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
@@ -241,7 +253,7 @@ def svm_regressor_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = SVR(cache_size=500, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -259,7 +271,7 @@ def rf_regressor_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = RFR(n_jobs=2, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=4)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -271,15 +283,16 @@ def adaboost_regressor_objective(
     def objective(trial: Trial) -> float:
         args: Dict = dict(
             n_estimators=trial.suggest_int("n_estimators", 50, 550, step=50),
-            learning_rate=trial.suggest_uniform("learning_rate", 0.05, 3)
+            learning_rate=trial.suggest_uniform("learning_rate", 0.05, 3),
             max_depth=trial.suggest_int("max_depth", 1, 5),
         )
         _cv = get_cv(y_train, cv_method)
         estimator = AdaReg(loss="huber", **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
+
 
 def gradboost_regressor_objective(
     X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
@@ -293,7 +306,7 @@ def gradboost_regressor_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = GBR(loss="huber", **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -310,7 +323,7 @@ def knn_regressor_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = KNeighborsRegressor(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -326,7 +339,7 @@ def mlp_regressor_objective(
         os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
-        scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(mlp, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         os.environ["PYTHONWARNINGS"] = before
         acc = float(np.mean(scores["test_score"]))
         return acc

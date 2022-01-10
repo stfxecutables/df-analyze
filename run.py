@@ -10,7 +10,7 @@ from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 from src._constants import CLASSIFIERS
-from src.analyses import classifier_analysis_multitest
+from src.analyses import full_estimator_analysis
 from src.hypertune import Classifier
 from src.options import get_options
 
@@ -51,7 +51,7 @@ def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -
     for arg in args:
         pbar.set_description(pbar_desc(arg))
         results.append(
-            classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **arg)
+            full_estimator_analysis(htune_trials=100, verbosity=optuna.logging.ERROR, **arg)
         )
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)

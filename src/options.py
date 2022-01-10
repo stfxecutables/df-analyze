@@ -49,6 +49,7 @@ exists, or the last column if it does not.
 If your data is in a NumPy array, the array must have the shape
 `(n_samples, n_features + 1)` where the last column is the target for either
 classification or prediction.
+
 """
 
 TARGET_HELP_STR = """
@@ -58,87 +59,112 @@ If a string, then `--df` must be a Pandas `DataFrame` and the string passed in
 here specifies the name of the column holding the targer variable.
 
 If an integer, and `--df` is a NumPy array only, specifies the column index.
+
 """
 
 MODE_HELP_STR = """
 If "classify", do classification. If "regress", do regression.
+
 """
 
 # DEPRECATE
 DFNAME_HELP_STR = """
 A unique identifier for your DataFrame to use when saving outputs. If
 unspecified, a name will be generated based on the filename passed to `--df`.
+
 """
 
 
 CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
 Can be a list of elements from {sorted(CLASSIFIERS)}.
+
 """
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
 Can be a list of elements from {sorted(REGRESSORS)}.
+
 """
 
 FEAT_SELECT_HELP = """
 The feature selection methods to use. Available options are:
 
-auc:        Select features with largest AUC values relative to the two classes
-            (classification only).
+  auc:        Select features with largest AUC values relative to the two
+              classes (classification only).
 
-d:          Select features with largest Cohen's d values relative to the two
-            classes (classification only).
+  d:          Select features with largest Cohen's d values relative to the two
+              classes (classification only).
 
-kpca:       Generate features by using largest components of kernel PCA.
+  kpca:       Generate features by using largest components of kernel PCA.
 
-pca:        Generate features by using largest components from a PCA.
+  pca:        Generate features by using largest components from a PCA.
 
-pearson:    Select features with largest Pearson correlations with target.
+  pearson:    Select features with largest Pearson correlations with target.
 
-step-up:    Use step-up features selection. Costly.
+  step-up:    Use step-up features selection. Costly.
+
 """
 
 FEAT_CLEAN_HELP = """
 If specified, which feature cleaning methods to use prior to feature selection.
 Makes use of the featuretools library (featuretools.com). Options are:
 
-correlated: remove highly correlated features using featuretools.
+  correlated: remove highly correlated features using featuretools.
+  constant:   remove constant (zero-variance) features. Default.
+  lowinfo:    remove "low information" features via featuretools.
 
-constant:   remove constant (zero-variance) features. Default.
-
-lowinfo:    remove "low information" features via featuretools.
 """
 
 NAN_HELP = """
 How to drop NaN values. Uses Pandas options.
 
-none:       Do not remove NaNs. Will cause errors for most algorithms. Default.
+  none:       Do not remove. Will cause errors for most algorithms. Default.
+  all:        Remove the sample and feature both (row and column) for any NaN.
+  rows:       Drop samples (rows) that contain one or more NaN values.
+  cols:       Drop features (columns) that contain one or more NaN values.
 
-all:        Remove the sample and feature both (row and column) for any NaN.
-
-rows:       Drop samples (rows) that contain one or more NaN values.
-
-cols:       Drop features (columns) that contain one or more NaN values.
 """
 
 N_FEAT_HELP = """
 Number of features to select using method specified by --feat-select. NOTE:
 specifying values greater than e.g. 10-50 with --feat-select=step-up and slower
 algorithms can easily result in compute times of many hours.
+
 """
 
 HTUNE_HELP = """
+
 """
 
 HTUNEVAL_HELP_STR = """
 If an
+
 """
 
 DESC = f"""
 {DF_HELP_STR}
 {TARGET_HELP_STR}
 {CLS_HELP_STR}
+"""
+
+USAGE_EXAMPLES = """
+USAGE EXAMPLE (assumes you have run `poetry shell`):
+
+    python df-analyze.py \\
+        --df="weather_data.json" \\
+        --target='temperature' \\
+        --mode=regress \\
+        --regressors=svm linear \\
+        --drop-nan=rows \\
+        --feat-clean=constant \\
+        --feat-select=pca pearson \\
+        --n-feat=5 \\
+        --htune \\
+        --test-val=kfold \\
+        --test-val-size=5 \\
+        --outdir='./results'
+
 """
 
 
@@ -204,7 +230,7 @@ class ProgramOptions(Debug):
         self.htune_val_size: float
         self.htune_trials: int
         self.test_val: ValMethod
-        self.test_val_size: float
+        self.test_val_sizes: Tuple[float, ...]
         self.outdir: Path
 
         self.datapath = self.validate_datapath(cli_args.df)
@@ -244,7 +270,7 @@ class ProgramOptions(Debug):
         self.htune_val_size = cli_args.htune_val_size
         self.htune_trials = cli_args.htune_trials
         self.test_val = cli_args.test_val
-        self.test_val_size = cli_args.test_val_size
+        self.test_val_sizes = tuple(sorted(set(cli_args.test_val_sizes)))
 
     @staticmethod
     def validate_datapath(df_path: Path) -> Path:
@@ -275,7 +301,7 @@ def resolved_path(p: str) -> Path:
     return Path(p).resolve()
 
 
-def cv_size(cv_str: str) -> float:
+def cv_size(cv_str: str) -> Union[float, int]:
     try:
         cv = float(cv_str)
     except Exception as e:
@@ -286,15 +312,19 @@ def cv_size(cv_str: str) -> float:
         return cv
     if cv == 1:
         raise ArgumentError("`--htune-val-size=1` is invalid.")
+    if cv != round(cv):
+        raise ArgumentError("`--htune-val-size` must be an integer if greater than 1, as it specified the `k` in k-fold")
     if cv > 10:
         warn("`--htune-val-size` greater than 10 is not recommended.", category=UserWarning)
+    if cv > 1:
+        return int(cv)
     return cv
 
 
 def get_options(args: str = None) -> ProgramOptions:
     """parse command line arguments"""
     # parser = ArgumentParser(description=DESC)
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
+    parser = ArgumentParser(formatter_class=RawTextHelpFormatter, epilog=USAGE_EXAMPLES)
     parser.add_argument("--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR)
     # just use existing pathname instead
     # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
@@ -356,13 +386,13 @@ def get_options(args: str = None) -> ProgramOptions:
         "-H",
         type=str,
         choices=HTUNE_VAL_METHODS,
-        default="none",
+        default=3,
         help=HTUNEVAL_HELP_STR,
     )
     parser.add_argument("--htune-val-size", type=cv_size, default=0)
     parser.add_argument("--htune-trials", type=int, default=100)
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
-    parser.add_argument("--test-val-size", type=cv_size, default=5)
+    parser.add_argument("--test-val-sizes", nargs="+", type=cv_size, default=5)
     parser.add_argument("--outdir", type=resolved_path, default=None)
     cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)

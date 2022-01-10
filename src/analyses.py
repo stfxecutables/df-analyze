@@ -69,22 +69,20 @@ def results_df(
     df: DataFrame
         Summary dataframe.
     """
-    htuned: HtuneResult = result["htuned"]
+    htuned: HtuneResult = result.pop("htuned")
+    cv_method = result.pop("cv_method")
     test_validation = options.test_val
     test_val = val_method_short(test_validation)
-    htune_val = val_method_short(result["cv_method"])
-    row = dict(
-        model=htuned.estimator,
-        feat_select=feature_selection,
-        n_feat=options.selection_options.n_feat,
-        test_val=test_val,
-        acc=result["acc"],
-        acc_sd=result["acc_sd"],
-        auc=result["auc"],
-        auc_sd=result["auc_sd"],
-        htune_val=htune_val,
-        htune_trials=options.htune_trials,
-    )
+    htune_val = val_method_short(cv_method)
+    row = {
+        "model": htuned.estimator,
+        "feat_select": feature_selection,
+        "n_feat": options.selection_options.n_feat,
+        "test_val": test_val,
+        **result,
+        "htune_val": htune_val,
+        "htune_trials": options.htune_trials,
+    }
     return DataFrame([row])
 
 
@@ -211,7 +209,7 @@ def full_estimator_analysis(
     if log:
         print(f"Preparing feature selection with method: {feature_selection}")
     selection_options = options.selection_options
-    test_val = options.test_val
+    test_val_sizes = options.test_val_sizes
     htune_trials = options.htune_trials
     htune_val = options.htune_val
 
@@ -234,9 +232,9 @@ def full_estimator_analysis(
     if verbosity != optuna.logging.ERROR:
         print(f"\n{' Testing Results ':=^80}\n")
     results = []
-    for test_validation in test_val:
+    for test_val_size in test_val_sizes:
         result = evaluate_hypertuned(
-            htuned, cv_method=test_validation, X_train=X_train, y_train=y_train, log=log
+            htuned, cv_method=test_val_size, X_train=X_train, y_train=y_train, log=log
         )
         results.append(
             results_df(
