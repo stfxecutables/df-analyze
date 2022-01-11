@@ -4,7 +4,7 @@ python df-analyze.py \
     --df="data/sklearn_classify/data.json" \
     --target='target' \
     --mode=classify \
-    --classifiers svm dtree bag \
+    --classifiers svm dtree \
     --drop-nan=rows \
     --feat-clean constant lowinfo \
     --feat-select d auc pearson pca \

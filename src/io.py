@@ -37,6 +37,7 @@ class FileType(Enum):
     Interim = "interim"
     Final = "final"
     Feature = "feature"
+    Params = "params"
 
 
 @dataclass
@@ -89,6 +90,17 @@ def try_save(
         if selection is None or selection == "none":
             # feature cleaning may have removed features and the cleaned
             # set of features is still worth saving
+            selection = "no-selection"
+        else:
+            selection += "-selection"
+        if len(cleaning) > 0:
+            clean = f"_cleaning={'-'.join([method for method in cleaning])}"
+        else:
+            clean = ""
+        outdir = program_dirs.feature_selection / f"{selection}{clean}"
+        desc = "selected/cleaned features"
+    elif file_type is FileType.Params:
+        if selection is None or selection == "none":
             selection = "no-selection"
         else:
             selection += "-selection"

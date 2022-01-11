@@ -23,7 +23,6 @@ from src._constants import (
     HTUNE_VAL_METHODS,
     REGRESSORS,
 )
-from src._globals import GLOBALS
 from src._types import (
     Classifier,
     DropNan,
@@ -188,9 +187,6 @@ class ProgramOptions(Debug):
                     f"`--feat-select` CLI option. [Got arguments: {args}]"
                 )
         self.spam_warnings()
-
-        # Careful!
-        GLOBALS.JOBLIB_CACHE_DIR = self.program_dirs.joblib_cache
 
     def spam_warnings(self) -> None:
         if self.verbosity is Verbosity.ERROR:

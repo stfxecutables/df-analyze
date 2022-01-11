@@ -21,8 +21,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
-from src._constants import DATADIR, JOBLIB_CACHE_DIR, SEED, UNCORRELATED
-from src._globals import GLOBALS
+from src._constants import DATADIR, SEED, UNCORRELATED
 from src._types import (
     Classifier,
     CorrMethod,
@@ -38,8 +37,8 @@ from src.io import FileType, try_save
 from src.regressors import get_regressor_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
-FEATURE_CACHE = GLOBALS.JOBLIB_CACHE_DIR / "__features__"
-MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
+# FEATURE_CACHE = GLOBALS.JOBLIB_CACHE_DIR / "__features__"
+# MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
 
 
 def cohens_d(df: DataFrame, target: str) -> Series:
@@ -140,7 +139,6 @@ def remove_correlated_custom(df: DataFrame, target: str, threshold: float = 0.95
     raise NotImplementedError()
 
 
-@MEMOIZER.cache
 def remove_weak_features(options: SelectionOptions) -> DataFrame:
     """Remove constant, low-information, and highly-correlated (> 0.95) features using the
     featuretools (https://www.featuretools.com/) Python API. This should be run *first*
@@ -161,6 +159,7 @@ def remove_weak_features(options: SelectionOptions) -> DataFrame:
     df_selected: DataFrame
         Copy of data with selected columns. Also still includes the `target` column.
     """
+
     df = get_clean_data(options.cleaning_options)
     target = options.cleaning_options.target
     X = df.drop(columns=target)
@@ -212,7 +211,7 @@ def select_features_by_univariate_rank(
     elif metric.lower() == "auc":
         importances = auroc(df, target).sort_values(ascending=False)
     elif metric.lower() in ["pearson", "spearman"]:
-        importances = correlations(df, target, method=metric).sort_values(ascending=False)  # type: ignore
+        importances = correlations(df, target, method=metric).sort_values(ascending=False)  # noqa # type: ignore
     else:
         raise ValueError("Invalid metric")
     strongest = importances[:n_feat]
@@ -279,7 +278,6 @@ def kernel_pca_reduce(df: DataFrame, target: str, n_features: int = 10) -> DataF
     return ret
 
 
-@MEMOIZER.cache
 def select_stepwise_features(
     df: DataFrame,
     target: str,
@@ -290,6 +288,7 @@ def select_stepwise_features(
 ) -> DataFrame:
     """Perform stepwise feature selection (which takes HOURS) and save the selected features in a
     DataFrame so that subsequent runs do not need to do this again."""
+
     # outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
     get_model = get_classifier_constructor if mode == "classify" else get_regressor_constructor
     selector = SequentialFeatureSelector(

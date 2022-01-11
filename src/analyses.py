@@ -24,6 +24,7 @@ from src.hypertune import (
     hypertune_regressor,
     train_val_splits,
 )
+from src.io import FileType, try_save
 
 
 def val_method_short(method: CVMethod, test_val_size: int) -> str:
@@ -229,6 +230,15 @@ def full_estimator_analysis(
         n_trials=htune_trials,
         cv_method=htune_val,
         verbosity=optuna_verbosity,
+    )
+    # TODO: save params
+    try_save(
+        program_dirs=options.program_dirs,
+        df=DataFrame(htuned.best_params),
+        file_stem="params",
+        file_type=FileType.Params,
+        selection=feature_selection,
+        cleaning=options.feat_clean,
     )
     if verbosity != optuna.logging.ERROR:
         print(f"\n{' Testing Results ':=^80}\n")
