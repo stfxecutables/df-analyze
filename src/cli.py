@@ -40,13 +40,19 @@ from src.cli_help import (
     FEAT_CLEAN_HELP,
     FEAT_SELECT_HELP,
     HTUNE_HELP,
+    HTUNE_TRIALS_HELP,
+    HTUNE_VALSIZE_HELP,
     HTUNEVAL_HELP_STR,
     MODE_HELP_STR,
     N_FEAT_HELP,
     NAN_HELP,
+    OUTDIR_HELP,
     REG_HELP_STR,
     TARGET_HELP_STR,
+    TEST_VAL_HELP,
+    TEST_VALSIZES_HELP,
     USAGE_EXAMPLES,
+    VERBOSITY_HELP,
 )
 from src.io import ProgramDirs, setup_io
 from src.utils import Debug
@@ -335,11 +341,15 @@ def get_options(args: str = None) -> ProgramOptions:
         default=3,
         help=HTUNEVAL_HELP_STR,
     )
-    parser.add_argument("--htune-val-size", type=cv_size, default=0)
-    parser.add_argument("--htune-trials", type=int, default=100)
-    parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
-    parser.add_argument("--test-val-sizes", nargs="+", type=cv_size, default=5)
-    parser.add_argument("--outdir", type=resolved_path, default=None)
-    parser.add_argument("--verbosity", type=Verbosity, default=Verbosity(1))
+    parser.add_argument("--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP)
+    parser.add_argument("--htune-trials", type=int, default=100, help=HTUNE_TRIALS_HELP)
+    parser.add_argument(
+        "--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold", help=TEST_VAL_HELP
+    )
+    parser.add_argument(
+        "--test-val-sizes", nargs="+", type=cv_size, default=5, help=TEST_VALSIZES_HELP
+    )
+    parser.add_argument("--outdir", type=resolved_path, required=True, help=OUTDIR_HELP)
+    parser.add_argument("--verbosity", type=Verbosity, default=Verbosity(1), help=VERBOSITY_HELP)
     cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)
