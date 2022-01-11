@@ -4,7 +4,7 @@ from _pytest.capture import CaptureFixture
 from src._constants import ROOT
 from src.cleaning import get_clean_data
 from src.feature_selection import select_features
-from src.options import get_options
+from src.cli import get_options
 
 DATA = ROOT / "data/banking/bank.json"
 

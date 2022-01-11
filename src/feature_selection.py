@@ -32,7 +32,8 @@ from src._types import (
 )
 from src.classifiers import get_classifier_constructor
 from src.cleaning import get_clean_data
-from src.options import CleaningOptions, SelectionOptions
+from src.cli import CleaningOptions, ProgramOptions, SelectionOptions
+from src.io import FileType, try_save
 from src.regressors import get_regressor_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
@@ -321,7 +322,7 @@ def select_stepwise_features(
 
 # DO NOT MEMOIZE
 def select_features(
-    options: SelectionOptions, feature_selection: Optional[FeatureSelection], classifier: Classifier
+    options: ProgramOptions, feature_selection: Optional[FeatureSelection], classifier: Classifier
 ) -> DataFrame:
     """Dispatch function to handle executing a single feature selection option
 
@@ -351,7 +352,7 @@ def select_features(
     target = options.cleaning_options.target
     y = df[options.cleaning_options.target].to_numpy()
 
-    n_feat = options.n_feat
+    n_feat = options.selection_options.n_feat
     method = str(feature_selection).lower()
     if method == "pca":
         df_selected = pca_reduce(df, target, n_feat)
@@ -381,4 +382,29 @@ def select_features(
         df_selected = df
     else:
         raise ValueError("Invalid feature selection method")
+
+    # For pca and kpca, features are in fact new data, so values must
+    # be saved as well. Otherwise, it is sufficient to save the names.
+    if method in ["pca", "kpca"]:
+        try_save(
+            program_dirs=options.program_dirs,
+            df=df_selected,
+            file_stem=f"{classifier}_features",
+            file_type=FileType.Feature,
+            selection=method,
+            cleaning=options.feat_clean,
+        )
+    else:
+        features = pd.Series(
+            name="features", data=df_selected.drop(columns=options.target).columns.to_list()
+        )
+        try_save(
+            program_dirs=options.program_dirs,
+            df=features,
+            file_stem=f"{classifier}_features",
+            file_type=FileType.Feature,
+            selection=method,
+            cleaning=options.feat_clean,
+        )
+
     return df_selected

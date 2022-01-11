@@ -15,6 +15,7 @@ from src._types import (
     Regressor,
 )
 from src.cleaning import get_clean_data
+from src.cli import ProgramOptions, Verbosity
 from src.feature_selection import select_features
 from src.hypertune import (
     HtuneResult,
@@ -23,7 +24,6 @@ from src.hypertune import (
     hypertune_regressor,
     train_val_splits,
 )
-from src.options import ProgramOptions, Verbosity
 
 
 def val_method_short(method: CVMethod, test_val_size: int) -> str:
@@ -141,7 +141,7 @@ def classifier_analysis(
     htune_trials = options.htune_trials
     htune_val = options.htune_val
     print(f"Preparing feature selection with method: {feature_selection}")
-    df = select_features(selection_options, feature_selection, classifier)
+    df = select_features(options, feature_selection, classifier)
     if isinstance(test_val, float):  # set aside data for final test
         if test_val <= 0 or test_val >= 1:
             raise ValueError("`--test-val` must be in (0, 1)")
@@ -182,7 +182,7 @@ def full_estimator_analysis(
     Parameters
     ----------
     options: ProgramOptions
-        See `src.options.ProgramOptions` for details. Options are created by the
+        See `src.cli.ProgramOptions` for details. Options are created by the
         CLI options, documented by running `python df-analyze.py --help`.
 
     estimator: Estimator = "svm"
@@ -214,7 +214,7 @@ def full_estimator_analysis(
     htune_trials = options.htune_trials
     htune_val = options.htune_val
 
-    df = select_features(selection_options, feature_selection, estimator)
+    df = select_features(options, feature_selection, estimator)
     X_raw = df.drop(columns="target")
     X_train = StandardScaler().fit_transform(X_raw)
     y_train = df["target"].to_numpy()

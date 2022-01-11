@@ -12,7 +12,7 @@ from tqdm import tqdm
 from src._constants import CLASSIFIERS
 from src.analyses import full_estimator_analysis
 from src.hypertune import Classifier
-from src.options import get_options
+from src.cli import get_options
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None

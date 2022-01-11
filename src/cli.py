@@ -32,6 +32,7 @@ from src._types import (
     Regressor,
     ValMethod,
 )
+from src.io import ProgramDirs, setup_io
 from src.utils import Debug
 
 DF_HELP_STR = """
@@ -252,10 +253,12 @@ class ProgramOptions(Debug):
         self.test_val: ValMethod
         self.test_val_sizes: Tuple[float, ...]
         self.outdir: Path
+        self.program_dirs: ProgramDirs
         self.verbosity: Verbosity = cli_args.verbosity
 
         self.datapath = self.validate_datapath(cli_args.df)
         self.outdir = self.ensure_outdir(self.datapath, cli_args.outdir)
+        self.program_dirs = setup_io(self.outdir)
         self.target = cli_args.target
         self.mode = cli_args.mode
         # remove duplicates

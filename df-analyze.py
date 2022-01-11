@@ -17,7 +17,8 @@ from tqdm import tqdm
 
 from src._types import CVMethod, Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
-from src.options import ProgramOptions, Verbosity, get_options
+from src.cli import ProgramOptions, Verbosity, get_options
+from src.io import FileType, try_save
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -60,38 +61,20 @@ def pbar_desc(loop_args: LoopArgs) -> str:
     return f"{estimator}|{selection}|{n_feat} features|htune_val={hv}"
 
 
-def try_save(df: DataFrame, outdir: Path, file_info: str) -> None:
-    json = outdir / f"{file_info}.json"
-    csv = outdir / f"{file_info}.csv"
-    try:
-        df.to_json(json)
-        print(f"Saved interim result to {json}")
-    except Exception:
-        traceback.print_exc()
-        print(f"Failed to save following results to {json}")
-        df.to_markdown(tablefmt="simple", floatfmt="0.5f")
-    try:
-        df.to_csv(csv)
-        print(f"Saved interim result to {csv}")
-    except Exception:
-        traceback.print_exc()
-        print(f"Failed to save following results to {csv}:")
-        df.to_markdown(tablefmt="simple", floatfmt="0.5f")
-
-
 def save_interim_result(args: LoopArgs, result: DataFrame) -> None:
     estimator = args.estimator
     outdir = args.options.outdir
+    prog_dirs = args.options.program_dirs
     if outdir is None:
         return
     step = "step-up" == args.feature_selection
 
     timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    file_info = f"results__{estimator}{'_step-up' if step else ''}__{timestamp}"
-    try_save(result, outdir, file_info)
+    file_stem = f"results__{estimator}{'_step-up' if step else ''}__{timestamp}"
+    try_save(prog_dirs, result, file_stem, FileType.Interim)
 
 
-def sort_df(df: DataFrame) -> None:
+def sort_df(df: DataFrame) -> DataFrame:
     """Auto-detect if classification or regression based on columns and sort"""
     cols = [c.lower() for c in df.columns]
     is_regression = False
@@ -180,7 +163,8 @@ def run_analysis(
         .replace("'", "")
     )
     file_info = f"results__{models}{'__step-up' if is_stepup else ''}__{timestamp}"
-    try_save(df, results_dir, file_info)
+    prog_dirs = loop_args[0].options.program_dirs
+    try_save(prog_dirs, df, file_info, FileType.Final)
     print_sorted(df)
     return df
 

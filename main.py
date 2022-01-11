@@ -6,7 +6,7 @@ import pandas as pd
 from pandas import DataFrame
 from scipy.io.arff import loadarff
 
-from src.options import get_options
+from src.cli import get_options
 
 if __name__ == "__main__":
     options = get_options()

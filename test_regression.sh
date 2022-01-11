@@ -4,7 +4,7 @@ python df-analyze.py \
     --df="data/sklearn_regression/data.json" \
     --target='target' \
     --mode=regress \
-    --regressors rf adaboost gboost mlp \
+    --regressors svm linear \
     --drop-nan=rows \
     --feat-clean constant lowinfo \
     --feat-select kpca pca pearson none \
@@ -15,3 +15,4 @@ python df-analyze.py \
     --test-val-size=5 \
     --outdir='test_results'
 #    --regressors knn svm linear rf adaboost gboost mlp \
+#    --regressors rf adaboost gboost mlp \
