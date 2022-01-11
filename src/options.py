@@ -4,6 +4,7 @@ File for defining all options passed to `df-analyze.py`.
 import os
 from argparse import ArgumentError, ArgumentParser, Namespace, RawTextHelpFormatter
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, cast, no_type_check
 from warnings import warn
@@ -168,6 +169,25 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
 """
 
 
+class Verbosity(Enum):
+    """
+    Properties
+    ----------
+    ERROR
+        Only log errors.
+
+    INFO
+        Log results of each full hyperparameter tuning and other interim progress bars.
+
+    DEBUG
+        Maximum level of logging.
+    """
+
+    ERROR = 0
+    INFO = 1
+    DEBUG = 2
+
+
 @dataclass
 class CleaningOptions(Debug):
     """Container for HASHABLE arguments used to check whether a memoized cleaning
@@ -232,6 +252,7 @@ class ProgramOptions(Debug):
         self.test_val: ValMethod
         self.test_val_sizes: Tuple[float, ...]
         self.outdir: Path
+        self.verbosity: Verbosity = cli_args.verbosity
 
         self.datapath = self.validate_datapath(cli_args.df)
         self.outdir = self.ensure_outdir(self.datapath, cli_args.outdir)
@@ -239,7 +260,7 @@ class ProgramOptions(Debug):
         self.mode = cli_args.mode
         # remove duplicates
         self.classifiers = tuple(sorted(set(cli_args.classifiers)))
-        self.regressors = tuple(sorted(set(cli_args.classifiers)))
+        self.regressors = tuple(sorted(set(cli_args.regressors)))
         self.feat_select = tuple(sorted(set(cli_args.feat_select)))
         self.feat_clean = tuple(sorted(set(cli_args.feat_clean)))
 
@@ -313,7 +334,9 @@ def cv_size(cv_str: str) -> Union[float, int]:
     if cv == 1:
         raise ArgumentError("`--htune-val-size=1` is invalid.")
     if cv != round(cv):
-        raise ArgumentError("`--htune-val-size` must be an integer if greater than 1, as it specified the `k` in k-fold")
+        raise ArgumentError(
+            "`--htune-val-size` must be an integer if greater than 1, as it specified the `k` in k-fold"
+        )
     if cv > 10:
         warn("`--htune-val-size` greater than 10 is not recommended.", category=UserWarning)
     if cv > 1:
@@ -394,5 +417,6 @@ def get_options(args: str = None) -> ProgramOptions:
     parser.add_argument("--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold")
     parser.add_argument("--test-val-sizes", nargs="+", type=cv_size, default=5)
     parser.add_argument("--outdir", type=resolved_path, default=None)
+    parser.add_argument("--verbosity", type=Verbosity, default=Verbosity(1))
     cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)

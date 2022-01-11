@@ -1,5 +1,5 @@
 #!/bin/bash
-poetry shell
+source .venv/bin/activate
 python df-analyze.py \
     --df="data/sklearn_regression/data.json" \
     --target='target' \

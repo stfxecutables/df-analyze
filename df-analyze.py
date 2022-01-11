@@ -1,7 +1,10 @@
 import os
+import sys
 import traceback
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
+from pprint import pprint
 from time import ctime
 from typing import Any, List, Optional
 
@@ -14,7 +17,7 @@ from tqdm import tqdm
 
 from src._types import CVMethod, Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
-from src.options import ProgramOptions, get_options
+from src.options import ProgramOptions, Verbosity, get_options
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -30,7 +33,7 @@ class LoopArgs(Debug):
     estimator: Estimator
     feature_selection: Optional[FeatureSelection]
     # verbosity: int = optuna.logging.ERROR
-    verbosity: int = optuna.logging.INFO
+    # verbosity: Verbosity = optuna.logging.INFO
 
 
 def listify(item: Any) -> List[Any]:
@@ -168,11 +171,29 @@ def run_analysis(
 
     df = sort_df(pd.concat(results, axis=0, ignore_index=True))
     timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    models = str(estimators).replace(" ", "").replace(",", "_").replace("(", "").replace(")", "").replace("'", "")
+    models = (
+        str(estimators)
+        .replace(" ", "")
+        .replace(",", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("'", "")
+    )
     file_info = f"results__{models}{'__step-up' if is_stepup else ''}__{timestamp}"
     try_save(df, results_dir, file_info)
     print_sorted(df)
     return df
+
+
+def log_options(options: ProgramOptions) -> None:
+    opts = deepcopy(options.__dict__)
+    clean = opts.pop("cleaning_options").__dict__
+    selection = opts.pop("selection_options").__dict__
+    selection.pop("cleaning_options")
+    opts = {**opts, **clean, **selection}
+
+    print("Will run analyses with options:")
+    pprint(opts, indent=2, depth=2, compact=False)
 
 
 if __name__ == "__main__":
@@ -190,4 +211,6 @@ if __name__ == "__main__":
         feature_selection=listify(feature_selection),
     )
     loop_args = [LoopArgs(**params) for params in ParameterGrid(arg_options)]
+    if options.verbosity.value > 0:
+        log_options(options)
     run_analysis(loop_args, estimators, is_stepup)

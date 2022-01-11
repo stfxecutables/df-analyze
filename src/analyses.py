@@ -23,7 +23,7 @@ from src.hypertune import (
     hypertune_regressor,
     train_val_splits,
 )
-from src.options import ProgramOptions
+from src.options import ProgramOptions, Verbosity
 
 
 def val_method_short(method: CVMethod) -> str:
@@ -171,7 +171,6 @@ def full_estimator_analysis(
     options: ProgramOptions,
     estimator: Estimator = "svm",
     feature_selection: Optional[FeatureSelection] = "pca",
-    verbosity: int = optuna.logging.ERROR,
 ) -> DataFrame:
     """Run a full analysis of a classifier or regressor and return a summary of the
     results. All listed options in `test_validations` (see below) will be performed
@@ -197,15 +196,14 @@ def full_estimator_analysis(
         the features with the strongest univariate relationship to the target.
         If None or "minimal", perform only basic cleaning and no feature selection.
 
-    verbosity: int = optuna.logging.ERROR
-        Controls the amount of console spam produced by Optuna, as well as tqdm progress bars.
-
     Returns
     -------
     results: DataFrame
         A summary DataFrame of the test results and methods used.
     """
-    log = verbosity != optuna.logging.ERROR
+    verbosity = options.verbosity.value
+    log = verbosity != Verbosity.ERROR
+    optuna_verbosity = optuna.logging.ERROR if verbosity == 0 else optuna.logging.INFO
     if log:
         print(f"Preparing feature selection with method: {feature_selection}")
     selection_options = options.selection_options
@@ -227,7 +225,7 @@ def full_estimator_analysis(
         y_train=y_train,
         n_trials=htune_trials,
         cv_method=htune_val,
-        verbosity=verbosity,
+        verbosity=optuna_verbosity,
     )
     if verbosity != optuna.logging.ERROR:
         print(f"\n{' Testing Results ':=^80}\n")
