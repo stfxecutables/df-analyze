@@ -318,16 +318,18 @@ class ProgramOptions(Debug):
 
         if ("step-up" in self.feat_select) or ("step-down" in self.feat_select):
             warn(
-                "Step-up and step-down feature selection have very high time-complexity.\n"
+                "Step-up and step-down feature selection can have very high time-complexity.\n"
                 "It is strongly recommended to run these selection procedures in isolation,\n"
                 "and not in the same process as all other feature selection procedures.\n"
+                "See also the relevant notes on runtime complexity of these techniques:\n"
+                "https://scikit-learn.org/stable/modules/feature_selection.html#sequential-feature-selection"
             )
         if "step-down" in self.feat_select:
             warn(
                 "Step-down feature selection in particular will usually be intractable\n"
                 "even on small (100 features, 1000 samples) datasets and when selecting\n"
-                "only 10-20 features, unless using a very fast estimator (linear\n"
-                "regression, logistic regression) or sometimes, a support-vector machine.\n"
+                "a much smaller number of features (10-20), unless using a very fast\n"
+                "estimator (linear regression, logistic regression, maybe svm)."
             )
 
     @staticmethod
