@@ -93,16 +93,19 @@ def sort_df(df: DataFrame) -> DataFrame:
 def print_sorted(df: DataFrame) -> None:
     """Auto-detect if classification or regression based on columns"""
     cols = [c.lower() for c in df.columns]
-    is_regression = False
+    is_regression = None
     sort_col = None
     for col in cols:
-        if ("mae" in col) and ("sd" not in col):
+        if "mae" in col:
             is_regression = True
-            sort_col = col
             break
-    if sort_col is None:
+        if "acc" in col:
+            is_regression = False
+            break
+    if is_regression is None:
         print(df.to_markdown(tablefmt="simple", floatfmt="0.3f"))
         return
+    sort_col = "mae" if is_regression else "acc"
     ascending = is_regression
     table = df.sort_values(by=sort_col, ascending=ascending).to_markdown(
         tablefmt="simple", floatfmt="0.3f"

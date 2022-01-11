@@ -298,8 +298,9 @@ class ProgramOptions(Debug):
                     "for regression data. Do not pass arguments `d` or `auc` to "
                     f"`--feat-select` CLI option. [Got arguments: {args}]"
                 )
+        self.spam_warnings()
 
-        # warnings
+    def spam_warnings(self) -> None:
         if self.verbosity is Verbosity.ERROR:
             return  # don't warn user
 
@@ -331,6 +332,7 @@ class ProgramOptions(Debug):
                 "a much smaller number of features (10-20), unless using a very fast\n"
                 "estimator (linear regression, logistic regression, maybe svm)."
             )
+        print("To silence these warnings, use `--verbosity=0`.")
 
     @staticmethod
     def validate_datapath(df_path: Path) -> Path:
