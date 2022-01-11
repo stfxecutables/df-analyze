@@ -11,11 +11,11 @@ from numpy import ndarray
 from pandas import DataFrame
 from scipy.io import loadmat
 
-from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE, JOBLIB_CACHE_DIR
+from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE
 from src.cli import CleaningOptions
 
-CLEAN_CACHE = JOBLIB_CACHE_DIR / "__cleaning__"
-MEMOIZER = Memory(location=CLEAN_CACHE, backend="local", compress=9)
+# CLEAN_CACHE = JOBLIB_CACHE_DIR / "__cleaning__"
+# MEMOIZER = Memory(location=CLEAN_CACHE, backend="local", compress=9)
 
 
 class MCIC:

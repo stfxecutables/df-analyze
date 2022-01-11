@@ -22,6 +22,7 @@ from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
 from src._constants import DATADIR, JOBLIB_CACHE_DIR, SEED, UNCORRELATED
+from src._globals import GLOBALS
 from src._types import (
     Classifier,
     CorrMethod,
@@ -37,7 +38,7 @@ from src.io import FileType, try_save
 from src.regressors import get_regressor_constructor
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 
-FEATURE_CACHE = JOBLIB_CACHE_DIR / "__features__"
+FEATURE_CACHE = GLOBALS.JOBLIB_CACHE_DIR / "__features__"
 MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
 
 

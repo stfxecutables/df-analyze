@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
-JOBLIB_CACHE_DIR = ROOT / "__cache__"
+
 DATAFILE = DATADIR / "MCICFreeSurfer.mat"
 DATA_JSON = DATAFILE.parent / "mcic.json"
 CLEAN_JSON = DATAFILE.parent / "mcic_clean.json"
