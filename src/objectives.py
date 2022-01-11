@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 from warnings import filterwarnings
 
@@ -107,10 +108,10 @@ def mlp_args(trial: Trial) -> Dict[str, Any]:
         activation=trial.suggest_categorical("activation", ["relu"]),
         solver=trial.suggest_categorical("solver", ["adam"]),
         alpha=trial.suggest_loguniform("alpha", 1e-6, 1e-1),
-        batch_size=trial.suggest_categorical("batch_size", choices=[8, 16, 32]),
+        batch_size=trial.suggest_categorical("batch_size", choices=[16, 32, 64, 128]),
         learning_rate=trial.suggest_categorical("learning_rate", choices=["constant"]),
-        learning_rate_init=trial.suggest_loguniform("learning_rate_init", 1e-5, 1e-1),
-        max_iter=trial.suggest_categorical("max_iter", [100]),
+        learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 1e-1),
+        max_iter=trial.suggest_categorical("max_iter", [200]),
         early_stopping=trial.suggest_categorical("early_stopping", [False]),
         validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
     )
@@ -120,13 +121,15 @@ def mlp_args(trial: Trial) -> Dict[str, Any]:
 def mlp_layers_from_sizes(depth: int, breadth: int) -> Dict:
     """Convert the params returned from trial.best_params into a form that can be used by
     MLPClassifier"""
-    return dict(hidden_layer_sizes=[breadth for _ in range(depth)])
+    return tuple([int(breadth) for _ in range(depth)])
 
 
 def mlp_args_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
-    depth = params["depth"]
-    width = params["width"]
-    layer_args = mlp_layers_from_sizes(depth, width)
+    # these args below must match names in `mlp_args` above
+    params = deepcopy(params)
+    depth = params.pop("depth")
+    width = params.pop("breadth")
+    layer_args = dict(hidden_layer_sizes=mlp_layers_from_sizes(depth, width))
     return {**layer_args, **params}
 
 
@@ -265,7 +268,9 @@ def rf_regressor_objective(
     def objective(trial: Trial) -> float:
         args: Dict = dict(
             n_estimators=trial.suggest_int("n_estimators", 5, 500),
-            criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
+            # NOTE: when updating SKLEAN these need to become
+            # "squared_error" and "absolute_error" instead of "mse" and "mae"
+            criterion=trial.suggest_categorical("criterion", ["mse", "mae", "poisson"]),
             max_depth=trial.suggest_int("max_depth", 2, 50),
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
         )
@@ -284,10 +289,10 @@ def adaboost_regressor_objective(
         args: Dict = dict(
             n_estimators=trial.suggest_int("n_estimators", 50, 550, step=50),
             learning_rate=trial.suggest_uniform("learning_rate", 0.05, 3),
-            max_depth=trial.suggest_int("max_depth", 1, 5),
+            loss=trial.suggest_categorical("loss", ["linear", "square", "exponential"]),
         )
         _cv = get_cv(y_train, cv_method)
-        estimator = AdaReg(loss="huber", **args)
+        estimator = AdaReg(**args)
         scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
@@ -319,7 +324,7 @@ def knn_regressor_objective(
         args: Dict = dict(
             n_neighbors=trial.suggest_int("n_neighbors", 1, 20, 1),
             weights=trial.suggest_categorical("weights", ["uniform", "distance"]),
-            metric=trial.suggest_categorical("metric", ["euclidean", "manhattan", "mahalanobis"]),
+            p=trial.suggest_int("p", 1, 20),
         )
         _cv = get_cv(y_train, cv_method)
         estimator = KNeighborsRegressor(**args)

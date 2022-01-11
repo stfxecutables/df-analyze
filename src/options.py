@@ -264,13 +264,6 @@ class ProgramOptions(Debug):
         self.feat_select = tuple(sorted(set(cli_args.feat_select)))
         self.feat_clean = tuple(sorted(set(cli_args.feat_clean)))
 
-        if ("step-up" in self.feat_select) or ("step-down" in self.feat_select):
-            warn(
-                "Step-up and step-down feature selection have very high time-complexity. "
-                "It is strongly recommended to run these selection procedures in isolation, "
-                "and not in the same process as all other feature selection procedures."
-            )
-
         self.cleaning_options = CleaningOptions(
             datapath=self.datapath,
             target=self.target,
@@ -292,6 +285,40 @@ class ProgramOptions(Debug):
         self.htune_trials = cli_args.htune_trials
         self.test_val = cli_args.test_val
         self.test_val_sizes = tuple(sorted(set(cli_args.test_val_sizes)))
+
+        # errors
+        if self.mode == "regress":
+            if ("d" in self.feat_select) or ("auc" in self.feat_select):
+                args = " ".join(self.feat_select)
+                raise ValueError(
+                    "Feature selection with Cohen's d or AUC values not supported "
+                    "for regression data. Do not pass arguments `d` or `auc` to "
+                    f"`--feat-select` CLI option. [Got arguments: {args}]"
+                )
+
+        # warnings
+        if self.verbosity is Verbosity.ERROR:
+            return  # don't warn user
+
+        if self.htune_trials < 100:
+            warn(
+                "Without pruning, Optuna generally only shows clear superiority\n"
+                "to random search at roughly 50-100 trials. See e.g.\n"
+                "    Akiba et al. (2019)\n"
+                "    Optuna: A Next-generation Hyperparameter Optimization Framework \n"
+                "    https://arxiv.org/pdf/1907.10902.pdf\n"
+                "For deep learners, e.g. if using `mlp` as either a classifer\n"
+                "or regressor, experience suggests more like 100-200 trials (with\n"
+                "pruning) are needed when exploring new architectures. For the\n"
+                "current MLP architecture, probably 100 trials is sufficient.\n"
+            )
+
+        if ("step-up" in self.feat_select) or ("step-down" in self.feat_select):
+            warn(
+                "Step-up and step-down feature selection have very high time-complexity. "
+                "It is strongly recommended to run these selection procedures in isolation, "
+                "and not in the same process as all other feature selection procedures."
+            )
 
     @staticmethod
     def validate_datapath(df_path: Path) -> Path:

@@ -1,9 +1,10 @@
 import os
+import traceback
 import warnings
 from dataclasses import dataclass, field
 from pprint import pprint
 from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
-from warnings import catch_warnings, filterwarnings
+from warnings import catch_warnings, filterwarnings, warn
 
 import numpy as np
 import optuna
@@ -441,13 +442,28 @@ def hypertune_regressor(
         os.environ["PYTHONWARNINGS"] = before
 
     val_method = cv_desc(cv_method)
-    acc = np.round(study.best_value, 3)
+    try:
+        best_val = study.best_value
+        best_params = study.best_params
+    except ValueError:
+        traceback.print_exc()
+        warn(
+            f"All Optuna trials for regressor {regressor} likely either failed "
+            "or produced NaN values (full stack trace should be above). Likely "
+            "this is due to an inappropriate feature selection method for the "
+            "data (e.g. kpca) or a convergence issue. Setting best metric to "
+            "NaN for now. "
+        )
+        best_val = np.nan
+        best_params = {}
+    mae = -np.round(best_val, 3)
+
     if verbosity != optuna.logging.ERROR:
         print(f"\n{' Tuning Results ':=^80}")
         print("Best params:")
         pprint(study.best_params, indent=4, width=80)
         print(f"\nTuning validation: {val_method}")
-        print(f"Best accuracy:      μ = {acc:0.3f}")
+        print(f"Best MAE:       μ = {mae:0.3f}")
         # print("=" * 80, end="\n")
 
     return HtuneResult(
@@ -455,8 +471,8 @@ def hypertune_regressor(
         estimator=regressor,
         n_trials=n_trials,
         cv_method=cv_method,
-        val_acc=study.best_value,
-        best_params=study.best_params,
+        val_acc=best_val,
+        best_params=best_params,
     )
 
 

@@ -26,12 +26,14 @@ from src.hypertune import (
 from src.options import ProgramOptions, Verbosity
 
 
-def val_method_short(method: CVMethod) -> str:
+def val_method_short(method: CVMethod, test_val_size: int) -> str:
     """Helper for shortening CVMethod for labeling purposes"""
     if isinstance(method, int):
         return f"{method}-fold"
     elif isinstance(method, float):
         return f"{int(100*method)}%-holdout"
+    elif str(method).lower() in ["kfold", "k-fold"]:
+        return f"{test_val_size}-fold"
     elif str(method).lower() == "mc":
         return "m-carlo"
     elif str(method).lower() == "loocv":
@@ -43,6 +45,7 @@ def val_method_short(method: CVMethod) -> str:
 def results_df(
     options: ProgramOptions,
     feature_selection: FeatureSelection,
+    test_val_size: int,
     result: Dict[str, Any],
 ) -> DataFrame:
     """Package the results of hypertuning into a convenient DataFrame summary.
@@ -72,8 +75,8 @@ def results_df(
     htuned: HtuneResult = result.pop("htuned")
     cv_method = result.pop("cv_method")
     test_validation = options.test_val
-    test_val = val_method_short(test_validation)
-    htune_val = val_method_short(cv_method)
+    test_val = val_method_short(test_validation, test_val_size)
+    htune_val = val_method_short(cv_method, test_val_size)
     row = {
         "model": htuned.estimator,
         "feat_select": feature_selection,
@@ -238,6 +241,7 @@ def full_estimator_analysis(
             results_df(
                 options=options,
                 feature_selection=feature_selection,
+                test_val_size=test_val_size,
                 result=result,
             )
         )

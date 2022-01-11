@@ -75,7 +75,7 @@ def try_save(df: DataFrame, outdir: Path, file_info: str) -> None:
         print(f"Saved interim result to {csv}")
     except Exception:
         traceback.print_exc()
-        print(f"Failed to save following results to {csv}")
+        print(f"Failed to save following results to {csv}:")
         df.to_markdown(tablefmt="simple", floatfmt="0.5f")
 
 
