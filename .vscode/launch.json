@@ -12,7 +12,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Regression IntegrationTest",
+      "name": "Regression Test",
       "type": "python",
       "request": "launch",
       "program": "df-analyze.py",
@@ -33,7 +33,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Regression IntegrationTest (MLP)",
+      "name": "Regression Test (MLP)",
       "type": "python",
       "request": "launch",
       "program": "df-analyze.py",
@@ -48,6 +48,28 @@
         "--n-feat=10",
         "--htune",
         "--htune-trials=5",
+        "--test-val=kfold",
+        "--test-val-size=5",
+        "--outdir=test_results"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Regression Test (step-up)",
+      "type": "python",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--df=data/sklearn_regression/data.json",
+        "--target=target",
+        "--mode=regress",
+        "--regressors", "linear", "svm",
+        "--drop-nan=rows",
+        "--feat-clean=constant",
+        "--feat-select", "step-up",
+        "--n-feat=10",
+        "--htune",
+        "--htune-trials=3",
         "--test-val=kfold",
         "--test-val-size=5",
         "--outdir=test_results"

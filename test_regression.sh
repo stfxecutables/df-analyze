@@ -7,7 +7,7 @@ python df-analyze.py \
     --regressors svm linear \
     --drop-nan=rows \
     --feat-clean constant lowinfo \
-    --feat-select kpca pca pearson none \
+    --feat-select step-down \
     --n-feat=10 \
     --htune \
     --htune-trials=3 \

@@ -363,10 +363,17 @@ def select_features(
         df_selected = df.loc[:, features.index]
         df_selected[target] = y
     elif method == "step-down":
-        raise NotImplementedError()
-        df_selected = select_stepwise_features(
-            df, classifier=classifier, n_features=n_feat, direction="backward"
+        # raise NotImplementedError()
+        column_idx = select_stepwise_features(
+            df,
+            target,
+            mode=options.mode,
+            estimator=classifier,
+            n_features=n_feat,
+            direction="backward",
         )
+        df_selected = df.drop(columns=target).loc[:, column_idx]
+        df_selected[target] = y
     elif method == "step-up":
         column_idx = select_stepwise_features(
             df,
@@ -376,7 +383,7 @@ def select_features(
             n_features=n_feat,
             direction="forward",
         )
-        df_selected = df.loc[:, column_idx]
+        df_selected = df.drop(columns=target).loc[:, column_idx]
         df_selected[target] = y
     elif method in ["minimal", "none"]:
         df_selected = df
