@@ -1,4 +1,5 @@
 #!/bin/bash
+cd ..
 source .venv/bin/activate
 python df-analyze.py \
     --df="data/sklearn_classify/data.json" \
