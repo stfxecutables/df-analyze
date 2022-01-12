@@ -14,7 +14,6 @@ from featuretools.selection import (
     remove_low_information_features,
     remove_single_value_features,
 )
-from joblib import Memory
 from pandas import DataFrame, Series
 from sklearn.decomposition import PCA, KernelPCA
 from sklearn.metrics import roc_auc_score
@@ -22,6 +21,7 @@ from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
 from src._constants import DATADIR, SEED, UNCORRELATED
+from src._setup import MEMOIZER
 from src._types import (
     Classifier,
     CorrMethod,
@@ -278,6 +278,7 @@ def kernel_pca_reduce(df: DataFrame, target: str, n_features: int = 10) -> DataF
     return ret
 
 
+@MEMOIZER.cache
 def select_stepwise_features(
     df: DataFrame,
     target: str,

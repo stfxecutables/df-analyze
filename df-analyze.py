@@ -15,8 +15,6 @@ from pandas import DataFrame
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-import src._globals as _globals
-from src._globals import Globals
 from src._types import CVMethod, Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
 from src.cli import ProgramOptions, Verbosity, get_options
@@ -190,7 +188,6 @@ if __name__ == "__main__":
     # get arguments
     # run analyses based on args
     options = get_options()
-    _globals.GLOBALS = Globals(options)
 
     estimators = options.classifiers if options.mode == "classify" else options.regressors
     feature_selection = options.selection_options.feat_select

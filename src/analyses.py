@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import optuna
 import pandas as pd
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
@@ -234,7 +234,7 @@ def full_estimator_analysis(
     # TODO: save params
     try_save(
         program_dirs=options.program_dirs,
-        df=DataFrame(htuned.best_params),
+        df=Series(htuned.best_params).to_frame(),
         file_stem="params",
         file_type=FileType.Params,
         selection=feature_selection,
