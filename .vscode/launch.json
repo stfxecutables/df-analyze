@@ -12,12 +12,69 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Python: Arg Debug ",
+      "name": "Regression Test",
       "type": "python",
       "request": "launch",
-      "program": "${file}",
-      "console": "integratedTerminal",
-      "args": ["--classifier", "dtree", "--step-up"],
+      "program": "df-analyze.py",
+      "args": [
+        "--df=data/sklearn_regression/data.json",
+        "--target=target",
+        "--mode=regress",
+        "--regressors", "svm", "linear",
+        "--drop-nan=rows",
+        "--feat-clean=constant",
+        "--feat-select", "pca", "pearson",
+        "--n-feat=10",
+        "--htune",
+        "--test-val=kfold",
+        "--test-val-size=5",
+        "--outdir=test_results"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Regression Test (MLP)",
+      "type": "python",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--df=data/sklearn_regression/data.json",
+        "--target=target",
+        "--mode=regress",
+        "--regressors", "mlp",
+        "--drop-nan=rows",
+        "--feat-clean=constant",
+        "--feat-select", "pca", "pearson",
+        "--n-feat=10",
+        "--htune",
+        "--htune-trials=5",
+        "--test-val=kfold",
+        "--test-val-size=5",
+        "--outdir=test_results"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Regression Test (step-up)",
+      "type": "python",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--df=data/sklearn_regression/data.json",
+        "--target=target",
+        "--mode=regress",
+        "--regressors", "linear", "svm",
+        "--drop-nan=rows",
+        "--feat-clean=constant",
+        "--feat-select", "step-up",
+        "--n-feat=10",
+        "--htune",
+        "--htune-trials=3",
+        "--test-val=kfold",
+        "--test-val-size=5",
+        "--outdir=test_results"
+      ],
+      "console": "integratedTerminal"
     }
   ]
 }

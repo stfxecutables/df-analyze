@@ -9,10 +9,11 @@ import pandas as pd
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src.analyses import classifier_analysis_multitest
+from src._constants import CLASSIFIERS
+from src.analyses import full_estimator_analysis
 from src.hypertune import Classifier
+from src.cli import get_options
 
-CLASSIFIERS = ["svm", "rf", "dtree", "bag", "mlp"]
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None
 DISABLE_PBAR = IN_CCANADA and IN_CC_JOB
@@ -36,21 +37,21 @@ def pbar_desc(args: Dict[str, Any]) -> str:
     return f"{classifier}|{selection}|{n_feat} features|htune_val={hv}"
 
 
-def get_options() -> Tuple[Classifier, bool]:
-    parser = ArgumentParser()
-    parser.add_argument("--classifier", choices=CLASSIFIERS, default="svm")
-    parser.add_argument("--step-up", action="store_true")
-    args = parser.parse_args()
-    return args.classifier, args.step_up
+# def get_options() -> Tuple[Classifier, bool]:
+#     parser = ArgumentParser()
+#     parser.add_argument("--classifier", choices=CLASSIFIERS, default="svm")
+#     parser.add_argument("--step-up", action="store_true")
+#     args = parser.parse_args()
+#     return args.classifier, args.step_up
 
 
 def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -> pd.DataFrame:
     results = []
-    pbar = tqdm(total=len(ARGS))
-    for args in ARGS:
-        pbar.set_description(pbar_desc(args))
+    pbar = tqdm(total=len(args))
+    for arg in args:
+        pbar.set_description(pbar_desc(arg))
         results.append(
-            classifier_analysis_multitest(htune_trials=100, verbosity=optuna.logging.ERROR, **args)
+            full_estimator_analysis(htune_trials=100, verbosity=optuna.logging.ERROR, **arg)
         )
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
