@@ -248,12 +248,12 @@ Assumes you have run `poetry shell` or otherwise activated the .venv installed b
 ```sh
 python df-analyze.py \
     --df="weather_data.json" \
-    --target='temperature' \
+    --target="temperature" \
     --mode=regress \
-    --regressors=svm linear \
+    --regressors svm linear \
     --drop-nan=rows \
     --feat-clean=constant \
-    --feat-select=pca pearson \
+    --feat-select none pca pearson \
     --n-feat=5 \
     --htune \
     --htune-val=kfold \

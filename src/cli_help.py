@@ -209,16 +209,16 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
 
     python df-analyze.py \\
         --df="weather_data.json" \\
-        --target='temperature' \\
+        --target="temperature" \\
         --mode=regress \\
-        --regressors=svm linear \\
+        --regressors svm linear gboost \\
         --drop-nan=rows \\
-        --feat-clean=constant \\
-        --feat-select=pca pearson \\
+        --feat-clean constant lowinfo \\
+        --feat-select none pca pearson \\
         --n-feat=5 \\
         --htune \\
         --test-val=kfold \\
         --test-val-size=5 \\
-        --outdir='./results'
+        --outdir="./results"
 
 """
