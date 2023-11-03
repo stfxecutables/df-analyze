@@ -39,6 +39,8 @@ def val_method_short(method: CVMethod, test_val_size: int) -> str:
         return "m-carlo"
     elif str(method).lower() == "loocv":
         return "loocv"
+    elif str(method).lower() == "holdout":
+        return f"{int(100*test_val_size)}%-holdout"
     else:
         return "none"
 
@@ -146,7 +148,7 @@ def classifier_analysis(
     if isinstance(test_val, float):  # set aside data for final test
         if test_val <= 0 or test_val >= 1:
             raise ValueError("`--test-val` must be in (0, 1)")
-        X_train, X_test, y_train, y_test = train_val_splits(df, options, test_val)
+        X_train, X_test, y_train, y_test = train_val_splits(df, options.mode, test_val)
     else:
         X_train = df.drop(columns=options.target)
         X_test = None
@@ -216,9 +218,9 @@ def full_estimator_analysis(
     htune_val = options.htune_val
 
     df = select_features(options, feature_selection, estimator)
-    X_raw = df.drop(columns=options.target)
+    X_raw = df.drop(columns="target")
     X_train = StandardScaler().fit_transform(X_raw)
-    y_train = df[options.target].to_numpy()
+    y_train = df["target"].to_numpy()
     hypertune_estimator = hypertune_regressor
     if options.mode == "classify":
         y_train = y_train.astype(int)

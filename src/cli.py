@@ -6,7 +6,19 @@ from argparse import ArgumentError, ArgumentParser, Namespace, RawTextHelpFormat
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union, cast, no_type_check
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+    cast,
+    no_type_check,
+)
 from warnings import warn
 
 import matplotlib.pyplot as plt
@@ -175,7 +187,10 @@ class ProgramOptions(Debug):
         self.htune_val_size = cli_args.htune_val_size
         self.htune_trials = cli_args.htune_trials
         self.test_val = cli_args.test_val
-        self.test_val_sizes = tuple(sorted(set(cli_args.test_val_sizes)))
+        if isinstance(cli_args.test_val_sizes, (int, float)):
+            self.test_val_sizes = (cli_args.test_val_sizes,)
+        else:
+            self.test_val_sizes = tuple(sorted(set(cli_args.test_val_sizes)))
 
         # errors
         if self.mode == "regress":
@@ -255,7 +270,9 @@ def cv_size(cv_str: str) -> Union[float, int]:
     try:
         cv = float(cv_str)
     except Exception as e:
-        raise ArgumentError("Could not convert `--htune-val-size` argument to float") from e
+        raise ArgumentError(
+            "Could not convert `--htune-val-size` argument to float"
+        ) from e
     if cv <= 0:
         raise ArgumentError("`--htune-val-size` must be positive")
     if 0 < cv < 1:
@@ -267,7 +284,10 @@ def cv_size(cv_str: str) -> Union[float, int]:
             "`--htune-val-size` must be an integer if greater than 1, as it specified the `k` in k-fold"
         )
     if cv > 10:
-        warn("`--htune-val-size` greater than 10 is not recommended.", category=UserWarning)
+        warn(
+            "`--htune-val-size` greater than 10 is not recommended.",
+            category=UserWarning,
+        )
     if cv > 1:
         return int(cv)
     return cv
@@ -277,11 +297,18 @@ def get_options(args: str = None) -> ProgramOptions:
     """parse command line arguments"""
     # parser = ArgumentParser(description=DESC)
     parser = ArgumentParser(formatter_class=RawTextHelpFormatter, epilog=USAGE_EXAMPLES)
-    parser.add_argument("--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR)
+    parser.add_argument(
+        "--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR
+    )
     # just use existing pathname instead
     # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
     parser.add_argument(
-        "--target", "-y", action="store", type=str, default="target", help=TARGET_HELP_STR
+        "--target",
+        "-y",
+        action="store",
+        type=str,
+        default="target",
+        help=TARGET_HELP_STR,
     )
     parser.add_argument(
         "--mode",
@@ -329,7 +356,11 @@ def get_options(args: str = None) -> ProgramOptions:
         help=FEAT_CLEAN_HELP,
     )
     parser.add_argument(
-        "--drop-nan", "-d", choices=["all", "rows", "cols", "none"], default="none", help=NAN_HELP
+        "--drop-nan",
+        "-d",
+        choices=["all", "rows", "cols", "none"],
+        default="none",
+        help=NAN_HELP,
     )
     parser.add_argument("--n-feat", type=int, default=10, help=N_FEAT_HELP)
     parser.add_argument("--htune", action="store_true", help=HTUNE_HELP)
@@ -341,15 +372,27 @@ def get_options(args: str = None) -> ProgramOptions:
         default=3,
         help=HTUNEVAL_HELP_STR,
     )
-    parser.add_argument("--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP)
+    parser.add_argument(
+        "--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP
+    )
     parser.add_argument("--htune-trials", type=int, default=100, help=HTUNE_TRIALS_HELP)
     parser.add_argument(
-        "--test-val", "-T", type=str, choices=HTUNE_VAL_METHODS, default="kfold", help=TEST_VAL_HELP
+        "--test-val",
+        "-T",
+        type=str,
+        choices=HTUNE_VAL_METHODS,
+        default="kfold",
+        help=TEST_VAL_HELP,
     )
     parser.add_argument(
         "--test-val-sizes", nargs="+", type=cv_size, default=5, help=TEST_VALSIZES_HELP
     )
     parser.add_argument("--outdir", type=resolved_path, required=True, help=OUTDIR_HELP)
-    parser.add_argument("--verbosity", type=Verbosity, default=Verbosity(1), help=VERBOSITY_HELP)
+    parser.add_argument(
+        "--verbosity",
+        type=lambda a: Verbosity(int(a)),
+        default=Verbosity(1),
+        help=VERBOSITY_HELP,
+    )
     cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)
