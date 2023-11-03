@@ -15,9 +15,13 @@ from sklearn.ensemble import RandomForestRegressor as RFR
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import ElasticNet
 from sklearn.linear_model import LogisticRegression as LR
-from sklearn.model_selection import BaseCrossValidator, LeaveOneOut, StratifiedShuffleSplit
+from sklearn.model_selection import (
+    BaseCrossValidator,
+    LeaveOneOut,
+    StratifiedShuffleSplit,
+    train_test_split,
+)
 from sklearn.model_selection import cross_validate as cv
-from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.neural_network import MLPClassifier as MLP
 from sklearn.neural_network import MLPRegressor as MLPR
@@ -55,7 +59,9 @@ TEST_SCORES = dict(
 NEG_MAE = "neg_mean_absolute_error"
 
 
-def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCrossValidator]:
+def get_cv(
+    y_train: DataFrame, cv_method: CVMethod
+) -> Union[int, Splits, BaseCrossValidator]:
     """Helper to construct an object that `sklearn.model_selection.cross_validate` will accept in
     its `cv` argument
 
@@ -89,7 +95,9 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
         y = np.array(y_train).ravel()
         idx = np.arange(y.shape[0])
         return [
-            train_test_split(idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y)
+            train_test_split(
+                idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y
+            )
         ]
     cv_method = str(cv_method).lower()  # type: ignore
     if cv_method == "loocv":
@@ -100,17 +108,21 @@ def get_cv(y_train: DataFrame, cv_method: CVMethod) -> Union[int, Splits, BaseCr
 
 
 def mlp_args(trial: Trial) -> Dict[str, Any]:
-    depth = trial.suggest_int("depth", low=MLP_DEPTH_MIN, high=MLP_DEPTH_MAX + 1, step=1)
+    depth = trial.suggest_int(
+        "depth", low=MLP_DEPTH_MIN, high=MLP_DEPTH_MAX + 1, step=1
+    )
     width = trial.suggest_int("breadth", low=MLP_WIDTH_MIN, high=MLP_WIDTH_MAX, step=4)
     layers = mlp_layers_from_sizes(depth, width)
     args: Dict = dict(
         hidden_layer_sizes=layers,
         activation=trial.suggest_categorical("activation", ["relu"]),
         solver=trial.suggest_categorical("solver", ["adam"]),
-        alpha=trial.suggest_loguniform("alpha", 1e-6, 1e-1),
+        alpha=trial.suggest_float("alpha", 1e-6, 1e-1, log=True),
         batch_size=trial.suggest_categorical("batch_size", choices=[16, 32, 64, 128]),
         learning_rate=trial.suggest_categorical("learning_rate", choices=["constant"]),
-        learning_rate_init=trial.suggest_loguniform("learning_rate_init", 5e-5, 1e-1),
+        learning_rate_init=trial.suggest_float(
+            "learning_rate_init", 5e-5, 1e-1, log=True
+        ),
         max_iter=trial.suggest_categorical("max_iter", [200]),
         early_stopping=trial.suggest_categorical("early_stopping", [False]),
         validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
@@ -145,11 +157,13 @@ def svm_classifier_objective(
     def objective(trial: Trial) -> float:
         args: Dict = dict(
             kernel=trial.suggest_categorical("kernel", choices=["rbf"]),
-            C=trial.suggest_loguniform("C", 1e-10, 1e10),
+            C=trial.suggest_float("C", 1e-10, 1e10, log=True),
         )
         _cv = get_cv(y_train, cv_method)
         estimator = SVC(cache_size=500, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(
+            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1
+        )
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -167,7 +181,9 @@ def rf_classifier_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = RF(n_jobs=2, **args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
+        scores = cv(
+            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4
+        )
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -184,7 +200,9 @@ def dtree_classifier_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = DTreeClassifier(**args)
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        scores = cv(
+            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1
+        )
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -203,7 +221,9 @@ def bagging_classifier_objective(
         estimator = BaggingClassifier(
             base_estimator=LR(solver=LR_SOLVER), random_state=SEED, n_jobs=2, **args
         )
-        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
+        scores = cv(
+            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4
+        )
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -216,7 +236,9 @@ def mlp_classifier_objective(
         mlp = MLP(**mlp_args(trial))
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ[
+            "PYTHONWARNINGS"
+        ] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
         scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
@@ -252,7 +274,7 @@ def svm_regressor_objective(
     def objective(trial: Trial) -> float:
         args: Dict = dict(
             kernel=trial.suggest_categorical("kernel", choices=["rbf"]),
-            C=trial.suggest_loguniform("C", 1e-10, 1e10),
+            C=trial.suggest_float("C", 1e-10, 1e10, log=True),
         )
         _cv = get_cv(y_train, cv_method)
         estimator = SVR(cache_size=500, **args)
@@ -341,7 +363,9 @@ def mlp_regressor_objective(
         mlp = MLPR(**mlp_args(trial))
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ[
+            "PYTHONWARNINGS"
+        ] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
         scores = cv(mlp, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
