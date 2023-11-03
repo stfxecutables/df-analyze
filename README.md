@@ -1,10 +1,5 @@
 [![DOI](https://zenodo.org/badge/364694785.svg)](https://zenodo.org/badge/latestdoi/364694785)
 
-- [Setup and Requirements](#setup-and-requirements)
-- [Running the Script](#running-the-script)
-- [Usage](#usage)
-- [Basic Example](#basic-example)
-
 This project uses Poetry to manage dependencies, so if you want to reproduce
 the results you should [install Poetry](https://python-poetry.org/docs/). Then
 you can install dependencies and activate the venv with:
