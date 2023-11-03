@@ -389,7 +389,10 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument("--outdir", type=resolved_path, required=True, help=OUTDIR_HELP)
     parser.add_argument(
-        "--verbosity", type=Verbosity, default=Verbosity(1), help=VERBOSITY_HELP
+        "--verbosity",
+        type=lambda a: Verbosity(int(a)),
+        default=Verbosity(1),
+        help=VERBOSITY_HELP,
     )
     cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
     return ProgramOptions(cli_args)
