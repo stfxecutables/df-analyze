@@ -39,6 +39,8 @@ def val_method_short(method: CVMethod, test_val_size: int) -> str:
         return "m-carlo"
     elif str(method).lower() == "loocv":
         return "loocv"
+    elif str(method).lower() == "holdout":
+        return f"{int(100*test_val_size)}%-holdout"
     else:
         return "none"
 
