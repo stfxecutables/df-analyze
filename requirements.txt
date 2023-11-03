@@ -1,0 +1,12 @@
+matplotlib
+numpy
+pandas
+scikit-learn
+scipy
+typing-extensions
+featuretools
+optuna
+tabulate
+joblib
+pytest
+coverage
