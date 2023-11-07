@@ -30,7 +30,7 @@ def get_cache_dir() -> Path:
     existing = os.environ.get(DF_ENV)
     if existing is None:
         try:
-            new = Path(os.environ.get("HOME")).resolve()
+            new = Path.home().resolve()
         except Exception as e:
             traceback.print_exc()
             raise EnvironmentError(
