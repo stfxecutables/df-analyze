@@ -218,9 +218,10 @@ def full_estimator_analysis(
     htune_val = options.htune_val
 
     df = select_features(options, feature_selection, estimator)
-    X_raw = df.drop(columns="target")
+    targname = options.target or "target"
+    X_raw = df.drop(columns=targname)
     X_train = StandardScaler().fit_transform(X_raw)
-    y_train = df["target"].to_numpy()
+    y_train = df[targname].to_numpy()
     hypertune_estimator = hypertune_regressor
     if options.mode == "classify":
         y_train = y_train.astype(int)
