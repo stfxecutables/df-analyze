@@ -25,9 +25,13 @@ from sklearn.metrics import (
     r2_score,
     roc_auc_score,
 )
-from sklearn.model_selection import BaseCrossValidator, LeaveOneOut, StratifiedShuffleSplit
+from sklearn.model_selection import (
+    BaseCrossValidator,
+    LeaveOneOut,
+    StratifiedShuffleSplit,
+    train_test_split,
+)
 from sklearn.model_selection import cross_validate as cv
-from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier as MLP
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
@@ -133,7 +137,7 @@ def train_val_splits(
     return X_train, X_val, y_train, y_val
 
 
-def cv_desc(cv_method: CVMethod) -> str:
+def cv_desc(cv_method: CVMethod, n_folds: Optional[int] = None) -> str:
     """Helper for logging a readable description of the CVMethod to stdout"""
     if isinstance(cv_method, int):
         return f"stratified {cv_method}-fold"
@@ -143,15 +147,23 @@ def cv_desc(cv_method: CVMethod) -> str:
         perc = int(100 * cv_method)
         return f"stratified {perc}% holdout"
     cv_method = str(cv_method).lower()  # type: ignore
+
+    if n_folds is None:
+        n_folds = 5
     if cv_method == "loocv":
         return "LOOCV"
+    if cv_method in ["kfold", "k-fold"]:
+        return f"{n_folds}-fold"
     if cv_method == "mc":
         return "stratified Monte-Carlo (20 random 20%-sized test sets)"
     raise ValueError(f"Invalid `cv_method`: {cv_method}")
 
 
 def package_classifier_cv_scores(
-    scores: Dict[str, ndarray], htuned: HtuneResult, cv_method: CVMethod, log: bool = False
+    scores: Dict[str, ndarray],
+    htuned: HtuneResult,
+    cv_method: CVMethod,
+    log: bool = False,
 ) -> Dict[str, Any]:
     result = dict(
         htuned=htuned,
@@ -200,7 +212,9 @@ def package_classifier_scores(
     sens = sensitivity(y_test, y_pred)
     spec = specificity(y_test, y_pred)
     percent = int(100 * float(cv_method))
-    scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
+    scores = dict(
+        test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel()
+    )
     result = dict(
         htuned=htuned,
         cv_method=cv_method,
@@ -216,13 +230,20 @@ def package_classifier_scores(
     if not log:
         return result
     print(f"Testing validation: {percent}% holdout")
-    print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
-    print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
+    print(
+        f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})"
+    )
+    print(
+        f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})"
+    )
     return result
 
 
 def package_regressor_cv_scores(
-    scores: Dict[str, ndarray], htuned: HtuneResult, cv_method: CVMethod, log: bool = False
+    scores: Dict[str, ndarray],
+    htuned: HtuneResult,
+    cv_method: CVMethod,
+    log: bool = False,
 ) -> Dict[str, Any]:
     result = dict(
         htuned=htuned,
@@ -348,12 +369,16 @@ def hypertune_classifier(
     }
     # HYPERTUNING
     objective = OBJECTIVES[classifier]
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    study = optuna.create_study(
+        direction="maximize", sampler=optuna.samplers.TPESampler()
+    )
     optuna.logging.set_verbosity(verbosity)
     if classifier == "mlp":
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ[
+            "PYTHONWARNINGS"
+        ] = "ignore"  # can't kill ConvergenceWarning any other way
 
     study.optimize(objective, n_trials=n_trials)
 
@@ -429,12 +454,16 @@ def hypertune_regressor(
     }
     # HYPERTUNING
     objective = OBJECTIVES[regressor]
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    study = optuna.create_study(
+        direction="maximize", sampler=optuna.samplers.TPESampler()
+    )
     optuna.logging.set_verbosity(verbosity)
     if regressor == "mlp":
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ[
+            "PYTHONWARNINGS"
+        ] = "ignore"  # can't kill ConvergenceWarning any other way
 
     study.optimize(objective, n_trials=n_trials)
 
@@ -483,6 +512,7 @@ def evaluate_hypertuned(
     y_train: DataFrame,
     X_test: Optional[DataFrame] = None,
     y_test: Optional[DataFrame] = None,
+    n_folds: Optional[int] = None,
     log: bool = True,
 ) -> Dict[str, Any]:
     """Core function. Given the result of hypertuning, evaluate the final parameters.
@@ -532,9 +562,13 @@ def evaluate_hypertuned(
         estimator = get_classifier_constructor(model)(**args)
     else:
         estimator = get_regressor_constructor(model)(**args)
-    SCORERS = CLASSIFIER_TEST_SCORERS if htuned.mode == "classify" else REGRESSION_TEST_SCORERS
+    SCORERS = (
+        CLASSIFIER_TEST_SCORERS
+        if htuned.mode == "classify"
+        else REGRESSION_TEST_SCORERS
+    )
     if (X_test is None) and (y_test is None):
-        _cv = get_cv(y_train, cv_method)
+        _cv = get_cv(y_train, cv_method, n_folds=n_folds)
         scores = cv(estimator, X=X_train, y=y_train, scoring=SCORERS, cv=_cv)
         if htuned.mode == "classify":
             return package_classifier_cv_scores(scores, htuned, cv_method, log)
@@ -559,4 +593,6 @@ def evaluate_hypertuned(
         else:
             return package_regressor_scores(y_test, y_pred, htuned, cv_method, log)
     else:
-        raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")
+        raise ValueError(
+            "Invalid test data: only one of `X_test` or `y_test` was None."
+        )

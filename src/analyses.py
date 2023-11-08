@@ -143,6 +143,13 @@ def classifier_analysis(
     test_val = options.test_val
     htune_trials = options.htune_trials
     htune_val = options.htune_val
+    test_val_size = options.test_val_sizes
+    if len(test_val_size) != 1:
+        raise NotImplementedError(
+            "Multiple test sizes and sets is not currently implemented. Try "
+            " just passing `--test_val_sizes=0.2` or `--test_val_sizes=k` "
+            "for some integer k, to specify k-fold."
+        )
     print(f"Preparing feature selection with method: {feature_selection}")
     df = select_features(options, feature_selection, classifier)
     if isinstance(test_val, float):  # set aside data for final test
@@ -170,6 +177,7 @@ def classifier_analysis(
         y_train=y_train,
         X_test=X_test,
         y_test=y_test,
+        n_folds=options.test_val_sizes,
     )
 
 

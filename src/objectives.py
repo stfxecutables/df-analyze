@@ -18,6 +18,7 @@ from sklearn.linear_model import LogisticRegression as LR
 from sklearn.model_selection import (
     BaseCrossValidator,
     LeaveOneOut,
+    StratifiedKFold,
     StratifiedShuffleSplit,
     train_test_split,
 )
@@ -60,7 +61,7 @@ NEG_MAE = "neg_mean_absolute_error"
 
 
 def get_cv(
-    y_train: DataFrame, cv_method: CVMethod
+    y_train: DataFrame, cv_method: CVMethod, n_folds: Optional[int] = None
 ) -> Union[int, Splits, BaseCrossValidator]:
     """Helper to construct an object that `sklearn.model_selection.cross_validate` will accept in
     its `cv` argument
@@ -86,6 +87,8 @@ def get_cv(
     the percentage of samples heldout for testing.
 
     """
+    if n_folds is None:
+        n_folds = 5
     if isinstance(cv_method, int):
         return int(cv_method)
     if isinstance(cv_method, float):  # stratified holdout
@@ -102,6 +105,8 @@ def get_cv(
     cv_method = str(cv_method).lower()  # type: ignore
     if cv_method == "loocv":
         return LeaveOneOut()
+    if cv_method in ["kfold", "k-fold"]:
+        return StratifiedKFold(n_splits=n_folds, random_state=SEED, shuffle=True)
     if cv_method == "mc":
         return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
     raise ValueError(f"Invalid `cv_method`: {cv_method}")
