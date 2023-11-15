@@ -31,7 +31,7 @@ from src._types import (
 )
 from src.classifiers import get_classifier_constructor
 from src.cleaning import get_clean_data
-from src.cli import ProgramOptions, SelectionOptions
+from src.cli.cli import ProgramOptions, SelectionOptions
 from src.regressors import get_regressor_constructor
 from src.saving import FileType, try_save
 from src.sklearn_pasta._sequential import SequentialFeatureSelector

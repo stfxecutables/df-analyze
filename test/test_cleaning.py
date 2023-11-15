@@ -2,7 +2,7 @@ from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
 from src.cleaning import get_clean_data
-from src.cli import get_options
+from src.cli.cli import get_options
 
 DATA = ROOT / "data/banking/bank.json"
 

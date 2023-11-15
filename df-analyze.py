@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from src._types import Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
-from src.cli import ProgramOptions, get_options
+from src.cli.cli import ProgramOptions, get_options
 from src.saving import FileType, try_save
 from src.utils import Debug
 

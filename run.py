@@ -9,8 +9,8 @@ from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 from src.analyses import full_estimator_analysis
+from src.cli.cli import get_options
 from src.hypertune import Classifier
-from src.cli import get_options
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None

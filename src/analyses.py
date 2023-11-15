@@ -11,7 +11,7 @@ from src._types import (
     Estimator,
     FeatureSelection,
 )
-from src.cli import ProgramOptions, Verbosity
+from src.cli.cli import ProgramOptions, Verbosity
 from src.feature_selection import select_features
 from src.hypertune import (
     HtuneResult,

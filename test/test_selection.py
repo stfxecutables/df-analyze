@@ -2,8 +2,8 @@ import numpy as np
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
+from src.cli.cli import get_options
 from src.feature_selection import select_features
-from src.cli import get_options
 
 DATA = ROOT / "data/banking/bank.json"
 

@@ -13,7 +13,6 @@ from typing import (
 )
 from warnings import warn
 
-
 from src._constants import (
     CLASSIFIERS,
     DEFAULT_OUTDIR,
@@ -31,7 +30,7 @@ from src._types import (
     Regressor,
     ValMethod,
 )
-from src.cli_help import (
+from src.cli.text import (
     CLS_HELP_STR,
     DF_HELP_STR,
     FEAT_CLEAN_HELP,
