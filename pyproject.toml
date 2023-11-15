@@ -1,13 +1,22 @@
-[tool.black]
+[tool.ruff]
 line-length = 100
+indent-width = 4
+target-version = "py310"
+ignore = ["E402"]
+respect-gitignore = true
 
-[tool.isort]
-profile = 'black'
-skip_gitignore = false
-line_length = 100
-atomic = true
-sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', 'LOCALFOLDER', 'FIRSTPARTY']
-known_local_folder = ['src']
+[tool.ruff.lint.isort]
+known-first-party = ["src", "test"]
+section-order = [
+  "future",
+  "standard-library",
+  "third-party",
+  "local-folder",
+  "first-party",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
 
 [tool.poetry]
 name = "df-analyze"
