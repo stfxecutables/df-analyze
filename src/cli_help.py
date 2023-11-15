@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from src._constants import (
     CLASSIFIERS,
+    DEFAULT_OUTDIR,
     FEATURE_CLEANINGS,
     FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
@@ -23,6 +26,27 @@ If your data is in a NumPy array, the array must have the shape
 `(n_samples, n_features + 1)` where the last column is the target for either
 classification or prediction.
 
+"""
+
+SHEET_HELP_STR = """
+The path to the formatted spreadsheet to analyze.
+
+Currently only spreadsheets saved as either `.xlsx` or `.csv` are supported.
+
+If your data is saved as a Pandas `DataFrame`, it must have shape
+`(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
+column holding the target variable (or feature) can be specified by the
+`--target` / `-y` argument, but is "target" by default if such a column name
+exists, or the last column if it does not.
+
+If your data is in a NumPy array, the array must have the shape
+`(n_samples, n_features + 1)` where the last column is the target for either
+classification or prediction.
+
+"""
+
+SEP_HELP_STR = """
+Separator used in .csv files. Default ",".
 """
 
 TARGET_HELP_STR = """
@@ -183,9 +207,9 @@ k-fold estimates of performance, and include these all in the final results.
 
 """
 
-OUTDIR_HELP = """
+OUTDIR_HELP = f"""
 Specifies location of all results, as well as cache files for slow computations
-(e.g.  stepwise feature selection).
+(e.g. stepwise feature selection). If unspecified, will default to {DEFAULT_OUTDIR}
 
 """
 
@@ -220,5 +244,19 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
         --test-val=kfold \\
         --test-val-size=5 \\
         --outdir='./results'
+
+"""
+
+USAGE_STRING = """
+
+    The df-analyze program can be used in one of two modes: CLI mode, and
+    spreadsheet mode. In spreadsheet mode, df-analyze options are specified in
+    a special format at the top of a spreadsheet or .csv file, and spreadsheet
+    columns are given specific names to identify targets, continuous features,
+    and categorical features. In spreadsheet mode, only a single argument needs
+    to be passed, which is the path to the df-analyze formatted spreadsheet:
+
+        python df-analyze.py --spreadsheet my_formatted_sheet.xlsx
+
 
 """

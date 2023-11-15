@@ -30,6 +30,7 @@ from typing_extensions import Literal
 
 from src._constants import (
     CLASSIFIERS,
+    DEFAULT_OUTDIR,
     FEATURE_CLEANINGS,
     FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
@@ -60,10 +61,13 @@ from src.cli_help import (
     NAN_HELP,
     OUTDIR_HELP,
     REG_HELP_STR,
+    SEP_HELP_STR,
+    SHEET_HELP_STR,
     TARGET_HELP_STR,
     TEST_VAL_HELP,
     TEST_VALSIZES_HELP,
     USAGE_EXAMPLES,
+    USAGE_STRING,
     VERBOSITY_HELP,
 )
 from src.io import ProgramDirs, setup_io
@@ -270,9 +274,7 @@ def cv_size(cv_str: str) -> Union[float, int]:
     try:
         cv = float(cv_str)
     except Exception as e:
-        raise ArgumentError(
-            "Could not convert `--htune-val-size` argument to float"
-        ) from e
+        raise ArgumentError("Could not convert `--htune-val-size` argument to float") from e
     if cv <= 0:
         raise ArgumentError("`--htune-val-size` must be positive")
     if 0 < cv < 1:
@@ -296,9 +298,34 @@ def cv_size(cv_str: str) -> Union[float, int]:
 def get_options(args: str = None) -> ProgramOptions:
     """parse command line arguments"""
     # parser = ArgumentParser(description=DESC)
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter, epilog=USAGE_EXAMPLES)
+    parser = ArgumentParser(
+        prog="df-analyze",
+        usage=USAGE_STRING,
+        formatter_class=RawTextHelpFormatter,
+        epilog=USAGE_EXAMPLES,
+    )
     parser.add_argument(
-        "--df", action="store", type=resolved_path, required=True, help=DF_HELP_STR
+        "--spreadsheet",
+        type=resolved_path,
+        required=False,
+        default=None,
+        help=SHEET_HELP_STR,
+    )
+    parser.add_argument(
+        "--df",
+        action="store",
+        type=resolved_path,
+        required=False,
+        default=None,
+        help=DF_HELP_STR,
+    )
+    parser.add_argument(
+        "--sep",
+        "--separator",
+        type=str,
+        required=False,
+        default=",",
+        help=SEP_HELP_STR,
     )
     # just use existing pathname instead
     # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
@@ -372,9 +399,7 @@ def get_options(args: str = None) -> ProgramOptions:
         default=3,
         help=HTUNEVAL_HELP_STR,
     )
-    parser.add_argument(
-        "--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP
-    )
+    parser.add_argument("--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP)
     parser.add_argument("--htune-trials", type=int, default=100, help=HTUNE_TRIALS_HELP)
     parser.add_argument(
         "--test-val",
@@ -387,7 +412,13 @@ def get_options(args: str = None) -> ProgramOptions:
     parser.add_argument(
         "--test-val-sizes", nargs="+", type=cv_size, default=5, help=TEST_VALSIZES_HELP
     )
-    parser.add_argument("--outdir", type=resolved_path, required=True, help=OUTDIR_HELP)
+    parser.add_argument(
+        "--outdir",
+        type=resolved_path,
+        required=False,
+        default=DEFAULT_OUTDIR,
+        help=OUTDIR_HELP,
+    )
     parser.add_argument(
         "--verbosity",
         type=lambda a: Verbosity(int(a)),
