@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
 from time import ctime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, TypeVar
 
 import numpy as np
 import optuna
@@ -23,6 +23,8 @@ from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
+T = TypeVar("T")
+
 
 @dataclass
 class LoopArgs(Debug):
@@ -37,7 +39,7 @@ class LoopArgs(Debug):
     # verbosity: Verbosity = optuna.logging.INFO
 
 
-def listify(item: Any) -> List[Any]:
+def listify(item: T) -> List[T]:
     if isinstance(item, list):
         return item
     if isinstance(item, tuple):
@@ -189,7 +191,9 @@ if __name__ == "__main__":
     # run analyses based on args
     options = get_options()
 
-    estimators = options.classifiers if options.mode == "classify" else options.regressors
+    estimators = (
+        options.classifiers if options.mode == "classify" else options.regressors
+    )
     feature_selection = options.selection_options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 
