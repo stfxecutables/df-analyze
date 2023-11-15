@@ -30,7 +30,7 @@ def load_excel(path: Path) -> tuple[DataFrame, dict[int, str]]:
     row: tuple[Any]
     meta = {}
     data = []
-    for i, row in enumerate(ws.iter_rows(values_only=True)):
+    for i, row in enumerate(ws.iter_rows(values_only=True)):  # type: ignore
         first = row[0]
         if first is not None and str(first).strip().startswith("--"):
             line = " ".join([str(value) for value in row if value is not None])

@@ -18,7 +18,7 @@ from tqdm import tqdm
 from src._types import CVMethod, Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
 from src.cli import ProgramOptions, Verbosity, get_options
-from src.io import FileType, try_save
+from src.saving import FileType, try_save
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -191,9 +191,7 @@ if __name__ == "__main__":
     # run analyses based on args
     options = get_options()
 
-    estimators = (
-        options.classifiers if options.mode == "classify" else options.regressors
-    )
+    estimators = options.classifiers if options.mode == "classify" else options.regressors
     feature_selection = options.selection_options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 

@@ -24,7 +24,7 @@ from src.hypertune import (
     hypertune_regressor,
     train_val_splits,
 )
-from src.io import FileType, try_save
+from src.saving import FileType, try_save
 
 
 def val_method_short(method: CVMethod, test_val_size: int) -> str:
