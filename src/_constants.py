@@ -4,7 +4,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
 SIMPLE_XLSX = DATADIR / "spreadsheet.xlsx"
 SIMPLE_CSV = DATADIR / "spreadsheet.csv"
+SIMPLE_CSV2 = DATADIR / "spreadsheet2.csv"
 SIMPLE_ODS = DATADIR / "spreadsheet.ods"
+
+DEFAULT_OUTDIR = Path.home().resolve() / "df-analyze-outputs"
 
 DATAFILE = DATADIR / "MCICFreeSurfer.mat"
 DATA_JSON = DATAFILE.parent / "mcic.json"
