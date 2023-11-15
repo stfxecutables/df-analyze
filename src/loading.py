@@ -11,11 +11,11 @@ from io import StringIO
 from typing import Any
 
 import pandas as pd
-from openpyxl import Workbook, load_workbook
+from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from pandas import DataFrame
 
-from src._constants import SIMPLE_CSV, SIMPLE_ODS, SIMPLE_XLSX
+from src._constants import SIMPLE_CSV, SIMPLE_XLSX
 
 
 def load_excel(path: Path) -> tuple[DataFrame, dict[int, str]]:

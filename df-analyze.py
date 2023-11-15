@@ -1,23 +1,19 @@
 import os
-import sys
-import traceback
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
 from time import ctime
-from typing import Any, List, Optional, TypeVar
+from typing import List, Optional, TypeVar
 
-import numpy as np
-import optuna
 import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src._types import CVMethod, Estimator, FeatureSelection
+from src._types import Estimator, FeatureSelection
 from src.analyses import full_estimator_analysis
-from src.cli import ProgramOptions, Verbosity, get_options
+from src.cli import ProgramOptions, get_options
 from src.saving import FileType, try_save
 from src.utils import Debug
 

@@ -29,15 +29,12 @@ from sklearn.neural_network import MLPRegressor as MLPR
 from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier as DTreeClassifier
 
-from src._constants import SEED, VAL_SIZE
-from src._types import Classifier, CVMethod, EstimationMode, Regressor
-from src.classifiers import get_classifier_constructor
+from src._constants import SEED
+from src._types import CVMethod
 from src.scoring import (
     accuracy_scorer,
     auc_scorer,
-    sensitivity,
     sensitivity_scorer,
-    specificity,
     specificity_scorer,
 )
 

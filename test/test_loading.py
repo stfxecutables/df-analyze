@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-from src._constants import SIMPLE_CSV, SIMPLE_CSV2, SIMPLE_ODS, SIMPLE_XLSX
+from src._constants import SIMPLE_CSV, SIMPLE_CSV2, SIMPLE_XLSX
 from src.loading import load_csv, load_excel
 
 

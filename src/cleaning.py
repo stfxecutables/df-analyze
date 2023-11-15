@@ -6,7 +6,6 @@ from warnings import warn
 
 import numpy as np
 import pandas as pd
-from joblib import Memory
 from numpy import ndarray
 from pandas import DataFrame
 from scipy.io import loadmat
@@ -114,7 +113,6 @@ class MCIC:
         df = remove_nan_features(df)
         df = remove_nan_samples(df)
         print("Shape after dropping:", df.shape)
-        inspect_data(df)
         df.to_json(CLEAN_JSON)
         return df
 

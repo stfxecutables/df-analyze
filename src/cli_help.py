@@ -1,11 +1,7 @@
-from pathlib import Path
 
 from src._constants import (
     CLASSIFIERS,
     DEFAULT_OUTDIR,
-    FEATURE_CLEANINGS,
-    FEATURE_SELECTIONS,
-    HTUNE_VAL_METHODS,
     REGRESSORS,
 )
 

@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict
+from typing import Callable, Dict
 
 from sklearn.ensemble import AdaBoostRegressor, GradientBoostingRegressor
 from sklearn.ensemble import RandomForestRegressor as RF

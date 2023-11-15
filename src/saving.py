@@ -6,26 +6,11 @@ from enum import Enum
 from pathlib import Path
 from time import ctime
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
     Optional,
     Tuple,
-    Type,
-    Union,
-    cast,
-    final,
-    no_type_check,
 )
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import pytest
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
+from pandas import DataFrame
 
 from src._types import FeatureCleaning, FeatureSelection
 from src.utils import Debug

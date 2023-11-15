@@ -7,26 +7,12 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
     Optional,
-    Set,
     Tuple,
-    Type,
     Union,
-    cast,
-    no_type_check,
 )
 from warnings import warn
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
 
 from src._constants import (
     CLASSIFIERS,
@@ -47,9 +33,7 @@ from src._types import (
 )
 from src.cli_help import (
     CLS_HELP_STR,
-    DESC,
     DF_HELP_STR,
-    DFNAME_HELP_STR,
     FEAT_CLEAN_HELP,
     FEAT_SELECT_HELP,
     HTUNE_HELP,

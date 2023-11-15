@@ -2,7 +2,6 @@ import numpy as np
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
-from src.cleaning import get_clean_data
 from src.feature_selection import select_features
 from src.cli import get_options
 

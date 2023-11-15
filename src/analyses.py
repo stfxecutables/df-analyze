@@ -1,9 +1,8 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 import optuna
 import pandas as pd
 from pandas import DataFrame, Series
-from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
 from src._types import (
@@ -11,10 +10,7 @@ from src._types import (
     CVMethod,
     Estimator,
     FeatureSelection,
-    MultiTestCVMethod,
-    Regressor,
 )
-from src.cleaning import get_clean_data
 from src.cli import ProgramOptions, Verbosity
 from src.feature_selection import select_features
 from src.hypertune import (
