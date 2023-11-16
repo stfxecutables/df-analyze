@@ -3,6 +3,10 @@
 <!-- omit from toc -->
 # Contents
 
+- [What it Does](#what-it-does)
+  - [Analysis Pipeline](#analysis-pipeline)
+  - [Philosophy](#philosophy)
+    - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
 - [Installation](#installation)
   - [Install Poetry](#install-poetry)
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
@@ -18,6 +22,72 @@
     - [Running](#running)
   - [Parallelization Options](#parallelization-options)
 
+# What it Does
+
+TODO
+
+`df-analyze` automates some common, naive machine-learning approaches
+
+## Analysis Pipeline
+
+TODO
+
+**Data Preparation**
+
+1. Data Loading
+   1. Type Conversions
+1. Data Cleaning
+   1. NaN removal / interpolation
+   1. OneHot Encoding
+1. Data Preprocessing
+   1. Normalization
+   1. Outlier removal / clipping
+
+**Feature Selection**
+
+1. Remove junk features
+   1. Remove constant features
+   1. Remove highly-correlated features
+1. Use filter methods
+   1. Remove features with minimal univariate relation to target
+   1. Keep features with largest filter
+
+**Data Splitting**
+
+1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
+
+
+**Recursive / Wrapper Feature Selection**
+
+1. Step-up selection using $X_\text{train}$
+
+**Hyperparameter Selection**
+
+1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
+
+**Final Validation**
+
+1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
+1. Final evaluation of trained model on $X_\text{test}$
+
+
+## Philosophy
+
+1. Data *preparation* is not to be optimized
+   - i.e. while one might re-run
+1. Proper validation of a feature selection method requires holdout data NOT to
+   be used during feature selection, i.e. requires preventing [double
+   dipping](https://www.nature.com/articles/nn.2303).
+
+### Recursive / Wrapper Feature Selection and Tuning
+
+- too expensive to do together (e.g. do hyperparameter tuning on each potential
+  feature subset)
+- in general a highly challenging bilevel optimization problem
+- to keep computationally tractable, must choose between:
+  1. using a model with "default" hyperparameters for the wrapper selection process
+  1. tuning on all features, then using the tuned model for wrapper selection
+- neither choice above is likely to be optimal
 
 # Installation
 
