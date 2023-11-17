@@ -2,9 +2,10 @@
 File for defining all options passed to `df-analyze.py`.
 """
 import os
-from argparse import ArgumentError, ArgumentParser, Namespace, RawTextHelpFormatter
+from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from dataclasses import dataclass
 from enum import Enum
+from math import isnan
 from pathlib import Path
 from typing import (
     Optional,
@@ -39,6 +40,7 @@ from src.cli.text import (
     HTUNE_TRIALS_HELP,
     HTUNE_VALSIZE_HELP,
     HTUNEVAL_HELP_STR,
+    MC_REPEATS_HELP,
     MODE_HELP_STR,
     N_FEAT_HELP,
     NAN_HELP,
@@ -55,6 +57,8 @@ from src.cli.text import (
 )
 from src.saving import ProgramDirs, setup_io
 from src.utils import Debug
+
+Size = Union[float, int]
 
 
 class Verbosity(Enum):
@@ -113,52 +117,73 @@ class SelectionOptions(Debug):
 
 
 class ProgramOptions(Debug):
-    """Just a container for handling CLI options and default logic (while also providing better
-    typing than just using the `Namespace` from the `ArgumentParser`).
+    """Just a container for handling CLI options and default logic (while also
+    providing better typing than just using the `Namespace` from the
+    `ArgumentParser`).
 
     Notes
     -----
-    For `joblib.Memory` to cache properly, we need all arguments to be hashable. This means
-    immutable (among other things) so we use `Tuple` types for arguments or options where there are
-    multiple steps to go through, e.g. feature selection.
+    For `joblib.Memory` to cache properly, we need all arguments to be
+    hashable. This means immutable (among other things) so we use `Tuple` types
+    for arguments or options where there are multiple steps to go through, e.g.
+    feature selection.
     """
 
-    def __init__(self, cli_args: Namespace) -> None:
+    def __init__(
+        self,
+        datapath: Path,
+        target: str,
+        drop_nan: DropNan,
+        feat_clean: Tuple[FeatureCleaning, ...],
+        feat_select: Tuple[FeatureSelection, ...],
+        n_feat: int,
+        mode: EstimationMode,
+        classifiers: Tuple[Classifier, ...],
+        regressors: Tuple[Regressor, ...],
+        htune: bool,
+        htune_val: ValMethod,
+        htune_val_size: Size,
+        htune_trials: int,
+        test_val: ValMethod,
+        test_val_sizes: Tuple[Size, ...],
+        outdir: Path,
+        is_spreadsheet: bool,
+        verbosity: Verbosity,
+    ) -> None:
         # memoization-related
         self.cleaning_options: CleaningOptions
         self.selection_options: SelectionOptions
         # other
-        self.datapath: Path
-        self.target: str
-        self.mode: EstimationMode
-        self.classifiers: Tuple[Classifier, ...]
-        self.regressors: Tuple[Regressor, ...]
-        self.htune: bool
-        self.htune_val: ValMethod
-        self.htune_val_size: float
-        self.htune_trials: int
-        self.test_val: ValMethod
-        self.test_val_sizes: Tuple[float, ...]
-        self.outdir: Path
-        self.program_dirs: ProgramDirs
-        self.verbosity: Verbosity = cli_args.verbosity
+        self.datapath: Path = self.validate_datapath(datapath)
+        self.target: str = target
+        self.drop_nan: DropNan = drop_nan
+        self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
+        self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
+        self.n_feat: int = n_feat
+        self.mode: EstimationMode = mode
+        self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
+        self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
+        self.htune: bool = htune
+        self.htune_val: ValMethod = htune_val
+        self.htune_val_size: Size = htune_val_size
+        self.htune_trials: int = htune_trials
+        self.test_val: ValMethod = test_val
+        self.test_val_sizes: Tuple[Size, ...]
+        self.outdir: Path = self.ensure_outdir(self.datapath, outdir)
+        self.program_dirs: ProgramDirs = setup_io(self.outdir)
+        self.is_spreadsheet: bool = is_spreadsheet
+        self.verbosity: Verbosity = verbosity
 
-        self.datapath = self.validate_datapath(cli_args.df)
-        self.outdir = self.ensure_outdir(self.datapath, cli_args.outdir)
-        self.program_dirs = setup_io(self.outdir)
-        self.target = cli_args.target
-        self.mode = cli_args.mode
-        # remove duplicates
-        self.classifiers = tuple(sorted(set(cli_args.classifiers)))
-        self.regressors = tuple(sorted(set(cli_args.regressors)))
-        self.feat_select = tuple(sorted(set(cli_args.feat_select)))
-        self.feat_clean = tuple(sorted(set(cli_args.feat_clean)))
+        if isinstance(test_val_sizes, (int, float)):
+            self.test_val_sizes = (test_val_sizes,)
+        else:
+            self.test_val_sizes = tuple(sorted(set(test_val_sizes)))
 
         self.cleaning_options = CleaningOptions(
             datapath=self.datapath,
             target=self.target,
             feat_clean=self.feat_clean,
-            drop_nan=cli_args.drop_nan,
+            drop_nan=self.drop_nan,
         )
         self.selection_options = SelectionOptions(
             cleaning_options=self.cleaning_options,
@@ -166,26 +191,16 @@ class ProgramOptions(Debug):
             classifiers=self.classifiers,
             regressors=self.regressors,
             feat_select=self.feat_select,
-            n_feat=cli_args.n_feat,
+            n_feat=self.n_feat,
         )
-
-        self.htune = cli_args.htune
-        self.htune_val = cli_args.htune_val
-        self.htune_val_size = cli_args.htune_val_size
-        self.htune_trials = cli_args.htune_trials
-        self.test_val = cli_args.test_val
-        if isinstance(cli_args.test_val_sizes, (int, float)):
-            self.test_val_sizes = (cli_args.test_val_sizes,)
-        else:
-            self.test_val_sizes = tuple(sorted(set(cli_args.test_val_sizes)))
 
         # errors
         if self.mode == "regress":
             if ("d" in self.feat_select) or ("auc" in self.feat_select):
                 args = " ".join(self.feat_select)
                 raise ValueError(
-                    "Feature selection with Cohen's d or AUC values not supported "
-                    "for regression data. Do not pass arguments `d` or `auc` to "
+                    "Feature selection with Cohen's d or AUC values is not supported "
+                    "for regression tasks. Do not pass arguments `d` or `auc` to "
                     f"`--feat-select` CLI option. [Got arguments: {args}]"
                 )
         self.spam_warnings()
@@ -226,11 +241,11 @@ class ProgramOptions(Debug):
 
     @staticmethod
     def validate_datapath(df_path: Path) -> Path:
-        datapath = df_path
+        datapath = resolved_path(df_path)
         if not datapath.exists():
             raise FileNotFoundError(f"The specified file {datapath} does not exist.")
         if not datapath.is_file():
-            raise FileNotFoundError(f"The object at {datapath} is not a file.")
+            raise FileNotFoundError(f"{datapath} is not a file.")
         return Path(datapath).resolve()
 
     @staticmethod
@@ -249,33 +264,51 @@ class ProgramOptions(Debug):
         return outdir
 
 
-def resolved_path(p: str) -> Path:
-    return Path(p).resolve()
+def resolved_path(p: Union[str, Path]) -> Path:
+    try:
+        path = Path(p)
+    except Exception as e:
+        raise ValueError(f"Could not interpret string {p} as path") from e
+    try:
+        path = path.resolve()
+    except Exception as e:
+        raise ValueError(f"Could not resolve path {path} to valid path.") from e
+    return path
 
 
 def cv_size(cv_str: str) -> Union[float, int]:
     try:
         cv = float(cv_str)
     except Exception as e:
-        raise ArgumentError("Could not convert `--htune-val-size` argument to float") from e
+        raise ValueError(
+            "Could not convert a `... -size` argument (e.g. --htune-val-size) value to float"
+        ) from e
+    # validate
+    if isnan(cv):
+        raise ValueError("NaN is not a valid size")
     if cv <= 0:
-        raise ArgumentError("`--htune-val-size` must be positive")
-    if 0 < cv < 1:
-        return cv
+        raise ValueError("`... -size` arguments (e.g. --htune-val-size) must be positive")
     if cv == 1:
-        raise ArgumentError("`--htune-val-size=1` is invalid.")
-    if cv != round(cv):
-        raise ArgumentError(
-            "`--htune-val-size` must be an integer if greater than 1, as it specified the `k` in k-fold"
+        raise ValueError(
+            "'1' is not a valid value for `... -size` arguments (e.g. --htune-val-size)."
         )
-    if cv > 10:
-        warn(
-            "`--htune-val-size` greater than 10 is not recommended.",
-            category=UserWarning,
+    if (cv > 1) and not cv.is_integer():
+        raise ValueError(
+            "Passing a float greater than 1.0 for `... -size` arguments "
+            "(e.g. --htune-val-size) is not valid. See documentation for "
+            "`--htune-val-size` or `--test-val-sizes`."
         )
     if cv > 1:
         return int(cv)
     return cv
+
+
+def separator(s: str) -> str:
+    if s.lower().strip() == "tab":
+        return "\t"
+    if s.lower().strip() == "newline":
+        return "\n"
+    return s
 
 
 def get_options(args: str = None) -> ProgramOptions:
@@ -303,15 +336,13 @@ def get_options(args: str = None) -> ProgramOptions:
         help=DF_HELP_STR,
     )
     parser.add_argument(
-        "--sep",
         "--separator",
-        type=str,
+        "--sep",
+        type=separator,
         required=False,
         default=",",
         help=SEP_HELP_STR,
     )
-    # just use existing pathname instead
-    # parser.add_argument("--df-name", action="store", type=str, default="", help=DFNAME_HELP_STR)
     parser.add_argument(
         "--target",
         "-y",
@@ -372,8 +403,19 @@ def get_options(args: str = None) -> ProgramOptions:
         default="none",
         help=NAN_HELP,
     )
-    parser.add_argument("--n-feat", type=int, default=10, help=N_FEAT_HELP)
-    parser.add_argument("--htune", action="store_true", help=HTUNE_HELP)
+    parser.add_argument(
+        "--n-feat",
+        "--n-features",
+        "--n-feats",
+        type=int,
+        default=10,
+        help=N_FEAT_HELP,
+    )
+    parser.add_argument(
+        "--htune",
+        action="store_true",
+        help=HTUNE_HELP,
+    )
     parser.add_argument(
         "--htune-val",
         "-H",
@@ -382,8 +424,24 @@ def get_options(args: str = None) -> ProgramOptions:
         default=3,
         help=HTUNEVAL_HELP_STR,
     )
-    parser.add_argument("--htune-val-size", type=cv_size, default=3, help=HTUNE_VALSIZE_HELP)
-    parser.add_argument("--htune-trials", type=int, default=100, help=HTUNE_TRIALS_HELP)
+    parser.add_argument(
+        "--htune-val-size",
+        type=cv_size,
+        default=3,
+        help=HTUNE_VALSIZE_HELP,
+    )
+    parser.add_argument(
+        "--htune-trials",
+        type=int,
+        default=100,
+        help=HTUNE_TRIALS_HELP,
+    )
+    parser.add_argument(
+        "--mc-repeats",
+        type=int,
+        default=10,
+        help=MC_REPEATS_HELP,
+    )
     parser.add_argument(
         "--test-val",
         "-T",
@@ -393,7 +451,12 @@ def get_options(args: str = None) -> ProgramOptions:
         help=TEST_VAL_HELP,
     )
     parser.add_argument(
-        "--test-val-sizes", nargs="+", type=cv_size, default=5, help=TEST_VALSIZES_HELP
+        "--test-val-sizes",
+        "--test-val-size",
+        nargs="+",
+        type=cv_size,
+        default=5,
+        help=TEST_VALSIZES_HELP,
     )
     parser.add_argument(
         "--outdir",
@@ -404,9 +467,32 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--verbosity",
+        "-v",
         type=lambda a: Verbosity(int(a)),
         default=Verbosity(1),
         help=VERBOSITY_HELP,
     )
-    cli_args = parser.parse_args() if args is None else parser.parse_args(args.split())
-    return ProgramOptions(cli_args)
+    cargs = parser.parse_args() if args is None else parser.parse_args(args.split())
+    if cargs.spreadsheet is None and cargs.df is None:
+        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+
+    return ProgramOptions(
+        datapath=cargs.spreadsheet if cargs.df is None else cargs.spreadsheet,
+        target=cargs.target,
+        drop_nan=cargs.drop_nan,
+        feat_clean=cargs.feat_clean,
+        feat_select=cargs.feat_select,
+        n_feat=cargs.n_feat,
+        mode=cargs.mode,
+        classifiers=cargs.classifiers,
+        regressors=cargs.regressors,
+        htune=cargs.htune,
+        htune_val=cargs.htune_val,
+        htune_val_size=cargs.htune_val_size,
+        htune_trials=cargs.htune_trials,
+        test_val=cargs.test_val,
+        test_val_sizes=cargs.test_val_sizes,
+        outdir=cargs.outdir,
+        is_spreadsheet=cargs.spreadsheet is not None,
+        verbosity=cargs.verbosity,
+    )
