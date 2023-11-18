@@ -55,6 +55,10 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
             data=SimpleImputer(strategy=strategy).fit_transform(X), columns=X.columns
         )
     elif nans is NanHandling.Impute:
+        warn(
+            "Using experimental multivariate imputation. This could take a while "
+            "for even moderate-sized (<2000 samples, <50 features) datasets."
+        )
         imputer = IterativeImputer()
         X_clean = DataFrame(data=imputer.fit_transform(X), columns=X.columns)
     else:

@@ -16,6 +16,10 @@ from src.preprocessing.cleaning import (
 )
 
 
+def no_cats(df: DataFrame, target: str) -> bool:
+    return df.drop(columns=target).select_dtypes(include=["object", "string[python]"]).shape[1] == 0
+
+
 def test_drop() -> None:
     for data, target in [(MUSHROOM_DATA, "target"), (ELDER_DATA, "temperature")]:
         options = get_options(f"--df {data} --target {target} --nan drop")
@@ -24,8 +28,28 @@ def test_drop() -> None:
         assert clean.isna().sum().sum() == 0
 
 
-def no_cats(df: DataFrame, target: str) -> bool:
-    return df.drop(columns=target).select_dtypes(include=["object", "string[python]"]).shape[1] == 0
+@pytest.mark.parametrize("method", ["mean", "median"])
+def test_interpolate(method: str) -> None:
+    datas = (MUSHROOM_DATA, ELDER_DATA)
+    types = (MUSHROOM_TYPES, ELDER_TYPES)
+    targets = ("target", "temperature")
+    for data, typ, target in zip(datas, types, targets):
+        df = load_as_df(data, spreadsheet=False)
+        dft = load_as_df(typ, spreadsheet=False)
+        cats = dft[dft["type"] == "categorical"]["feature_name"].to_list()
+        cat_arg = " ".join(cats)
+        options = get_options(
+            f"--df {data} --target {target} --nan {method} --categoricals {cat_arg}"
+        )
+
+        df = load_as_df(data, spreadsheet=False)
+        df = encode_categoricals(df, target=options.target, categoricals=cats)
+        clean = handle_nans(df, target=options.target, nans=options.nan_handling)
+        assert clean.isna().sum().sum() == 0
+
+
+def test_multivariate_interpolate() -> None:
+    test_interpolate("impute")
 
 
 def test_encode() -> None:
