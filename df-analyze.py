@@ -13,7 +13,7 @@ from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 from src._types import Estimator, FeatureSelection
-from src.analyses import full_estimator_analysis
+from src.analysis.analyses import full_estimator_analysis
 from src.cli.cli import ProgramOptions, get_options
 from src.saving import FileType, try_save
 from src.utils import Debug
@@ -191,7 +191,6 @@ if __name__ == "__main__":
         log_options(options)
         print(options)
 
-    sys.exit()
     estimators = options.classifiers if options.mode == "classify" else options.regressors
     feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)

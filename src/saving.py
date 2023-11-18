@@ -23,6 +23,7 @@ class FileType(Enum):
     Final = "final"
     Feature = "feature"
     Params = "params"
+    Univariate = "univariatae"
 
 
 @dataclass
@@ -30,17 +31,21 @@ class ProgramDirs(Debug):
     """Container for various output and caching directories"""
 
     joblib_cache: Path
+    univariate: Path
     feature_selection: Path
     interim_results: Path
     final_results: Path
 
 
-def setup_io(outdir: Path) -> ProgramDirs:
-    timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    out = outdir / f"{timestamp}"
+def setup_io(outdir: Path, add_timestamp: bool = False) -> ProgramDirs:
+    out = outdir
+    if add_timestamp:
+        timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
+        out = out / f"{timestamp}"
 
     dirs = ProgramDirs(
         joblib_cache=out / JOBLIB,
+        univariate=out / "univariate",
         feature_selection=out / "selected_features",
         interim_results=out / "interim_results",
         final_results=out / "final_results",
