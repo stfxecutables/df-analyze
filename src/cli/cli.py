@@ -401,8 +401,9 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--nan",
-        choices=["drop", "mean", "median", "impute"],
-        default="mean",
+        choices=[na.value for na in NanHandling],
+        default=NanHandling.Mean,
+        type=NanHandling,
         help=NAN_HELP,
     )
     parser.add_argument(
