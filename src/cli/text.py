@@ -54,6 +54,26 @@ If an integer, and `--df` is a NumPy array only, specifies the column index.
 
 """
 
+CATEGORICAL_HELP_STR = """
+If an integer, specifies the count threshold for a feature to be treated as
+categorical (i.e. converted to one-hot). Regardless of the user-specified
+integer value, features with string values will be treated as categorical.
+This is a quick and automatic method that will cause ordinal features (e.g.
+user ratings, Likert-like ratings, self-reported ratings, etc.) to be
+converted to categoricals, which will in general not be desirable if the
+ordinal feature has a large range. Thus it is perferable to explicitly
+specify the categorical features in the form below.
+
+If the argument to `--categoricals` is a list of strings, e.g.
+
+    --categoricals sex gender ancestry education life_satisfaction
+
+then these features will be treated as categorical regardless of the number
+of levels in each. In this case, if during data cleaning categorical variables
+are detected that are NOT specified by the user, a warning will be raised, and
+then those features will be one-hot encoded anyway.
+"""
+
 MODE_HELP_STR = """
 If "classify", do classification. If "regress", do regression.
 
@@ -118,13 +138,19 @@ Makes use of the featuretools library (featuretools.com). Options are:
 """
 
 NAN_HELP = """
-How to drop NaN values. Uses Pandas options.
+How to handle NaN values in non-categorical features. Categorical features
+are handled by representing the NaN value as another category level (class),
+i.e. one extra one-hot column is created for each categorical feature with a
+NaN value.
 
-  none:       Do not remove. Will cause errors for most algorithms. Default.
-  all:        Remove the sample and feature both (row and column) for any NaN.
-  rows:       Drop samples (rows) that contain one or more NaN values.
-  cols:       Drop features (columns) that contain one or more NaN values.
-
+  drop:      Attempt to remove all non-categorical NaN values. Note this could
+             remove all data if a lot of values are missing, which will cause
+             errors.
+  mean:      Replace all NaN values with the feature mean value.
+  median:    Replace all NaN values with the feature median value.
+  impute:    Use scikit-learn experimental IterativeImputer to attempt to
+             predictively fill NaN values based on other feature values. May
+             be computationally demanding on larger datasets.
 """
 
 N_FEAT_HELP = """

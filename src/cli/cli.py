@@ -25,7 +25,6 @@ from src._constants import (
 )
 from src._types import (
     Classifier,
-    DropNan,
     EstimationMode,
     FeatureCleaning,
     FeatureSelection,
@@ -34,6 +33,7 @@ from src._types import (
 )
 from src.cli.parsing import cv_size, resolved_path, separator
 from src.cli.text import (
+    CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
     DF_HELP_STR,
     FEAT_CLEAN_HELP,
@@ -57,6 +57,7 @@ from src.cli.text import (
     USAGE_STRING,
     VERBOSITY_HELP,
 )
+from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
 from src.saving import ProgramDirs, setup_io
 from src.utils import Debug
@@ -92,8 +93,9 @@ class CleaningOptions(Debug):
 
     datapath: Path
     target: str
+    categoricals: Union[list[str], int]
     feat_clean: Tuple[FeatureCleaning, ...]
-    drop_nan: DropNan
+    nan_handling: NanHandling
 
 
 @dataclass
@@ -136,7 +138,8 @@ class ProgramOptions(Debug):
         self,
         datapath: Path,
         target: str,
-        drop_nan: DropNan,
+        categoricals: Union[list[str], int],
+        nan_handling: NanHandling,
         feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
         n_feat: int,
@@ -161,7 +164,8 @@ class ProgramOptions(Debug):
         # other
         self.datapath: Path = self.validate_datapath(datapath)
         self.target: str = target
-        self.drop_nan: DropNan = drop_nan
+        self.categoricals: Union[list[str], int] = categoricals
+        self.nan_handling: NanHandling = nan_handling
         self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
         self.n_feat: int = n_feat
@@ -189,8 +193,9 @@ class ProgramOptions(Debug):
         self.cleaning_options = CleaningOptions(
             datapath=self.datapath,
             target=self.target,
+            categoricals=self.categoricals,
             feat_clean=self.feat_clean,
-            drop_nan=self.drop_nan,
+            nan_handling=self.nan_handling,
         )
         self.selection_options = SelectionOptions(
             cleaning_options=self.cleaning_options,
@@ -347,6 +352,14 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         help=TARGET_HELP_STR,
     )
     parser.add_argument(
+        "--categoricals",
+        nargs="+",
+        action="store",
+        type=str,
+        default=5,
+        help=CATEGORICAL_HELP_STR,
+    )
+    parser.add_argument(
         "--mode",
         action="store",
         choices=["classify", "regress"],
@@ -387,9 +400,9 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         help=FEAT_CLEAN_HELP,
     )
     parser.add_argument(
-        "--drop-nan",
-        choices=["all", "rows", "cols", "none"],
-        default="none",
+        "--nan",
+        choices=["drop", "mean", "median", "impute"],
+        default="mean",
         help=NAN_HELP,
     )
     parser.add_argument(
@@ -461,7 +474,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.spreadsheet,
         target=cli_args.target,
-        drop_nan=cli_args.drop_nan,
+        categoricals=cli_args.categoricals,
+        nan_handling=cli_args.nan,
         feat_clean=cli_args.feat_clean,
         feat_select=cli_args.feat_select,
         n_feat=cli_args.n_feat,

@@ -9,6 +9,13 @@ from warnings import warn
 T = TypeVar("T")
 
 
+class NanHandling(Enum):
+    Drop = "drop"
+    Mean = "mean"
+    Median = "median"
+    Impute = "impute"
+
+
 class CliArgument(Enum, Generic[T]):
     def to_string(self, value: T | None = None) -> str:
         return self.value

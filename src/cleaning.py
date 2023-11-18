@@ -164,9 +164,9 @@ def get_clean_data(options: CleaningOptions) -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
     df = load_as_df(options.datapath)
     print("Shape before dropping:", df.shape)
-    if options.drop_nan in ["all", "rows"]:
+    if options.nan_handling in ["all", "rows"]:
         df = remove_nan_samples(df)
-    if options.drop_nan in ["all", "cols"]:
+    if options.nan_handling in ["all", "cols"]:
         df = remove_nan_features(df, target=options.target)
     print("Shape after dropping:", df.shape)
     if df[options.target].isnull().any():
