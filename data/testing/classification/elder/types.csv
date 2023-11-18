@@ -1,0 +1,11 @@
+feature_name,type
+timestamp,categorical
+temperature,continuous
+humidity,continuous
+CO2CosIRValue,continuous
+CO2MG811Value,continuous
+MOX1,continuous
+MOX2,continuous
+MOX3,continuous
+MOX4,continuous
+COValue,continuous

@@ -10,7 +10,9 @@ SIMPLE_CSV = DATADIR / "spreadsheet.csv"
 SIMPLE_CSV2 = DATADIR / "spreadsheet2.csv"
 SIMPLE_ODS = DATADIR / "spreadsheet.ods"
 MUSHROOM_DATA = TESTDATA / "classification/mushrooms/mushrooms.parquet"
+MUSHROOM_TYPES = TESTDATA / "classification/mushrooms/types.csv"
 ELDER_DATA = TESTDATA / "classification/elder/measurements.csv"
+ELDER_TYPES = TESTDATA / "classification/elder/types.csv"
 
 DEFAULT_OUTDIR = Path.home().resolve() / "df-analyze-outputs"
 

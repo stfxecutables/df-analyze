@@ -474,6 +474,13 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
 
     cli_args = parse_and_merge_args(parser, args)
+    cats = cli_args.categoricals
+    if isinstance(cats, list) and len(cats) == 1:
+        try:
+            n_cats = int(cats[0])
+            cli_args.categoricals = n_cats
+        except ValueError:
+            pass
 
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,

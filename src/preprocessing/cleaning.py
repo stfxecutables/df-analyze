@@ -10,7 +10,6 @@ import pandas as pd
 from dateutil.parser import parse
 from numpy import ndarray
 from pandas import DataFrame
-from scipy.io import loadmat
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import MinMaxScaler
@@ -41,7 +40,7 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
     y = df[target]
 
     if nans is NanHandling.Drop:
-        X_clean = X.dropna(axis="index").dropna(axis="columns")
+        X_clean = X.dropna(axis="columns").dropna(axis="index")
         if 0 in X_clean.shape:
             others = [na.value for na in NanHandling if na is not NanHandling.Drop]
             raise RuntimeError(
@@ -65,15 +64,22 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
     return X_clean
 
 
+def encode_target():
+    ...
+
+
 def encode_categoricals(
     df: DataFrame, target: str, categoricals: Union[list[str], int]
 ) -> DataFrame:
     """Treat all features with <= options.cat_threshold as categorical"""
-    X = df.drop(columns=target).infer_objects()
+    X = df.drop(columns=target).infer_objects().convert_dtypes()
     unique_counts = {}
     for colname in X.columns:
-        unique_counts[colname] = len(np.unique(df[colname]))
-    str_cols = X.dtypes[X.dtypes == "object"].index.tolist()
+        try:
+            unique_counts[colname] = len(np.unique(df[colname]))
+        except TypeError:  # happens when can't sort for unique
+            unique_counts[colname] = len(np.unique(df[colname].astype(str)))
+    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
     int_cols = X.select_dtypes(include="int").columns.to_list()
     sus_ints = [col for col in int_cols if unique_counts[col] < 5]
 

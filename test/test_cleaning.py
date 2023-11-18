@@ -1,7 +1,10 @@
+from math import ceil
+
 import pytest
 from _pytest.capture import CaptureFixture
+from pandas import DataFrame
 
-from src._constants import ELDER_DATA, MUSHROOM_DATA, ROOT
+from src._constants import ELDER_DATA, ELDER_TYPES, MUSHROOM_DATA, MUSHROOM_TYPES, ROOT
 from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
     detect_timestamps,
@@ -13,12 +16,58 @@ from src.preprocessing.cleaning import (
 )
 
 
-class TestNanHandling:
-    def test_drop(self, capsys: CaptureFixture) -> None:
-        options = get_options(f"--df {DATA} --target y --nan drop")
-        df = load_as_df(DATA, spreadsheet=False)
+def test_drop() -> None:
+    for data, target in [(MUSHROOM_DATA, "target"), (ELDER_DATA, "temperature")]:
+        options = get_options(f"--df {data} --target {target} --nan drop")
+        df = load_as_df(data, spreadsheet=False)
         clean = handle_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
+
+
+def no_cats(df: DataFrame, target: str) -> bool:
+    return df.drop(columns=target).select_dtypes(include=["object", "string[python]"]).shape[1] == 0
+
+
+def test_encode() -> None:
+    datas = (MUSHROOM_DATA, ELDER_DATA)
+    types = (MUSHROOM_TYPES, ELDER_TYPES)
+    targets = ("target", "temperature")
+    for data, typ, target in zip(datas, types, targets):
+        df = load_as_df(data, spreadsheet=False)
+        dft = load_as_df(typ, spreadsheet=False)
+        cats = dft[dft["type"] == "categorical"]
+        cat_arg = " ".join(cats["feature_name"].to_list())
+        options = get_options(f"--df {data} --target {target} --nan drop --categoricals {cat_arg}")
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        assert no_cats(df, target=options.target)
+
+
+def test_encode_warn() -> None:
+    data = MUSHROOM_DATA
+    typ = MUSHROOM_TYPES
+    target = "target"
+
+    df = load_as_df(data, spreadsheet=False)
+    dft = load_as_df(typ, spreadsheet=False)
+    cats = dft[dft["type"] == "categorical"]
+    n = ceil(len(cats) / 2)
+    some_cats = cats[:n]
+    cat_arg = " ".join(some_cats["feature_name"].to_list())
+    options = get_options(f"--df {data} --target {target} --nan drop --categoricals {cat_arg}")
+    with pytest.warns(UserWarning):
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        assert no_cats(df, target=options.target)
+
+
+def test_encode_auto() -> None:
+    datas = (MUSHROOM_DATA, ELDER_DATA)
+    targets = ("target", "temperature")
+
+    for data, target in zip(datas, targets):
+        df = load_as_df(data, spreadsheet=False)
+        options = get_options(f"--df {data} --target {target} --nan drop --categoricals 3")
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        assert no_cats(df, target=options.target)
 
 
 def test_timestamp_detection() -> None:
