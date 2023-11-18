@@ -283,7 +283,10 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     sheet_parser = deepcopy(parser)
     sentinel_parser = deepcopy(parser)
 
-    sentinels = {key: SENTINEL for key in parser.parse_args().__dict__}
+    if args is None:
+        sentinels = {key: SENTINEL for key in parser.parse_args().__dict__}
+    else:
+        sentinels = {key: SENTINEL for key in parser.parse_args(args.split()).__dict__}
     sentinel_parser.set_defaults(**sentinels)
 
     cli_args = cli_parser.parse_args() if args is None else cli_parser.parse_args(args.split())
@@ -401,7 +404,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--nan",
-        choices=[na.value for na in NanHandling],
+        choices=[*NanHandling],
         default=NanHandling.Mean,
         type=NanHandling,
         help=NAN_HELP,
@@ -473,7 +476,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     cli_args = parse_and_merge_args(parser, args)
 
     return ProgramOptions(
-        datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.spreadsheet,
+        datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=cli_args.target,
         categoricals=cli_args.categoricals,
         nan_handling=cli_args.nan,

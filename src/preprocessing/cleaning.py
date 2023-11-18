@@ -16,6 +16,7 @@ from sklearn.preprocessing import MinMaxScaler
 from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE
 from src.cli.cli import CleaningOptions, ProgramOptions
 from src.enumerables import NanHandling
+from src.loading import load_spreadsheet
 
 
 def normalize(df: DataFrame, target: str) -> DataFrame:
@@ -118,14 +119,24 @@ def encode_categoricals(
     return new
 
 
-def load_as_df(path: Path) -> Union[DataFrame, ndarray]:
-    FILETYPES = [".json", ".csv", ".npy"]
+def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
+    FILETYPES = [".json", ".csv", ".npy", "xlsx", ".parquet"]
     if path.suffix not in FILETYPES:
-        raise ValueError("Invalid data file. Currently must be one of ")
+        raise ValueError(f"Invalid data file. Currently must be one of: {FILETYPES}")
     if path.suffix == ".json":
         df = pd.read_json(str(path))
     elif path.suffix == ".csv":
-        df = pd.read_csv(str(path))
+        if spreadsheet:
+            df = load_spreadsheet(path)[0]
+        else:
+            df = pd.read_csv(str(path))
+    elif path.suffix == ".parquet":
+        df = pd.read_parquet(str(path))
+    elif path.suffix == ".xlsx":
+        if spreadsheet:
+            df = load_spreadsheet(path)[0]
+        else:
+            df = pd.read_excel(str(path))
     elif path.suffix == ".npy":
         arr: ndarray = np.load(str(path), allow_pickle=False)
         if arr.ndim != 2:
@@ -136,9 +147,7 @@ def load_as_df(path: Path) -> Union[DataFrame, ndarray]:
         df = DataFrame(data=arr, columns=cols)
     else:
         raise RuntimeError("Unreachable!")
-    # pd.get_dummies is idempotent-ish so below is safe-ish
-    dummified = pd.get_dummies(df, drop_first=False)
-    return dummified
+    return df
 
 
 def remove_nan_features(df: DataFrame, target: str) -> DataFrame:

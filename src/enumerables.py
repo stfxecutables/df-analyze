@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from argparse import ArgumentError
 from enum import Enum
 from math import isnan
-from typing import Any, Generic, TypeVar
 from warnings import warn
-
-T = TypeVar("T")
 
 
 class NanHandling(Enum):
@@ -16,16 +12,7 @@ class NanHandling(Enum):
     Impute = "impute"
 
 
-class CliArgument(Enum, Generic[T]):
-    def to_string(self, value: T | None = None) -> str:
-        return self.value
-
-    @staticmethod
-    def from_str(s: str) -> CliArgument:
-        return CliArgument(s)
-
-
-class CVSplit(CliArgument):
+class CVSplit(Enum):
     KFold3 = "3-fold"
     KFold5 = "5-fold"
     KFold10 = "10-fold"
@@ -38,7 +25,7 @@ class CVSplit(CliArgument):
         return f"{value*100}%-holdout"
 
     @staticmethod
-    def from_str(s: str) -> CliArgument:
+    def from_str(s: str) -> CVSplit:
         try:
             cv = float(s)
         except Exception as e:
@@ -73,6 +60,6 @@ class CVSplit(CliArgument):
                 category=UserWarning,
             )
         if cv > 1:
-            return int(cv)
+            return CVSplit(cv)
 
-        return CliArgument(s)
+        return CVSplit(s)
