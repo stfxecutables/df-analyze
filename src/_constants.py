@@ -2,10 +2,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
+TESTDATA = DATADIR / "testing"
+
+# Testing
 SIMPLE_XLSX = DATADIR / "spreadsheet.xlsx"
 SIMPLE_CSV = DATADIR / "spreadsheet.csv"
 SIMPLE_CSV2 = DATADIR / "spreadsheet2.csv"
 SIMPLE_ODS = DATADIR / "spreadsheet.ods"
+MUSHROOM_DATA = TESTDATA / "classification/mushrooms/mushrooms.parquet"
+ELDER_DATA = TESTDATA / "classification/elder/measurements.csv"
 
 DEFAULT_OUTDIR = Path.home().resolve() / "df-analyze-outputs"
 

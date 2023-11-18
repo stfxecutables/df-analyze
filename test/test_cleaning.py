@@ -1,16 +1,16 @@
+import pytest
 from _pytest.capture import CaptureFixture
 
-from src._constants import ROOT
+from src._constants import ELDER_DATA, MUSHROOM_DATA, ROOT
 from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
+    detect_timestamps,
     encode_categoricals,
     get_clean_data,
     handle_nans,
     load_as_df,
     normalize,
 )
-
-DATA = ROOT / "data/banking/bank.json"
 
 
 class TestNanHandling:
@@ -20,17 +20,11 @@ class TestNanHandling:
         clean = handle_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
 
-    def test_drop_all(self, capsys: CaptureFixture) -> None:
-        options = get_options(f"--df {DATA} --target y --drop-nan all")
-        df = get_clean_data(options.cleaning_options)
-        assert not df.isnull().any().any()
 
-    def test_drop_rows(self, capsys: CaptureFixture) -> None:
-        options = get_options(f"--df {DATA} --target y --drop-nan rows")
-        df = get_clean_data(options.cleaning_options)
-        assert not df.isnull().any().any()
+def test_timestamp_detection() -> None:
+    df = load_as_df(MUSHROOM_DATA, spreadsheet=False)
+    detect_timestamps(df, "target")
 
-    def test_drop_cols(self, capsys: CaptureFixture) -> None:
-        options = get_options(f"--df {DATA} --target y --drop-nan cols")
-        df = get_clean_data(options.cleaning_options)
-        assert not df.isnull().any().any()
+    df = load_as_df(ELDER_DATA, spreadsheet=False)
+    with pytest.raises(ValueError):
+        detect_timestamps(df, "temperature")

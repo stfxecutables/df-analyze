@@ -3,6 +3,8 @@
 ################################################################################
 data/*.csv
 data/*.rar
+data/testing/**/*.csv
+data/testing/**/*.txt
 
 test_results
 

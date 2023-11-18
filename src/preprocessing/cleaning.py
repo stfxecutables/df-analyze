@@ -1,4 +1,5 @@
 import traceback
+from math import ceil
 from os import PathLike
 from pathlib import Path
 from typing import Union
@@ -6,6 +7,7 @@ from warnings import warn
 
 import numpy as np
 import pandas as pd
+from dateutil.parser import parse
 from numpy import ndarray
 from pandas import DataFrame
 from scipy.io import loadmat
@@ -119,6 +121,40 @@ def encode_categoricals(
     return new
 
 
+def is_timelike(s: str) -> bool:
+    # https://stackoverflow.com/a/25341965 for this...
+    try:
+        parse(s, fuzzy=False)
+        return True
+    except ValueError:
+        return False
+
+
+def detect_timestamps(df: DataFrame, target: str) -> None:
+    n_subsamp = max(ceil(0.5 * len(df)), 500)
+    n_subsamp = min(n_subsamp, len(df))
+    # time checks can be very slow, so just check a few for each feature first
+    X = df.drop(columns=target).infer_objects().select_dtypes(include="object").dropna(axis="index")
+    for col in X.columns:
+        idx = np.random.permutation(len(X))[:n_subsamp]
+        percent = X[col].loc[idx].apply(is_timelike).sum() / n_subsamp
+        if percent > 1.0 / 3.0:
+            p = X[col].loc[idx].apply(is_timelike).mean()
+            if p > 0.3:
+                raise ValueError(
+                    f"A significant proportion ({p*100:02f}%) of the data for feature "
+                    f"`{col}` appears to be parseable as datetime data. Datetime data "
+                    "cannot currently be handled by `df-analyze` (or most AutoML or "
+                    "or most automated predictive approaches) due to special requirements "
+                    "in data preprocessing (e.g. Fourier features), splitting (e.g. time-"
+                    "based cross-validation, forecasting, hindcasting) and in the models "
+                    "used (e.g. ARIMA, VAR, etc.).\n\n"
+                    f"To remove this error, either DELETE the `{col}` column from your data, "
+                    "or manually edit the column values so they are clearly interpretable "
+                    "as a categorical variable."
+                )
+
+
 def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
     FILETYPES = [".json", ".csv", ".npy", "xlsx", ".parquet"]
     if path.suffix not in FILETYPES:
@@ -170,9 +206,9 @@ def remove_nan_samples(df: DataFrame) -> DataFrame:
 
 # this is usually really fast, no real need to memoize probably
 # @MEMOIZER.cache
-def get_clean_data(options: CleaningOptions) -> DataFrame:
+def get_clean_data(options: ProgramOptions) -> DataFrame:
     """Perform minimal cleaning, like removing NaN features"""
-    df = load_as_df(options.datapath)
+    df = load_as_df(options.datapath, options.is_spreadsheet)
     print("Shape before dropping:", df.shape)
     if options.nan_handling in ["all", "rows"]:
         df = remove_nan_samples(df)
