@@ -2,7 +2,6 @@
 File for defining all options passed to `df-analyze.py`.
 """
 import os
-import sys
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from copy import deepcopy
 from dataclasses import dataclass
@@ -277,34 +276,35 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     # see https://stackoverflow.com/a/76230387 for a similar problem
     cli_parser = deepcopy(parser)
     sheet_parser = deepcopy(parser)
-
     sentinel_parser = deepcopy(parser)
-    sentinels = Namespace(**{key: SENTINEL for key in parser.parse_args().__dict__})
-    sentinel_parser.set_defaults(**sentinels.__dict__)
+
+    sentinels = {key: SENTINEL for key in parser.parse_args().__dict__}
+    sentinel_parser.set_defaults(**sentinels)
 
     cli_args = cli_parser.parse_args() if args is None else cli_parser.parse_args(args.split())
+    if cli_args.spreadsheet is None and cli_args.df is None:
+        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+
     sentinel_cli_args = (
         sentinel_parser.parse_args() if args is None else sentinel_parser.parse_args(args.split())
     )
-    explicit_cli_args = Namespace(
-        **{key: val for key, val in sentinel_cli_args.__dict__.items() if val is not SENTINEL}
-    )
-
-    if cli_args.spreadsheet is None and cli_args.df is None:
-        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+    explicit_cli_args = {
+        key: val for key, val in sentinel_cli_args.__dict__.items() if val is not SENTINEL
+    }
 
     spreadsheet = cli_args.spreadsheet
     if spreadsheet is not None:
         options = load_spreadsheet(spreadsheet)[1]
     else:
         options = ""
-    sheet_args = sheet_parser.parse_args(options.split())
-    sentinel_sheet_args = sentinel_parser.parse_args(options.split())
-    explicit_sheet_args = Namespace(
-        **{key: val for key, val in sentinel_sheet_args.__dict__.items() if val is not SENTINEL}
-    )
 
-    cli_args = Namespace(**{**sheet_args.__dict__, **explicit_cli_args.__dict__})
+    sheet_args = sheet_parser.parse_args(options.split()).__dict__
+    # sentinel_sheet_args = sentinel_parser.parse_args(options.split())
+    # explicit_sheet_args = Namespace(
+    #     **{key: val for key, val in sentinel_sheet_args.__dict__.items() if val is not SENTINEL}
+    # )
+
+    cli_args = Namespace(**{**sheet_args, **explicit_cli_args})
     return cli_args
 
 
