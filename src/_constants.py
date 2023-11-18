@@ -21,5 +21,12 @@ FEATURE_CLEANINGS = ["correlated", "constant", "lowinfo"]
 CLEANINGS_SHORT = ["corr", "const", "info"]
 HTUNE_VAL_METHODS = ["holdout", "kfold", "k-fold", "loocv", "mc", "none"]
 
+
+class __Sentinel:
+    pass
+
+
+SENTINEL = __Sentinel()
+
 VAL_SIZE = 0.20
 SEED = 69

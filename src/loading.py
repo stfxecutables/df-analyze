@@ -18,7 +18,7 @@ from pandas import DataFrame
 from src._constants import SIMPLE_CSV, SIMPLE_XLSX
 
 
-def load_excel(path: Path) -> tuple[DataFrame, dict[int, str]]:
+def load_excel(path: Path) -> tuple[DataFrame, str]:
     wb = load_workbook(path, data_only=True)
     sheetnames = wb.sheetnames
     if len(sheetnames) != 1:
@@ -42,10 +42,10 @@ def load_excel(path: Path) -> tuple[DataFrame, dict[int, str]]:
 
     df = DataFrame(data=data[1:], columns=data[0])
 
-    return df, meta
+    return df, " ".join(meta.values())
 
 
-def load_csv(path: Path, separator: str = ",") -> tuple[DataFrame, dict[int, str]]:
+def load_csv(path: Path, separator: str = ",") -> tuple[DataFrame, str]:
     with open(path, "r") as handle:
         lines = handle.readlines()
 
@@ -69,7 +69,16 @@ def load_csv(path: Path, separator: str = ",") -> tuple[DataFrame, dict[int, str
 
     data = StringIO("".join(lines[header:]))
     df = pd.read_csv(data, sep=separator)
-    return df, meta
+    return df, " ".join(meta.values())
+
+
+def load_spreadsheet(path: Path) -> tuple[DataFrame, str]:
+    if "xlsx" in path.suffix:
+        return load_excel(path)
+    elif "csv" in path.suffix:
+        return load_csv(path)
+    else:
+        raise ValueError(f"Unsupported file extension: {path.suffix}")
 
 
 if __name__ == "__main__":

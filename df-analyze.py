@@ -1,10 +1,11 @@
 import os
+import sys
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
 from time import ctime
-from typing import List, Optional, TypeVar
+from typing import List, Optional, Sequence, TypeVar, Union
 
 import pandas as pd
 from pandas import DataFrame
@@ -35,7 +36,7 @@ class LoopArgs(Debug):
     # verbosity: Verbosity = optuna.logging.INFO
 
 
-def listify(item: T) -> List[T]:
+def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
     if isinstance(item, list):
         return item
     if isinstance(item, tuple):
@@ -186,9 +187,13 @@ if __name__ == "__main__":
     # get arguments
     # run analyses based on args
     options = get_options()
+    if options.verbosity.value > 0:
+        log_options(options)
+        print(options)
 
+    sys.exit()
     estimators = options.classifiers if options.mode == "classify" else options.regressors
-    feature_selection = options.selection_options.feat_select
+    feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 
     arg_options = dict(
@@ -197,6 +202,4 @@ if __name__ == "__main__":
         feature_selection=listify(feature_selection),
     )
     loop_args = [LoopArgs(**params) for params in ParameterGrid(arg_options)]
-    if options.verbosity.value > 0:
-        log_options(options)
     run_analysis(loop_args, estimators, is_stepup)

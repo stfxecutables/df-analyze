@@ -2,10 +2,11 @@
 File for defining all options passed to `df-analyze.py`.
 """
 import os
+import sys
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-from math import isnan
 from pathlib import Path
 from typing import (
     Optional,
@@ -21,6 +22,7 @@ from src._constants import (
     FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
     REGRESSORS,
+    SENTINEL,
 )
 from src._types import (
     Classifier,
@@ -31,6 +33,7 @@ from src._types import (
     Regressor,
     ValMethod,
 )
+from src.cli.parsing import cv_size, resolved_path, separator
 from src.cli.text import (
     CLS_HELP_STR,
     DF_HELP_STR,
@@ -55,6 +58,7 @@ from src.cli.text import (
     USAGE_STRING,
     VERBOSITY_HELP,
 )
+from src.loading import load_spreadsheet
 from src.saving import ProgramDirs, setup_io
 from src.utils import Debug
 
@@ -146,8 +150,10 @@ class ProgramOptions(Debug):
         htune_trials: int,
         test_val: ValMethod,
         test_val_sizes: Tuple[Size, ...],
+        mc_repeats: int,
         outdir: Path,
         is_spreadsheet: bool,
+        separator: str,
         verbosity: Verbosity,
     ) -> None:
         # memoization-related
@@ -169,9 +175,11 @@ class ProgramOptions(Debug):
         self.htune_trials: int = htune_trials
         self.test_val: ValMethod = test_val
         self.test_val_sizes: Tuple[Size, ...]
+        self.mc_repeats: int = mc_repeats
         self.outdir: Path = self.ensure_outdir(self.datapath, outdir)
         self.program_dirs: ProgramDirs = setup_io(self.outdir)
         self.is_spreadsheet: bool = is_spreadsheet
+        self.separator: str = separator
         self.verbosity: Verbosity = verbosity
 
         if isinstance(test_val_sizes, (int, float)):
@@ -264,54 +272,43 @@ class ProgramOptions(Debug):
         return outdir
 
 
-def resolved_path(p: Union[str, Path]) -> Path:
-    try:
-        path = Path(p)
-    except Exception as e:
-        raise ValueError(f"Could not interpret string {p} as path") from e
-    try:
-        path = path.resolve()
-    except Exception as e:
-        raise ValueError(f"Could not resolve path {path} to valid path.") from e
-    return path
+def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
+    # CLI args supersede when non default and also specified in sheet
+    # see https://stackoverflow.com/a/76230387 for a similar problem
+    cli_parser = deepcopy(parser)
+    sheet_parser = deepcopy(parser)
+
+    sentinel_parser = deepcopy(parser)
+    sentinels = Namespace(**{key: SENTINEL for key in parser.parse_args().__dict__})
+    sentinel_parser.set_defaults(**sentinels.__dict__)
+
+    cli_args = cli_parser.parse_args() if args is None else cli_parser.parse_args(args.split())
+    sentinel_cli_args = (
+        sentinel_parser.parse_args() if args is None else sentinel_parser.parse_args(args.split())
+    )
+    explicit_cli_args = Namespace(
+        **{key: val for key, val in sentinel_cli_args.__dict__.items() if val is not SENTINEL}
+    )
+
+    if cli_args.spreadsheet is None and cli_args.df is None:
+        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+
+    spreadsheet = cli_args.spreadsheet
+    if spreadsheet is not None:
+        options = load_spreadsheet(spreadsheet)[1]
+    else:
+        options = ""
+    sheet_args = sheet_parser.parse_args(options.split())
+    sentinel_sheet_args = sentinel_parser.parse_args(options.split())
+    explicit_sheet_args = Namespace(
+        **{key: val for key, val in sentinel_sheet_args.__dict__.items() if val is not SENTINEL}
+    )
+
+    cli_args = Namespace(**{**sheet_args.__dict__, **explicit_cli_args.__dict__})
+    return cli_args
 
 
-def cv_size(cv_str: str) -> Union[float, int]:
-    try:
-        cv = float(cv_str)
-    except Exception as e:
-        raise ValueError(
-            "Could not convert a `... -size` argument (e.g. --htune-val-size) value to float"
-        ) from e
-    # validate
-    if isnan(cv):
-        raise ValueError("NaN is not a valid size")
-    if cv <= 0:
-        raise ValueError("`... -size` arguments (e.g. --htune-val-size) must be positive")
-    if cv == 1:
-        raise ValueError(
-            "'1' is not a valid value for `... -size` arguments (e.g. --htune-val-size)."
-        )
-    if (cv > 1) and not cv.is_integer():
-        raise ValueError(
-            "Passing a float greater than 1.0 for `... -size` arguments "
-            "(e.g. --htune-val-size) is not valid. See documentation for "
-            "`--htune-val-size` or `--test-val-sizes`."
-        )
-    if cv > 1:
-        return int(cv)
-    return cv
-
-
-def separator(s: str) -> str:
-    if s.lower().strip() == "tab":
-        return "\t"
-    if s.lower().strip() == "newline":
-        return "\n"
-    return s
-
-
-def get_options(args: str = None) -> ProgramOptions:
+def get_options(args: Optional[str] = None) -> ProgramOptions:
     """parse command line arguments"""
     # parser = ArgumentParser(description=DESC)
     parser = ArgumentParser(
@@ -337,7 +334,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--separator",
-        "--sep",
         type=separator,
         required=False,
         default=",",
@@ -345,7 +341,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--target",
-        "-y",
         action="store",
         type=str,
         default="target",
@@ -353,7 +348,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--mode",
-        "-m",
         action="store",
         choices=["classify", "regress"],
         default="classify",
@@ -362,7 +356,6 @@ def get_options(args: str = None) -> ProgramOptions:
     # NOTE: `nargs="+"` allows repeats, must be removed after
     parser.add_argument(
         "--classifiers",
-        "-C",
         nargs="+",
         type=str,
         choices=CLASSIFIERS,
@@ -371,7 +364,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--regressors",
-        "-R",
         nargs="+",
         type=str,
         choices=REGRESSORS,
@@ -380,7 +372,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--feat-select",
-        "-F",
         nargs="+",
         type=str,
         choices=FEATURE_SELECTIONS,
@@ -389,7 +380,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--feat-clean",
-        "-f",
         nargs="+",
         type=str,
         choices=FEATURE_CLEANINGS,
@@ -398,15 +388,12 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--drop-nan",
-        "-d",
         choices=["all", "rows", "cols", "none"],
         default="none",
         help=NAN_HELP,
     )
     parser.add_argument(
         "--n-feat",
-        "--n-features",
-        "--n-feats",
         type=int,
         default=10,
         help=N_FEAT_HELP,
@@ -418,7 +405,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--htune-val",
-        "-H",
         type=str,
         choices=HTUNE_VAL_METHODS,
         default=3,
@@ -444,7 +430,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--test-val",
-        "-T",
         type=str,
         choices=HTUNE_VAL_METHODS,
         default="kfold",
@@ -452,7 +437,6 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--test-val-sizes",
-        "--test-val-size",
         nargs="+",
         type=cv_size,
         default=5,
@@ -467,32 +451,32 @@ def get_options(args: str = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--verbosity",
-        "-v",
         type=lambda a: Verbosity(int(a)),
         default=Verbosity(1),
         help=VERBOSITY_HELP,
     )
-    cargs = parser.parse_args() if args is None else parser.parse_args(args.split())
-    if cargs.spreadsheet is None and cargs.df is None:
-        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+
+    cli_args = parse_and_merge_args(parser, args)
 
     return ProgramOptions(
-        datapath=cargs.spreadsheet if cargs.df is None else cargs.spreadsheet,
-        target=cargs.target,
-        drop_nan=cargs.drop_nan,
-        feat_clean=cargs.feat_clean,
-        feat_select=cargs.feat_select,
-        n_feat=cargs.n_feat,
-        mode=cargs.mode,
-        classifiers=cargs.classifiers,
-        regressors=cargs.regressors,
-        htune=cargs.htune,
-        htune_val=cargs.htune_val,
-        htune_val_size=cargs.htune_val_size,
-        htune_trials=cargs.htune_trials,
-        test_val=cargs.test_val,
-        test_val_sizes=cargs.test_val_sizes,
-        outdir=cargs.outdir,
-        is_spreadsheet=cargs.spreadsheet is not None,
-        verbosity=cargs.verbosity,
+        datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.spreadsheet,
+        target=cli_args.target,
+        drop_nan=cli_args.drop_nan,
+        feat_clean=cli_args.feat_clean,
+        feat_select=cli_args.feat_select,
+        n_feat=cli_args.n_feat,
+        mode=cli_args.mode,
+        classifiers=cli_args.classifiers,
+        regressors=cli_args.regressors,
+        htune=cli_args.htune,
+        htune_val=cli_args.htune_val,
+        htune_val_size=cli_args.htune_val_size,
+        htune_trials=cli_args.htune_trials,
+        test_val=cli_args.test_val,
+        test_val_sizes=cli_args.test_val_sizes,
+        mc_repeats=cli_args.mc_repeats,
+        outdir=cli_args.outdir,
+        is_spreadsheet=cli_args.spreadsheet is not None,
+        separator=cli_args.separator,
+        verbosity=cli_args.verbosity,
     )
