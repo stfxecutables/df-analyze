@@ -45,6 +45,7 @@ ucimlrepo = "^0.0.3"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.5"
+cli-test-helpers = "^3.4.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
