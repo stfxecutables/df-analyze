@@ -1,5 +1,6 @@
 from math import ceil
 
+import numpy as np
 import pytest
 from _pytest.capture import CaptureFixture
 from pandas import DataFrame
@@ -42,14 +43,31 @@ def test_interpolate(method: str) -> None:
             f"--df {data} --target {target} --nan {method} --categoricals {cat_arg}"
         )
 
-        df = load_as_df(data, spreadsheet=False)
-        df = encode_categoricals(df, target=options.target, categoricals=cats)
+        df = encode_categoricals(df, target=options.target, categoricals=cats)[0]
         clean = handle_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
 
 
-def test_multivariate_interpolate() -> None:
-    test_interpolate("impute")
+def test_multivariate_interpolate(capsys: CaptureFixture) -> None:
+    datas = (MUSHROOM_DATA, ELDER_DATA)
+    types = (MUSHROOM_TYPES, ELDER_TYPES)
+    targets = ("target", "temperature")
+    for data, typ, target in zip(datas, types, targets):
+        df = load_as_df(data, spreadsheet=False)
+        n_max = min(50, len(df))
+        idx = np.random.permutation(len(df))[:n_max]
+        df = df.loc[idx]
+
+        dft = load_as_df(typ, spreadsheet=False)
+        cats = dft[dft["type"] == "categorical"]["feature_name"].to_list()
+        cat_arg = " ".join(cats)
+        options = get_options(
+            f"--df {data} --target {target} --nan impute --categoricals {cat_arg}"
+        )
+        with capsys.disabled():
+            df = encode_categoricals(df, target=options.target, categoricals=cats)[0]
+        clean = handle_nans(df, target=options.target, nans=options.nan_handling)
+        assert clean.isna().sum().sum() == 0
 
 
 def test_encode() -> None:
@@ -62,7 +80,7 @@ def test_encode() -> None:
         cats = dft[dft["type"] == "categorical"]
         cat_arg = " ".join(cats["feature_name"].to_list())
         options = get_options(f"--df {data} --target {target} --nan drop --categoricals {cat_arg}")
-        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)[0]
         assert no_cats(df, target=options.target)
 
 
@@ -79,7 +97,7 @@ def test_encode_warn() -> None:
     cat_arg = " ".join(some_cats["feature_name"].to_list())
     options = get_options(f"--df {data} --target {target} --nan drop --categoricals {cat_arg}")
     with pytest.warns(UserWarning):
-        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)[0]
         assert no_cats(df, target=options.target)
 
 
@@ -90,7 +108,7 @@ def test_encode_auto() -> None:
     for data, target in zip(datas, targets):
         df = load_as_df(data, spreadsheet=False)
         options = get_options(f"--df {data} --target {target} --nan drop --categoricals 3")
-        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)
+        df = encode_categoricals(df, target=options.target, categoricals=options.categoricals)[0]
         assert no_cats(df, target=options.target)
 
 

@@ -56,10 +56,10 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
         )
     elif nans is NanHandling.Impute:
         warn(
-            "Using experimental multivariate imputation. This could take a while "
-            "for even moderate-sized (<2000 samples, <50 features) datasets."
+            "Using experimental multivariate imputation. This could take a very "
+            "long time for even tiny (<500 samples, <50 features) datasets."
         )
-        imputer = IterativeImputer()
+        imputer = IterativeImputer(verbose=2)
         X_clean = DataFrame(data=imputer.fit_transform(X), columns=X.columns)
     else:
         raise NotImplementedError(f"Unhandled enum case: {nans}")
@@ -73,9 +73,19 @@ def encode_target():
 
 
 def encode_categoricals(
-    df: DataFrame, target: str, categoricals: Union[list[str], int]
-) -> DataFrame:
-    """Treat all features with <= options.cat_threshold as categorical"""
+    df: DataFrame, target: str, categoricals: Union[list[str], int], warn_sus: bool = True
+) -> tuple[DataFrame, DataFrame]:
+    """Treat all features with <= options.cat_threshold as categorical
+
+    Returns
+    -------
+    encoded: DataFrame
+        Pandas DataFrame with categorical variables one-hot encoded
+
+    unencoded: DataFrame
+        Pandas DataFrame with original categorical variables
+
+    """
     X = df.drop(columns=target).infer_objects().convert_dtypes()
     unique_counts = {}
     for colname in X.columns:
@@ -84,12 +94,52 @@ def encode_categoricals(
         except TypeError:  # happens when can't sort for unique
             unique_counts[colname] = len(np.unique(df[colname].astype(str)))
     str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    # Reasoning: if there are more levels in a categorical than 1/5 of the number
+    # of samples, then in 5-fold, test set will have most levels effectively never
+    # seen before (unless distribution of levels is highly skwewed).
+    id_cols = [col for col in str_cols if unique_counts[col] >= len(df) // 5]
+    if len(id_cols) > 0:
+        warn(
+            "Found string-valued features with more unique levels than 20%% of "
+            "the total number of samples in the data. This is most likely an "
+            "'identifier' or junk feature which has no predictive value, and most "
+            "likely should be removed from the data. Even if this is not the case, "
+            "with such a large number of levels, then a test set (either in k-fold, "
+            "or holdout) will likely simply contain a large number of values for "
+            "such a categorical variable that were never seen during training. Thus "
+            "these features are likely too sparse to be useful given the amount of data, "
+            "and also massively increase compute costs for likely no gain. We thus "
+            "REMOVE these features and do not one-hot encode them. To silence this "
+            "warning, either remove these features from the data, or manually break "
+            "them into a smaller number of categories. "
+            f"String-valued features with too many levels: {id_cols}"
+        )
+        X = X.drop(columns=id_cols)
+        for col in id_cols:
+            unique_counts.pop(col)
+        str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+
+    big_cats = [col for col in str_cols if unique_counts[col] >= 50]
+    if len(big_cats) > 0:
+        warn(
+            "Found string-valued features with more than 50 unique levels. "
+            "Unless you have an extremely large number of samples, or if these "
+            "features have a highly imbalanced / skewed distribution, then they "
+            "will cause sparseness after one-hot encoding. This is generally not "
+            "beneficial to most algorithms. You should inspect these features and "
+            "think if it makes sense if they would be predictively useful for the "
+            "given target. If they are unlikely to be useful, consider removing "
+            "them from the data. This will also likely considerably improve "
+            "`df-analyze` predictive performance and reduce compute times. "
+            f"String-valued features with over 50 levels: {big_cats}"
+        )
+
     int_cols = X.select_dtypes(include="int").columns.to_list()
     sus_ints = [col for col in int_cols if unique_counts[col] < 5]
 
     cats = categoricals
     auto = isinstance(cats, int)
-    # if no threshold specified, only convert what has to be converted
+    # if no threshold specified, only convert what absolutely has to be converted
     threshold = cats if auto else -1
     if auto:
         to_convert = [col for col, cnt in unique_counts.items() if cnt <= threshold]
@@ -97,7 +147,7 @@ def encode_categoricals(
         new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
         new = new.astype(float)
         new[target] = df[target]
-        return new
+        return new, X.loc[:, to_convert]
 
     # warn the user if some int columns look sus, and check for unspecified
     # categoricals
@@ -113,7 +163,7 @@ def encode_categoricals(
             f"Unspecified string-valued features: {unspecified}"
         )
     sus_cols = sorted(set(sus_ints).difference(cats))
-    if len(sus_cols) > 0:
+    if len(sus_cols) > 0 and warn_sus:
         warn(
             "Found integer-valued features not specified with `--categoricals` "
             "argument, and which have less than 5 levels (classes) each. "
@@ -128,7 +178,7 @@ def encode_categoricals(
     new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
     new = new.astype(float)
     new[target] = df[target]
-    return new
+    return new, X.loc[:, to_convert]
 
 
 def is_timelike(s: str) -> bool:
