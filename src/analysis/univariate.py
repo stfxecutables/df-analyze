@@ -264,6 +264,21 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
 
 
 def cont_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
+    """
+    Parameters
+    ----------
+
+    x: Series
+        Continuous feature
+
+    y: Series
+        Continuous target
+
+    Returns
+    -------
+    stats: DataFrame
+        Table of stats
+    """
     stats = [
         "pearson_r",
         "pearson_p",
@@ -353,21 +368,18 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
 
 
 def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str) -> DataFrame:
-    stats = ["cramer_v", "mut_info"]
-
-    xx = x.to_numpy().ravel()
+    # stats = ["cramer_v", "mut_info"]
+    stats = ["cramer_v"]
 
     idx_level = y == level
     y_bin = idx_level.astype(float)
-    g0 = x[~idx_level]
-    g1 = x[idx_level]
 
     V = cramer_v(x, y_bin)
-    minfo = minfo_cat(xx.reshape(-1, 1), y_bin, discrete_features=True)
+    # minfo = minfo_cat(xx.reshape(-1, 1), y_bin, discrete_features=True)
 
     data = {
         "cramer_v": V,
-        "mut_into": minfo,
+        # "mut_into": minfo,
     }
 
     return DataFrame(
@@ -513,40 +525,25 @@ def test() -> None:
     df_cont = DataFrame(data=X_cont, columns=cont_names)
     df_cat = DataFrame(data=X_cat, columns=cat_names)
 
-    # for cname in cont_names:
-    #     desc = describe_continuous(df_cont, cname)
-    #     print(desc)
-
-    # for cname in cat_names:
-    #     desc = describe_categorical(df_cat, cname)
-    #     print(desc)
-
-    # desc_cont, desc_cat = describe_all_features(
-    #     continuous=df_cont,
-    #     categoricals=df_cat,
-    #     target=y_cont,
-    #     mode="regress",
-    # )
-    # print(desc_cont)
-    # print(desc_cat)
-
-    # desc_cont, desc_cat = describe_all_features(
-    #     continuous=df_cont,
-    #     categoricals=df_cat,
-    #     target=y_cat,
-    #     mode="classify",
-    # )
-    # print(desc_cont)
-    # print(desc_cat)
-
-    res = feature_target_stats(
+    df_cont_stats, df_cat_stats = feature_target_stats(
         continuous=df_cont, categoricals=df_cat, target=y_cat, mode="classify"
     )
-    print("Categorical target stats:\n", res[1])
-    res = feature_target_stats(
+    level_idx = df_cat_stats.index.to_series().apply(lambda s: "." in s)
+    cat_level_stats = df_cat_stats[level_idx]
+    cat_stats = df_cat_stats[~level_idx]
+    print("Continuous stats:\n", df_cont_stats)
+    print("Categorical target level stats:\n", cat_level_stats)
+    print("Categorical full target stats:\n", cat_stats)
+
+    df_cont_stats, df_cat_stats = feature_target_stats(
         continuous=df_cont, categoricals=df_cat, target=y_cont, mode="regress"
     )
-    print("Continuous target stats:\n", res[0])
+    level_idx = df_cat_stats.index.to_series().apply(lambda s: "." in s)
+    cat_level_stats = df_cat_stats[level_idx]
+    cat_stats = df_cat_stats[~level_idx]
+    print("Continuous stats:\n", df_cont_stats)
+    print("Categorical target level stats:\n", cat_level_stats)
+    print("Categorical full target stats:\n", cat_stats)
 
 
 if __name__ == "__main__":
