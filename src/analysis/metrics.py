@@ -1,34 +1,13 @@
-import os
-import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
     Union,
-    cast,
-    no_type_check,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy import ndarray
-from pandas import DataFrame, Series
+from pandas import Series
+from scipy.stats import entropy
 from scipy.stats.contingency import association, crosstab
-from sklearn.metrics import cohen_kappa_score as _kappa
-from sklearn.metrics import confusion_matrix as confusion
 from sklearn.metrics import roc_auc_score
-from typing_extensions import Literal
 
 
 def cramer_v(y1: Union[ndarray, Series], y2: Union[ndarray, Series]) -> float:
@@ -54,3 +33,24 @@ def cohens_d(g0: Union[ndarray, Series], g1: Union[ndarray, Series]) -> float:
 
 def auroc(x: Union[ndarray, Series], y_bin: Union[ndarray, Series]) -> float:
     return roc_auc_score(y_bin, x, multi_class="raise")
+
+
+def relative_entropy(x: Union[ndarray, Series], y: Union[ndarray, Series]) -> float:
+    """Returns the relative entropy (KL divergence) of x and y
+    i.e. KL(P, Q) for P = x, Q = y
+
+    Notes
+    -----
+    Probabilities / pdfs for the discrete variables are estimated very naively
+    by simply computing the frequencies of each unique value.
+
+    Requires x and y to have same number of classes...
+    """
+
+    y_cnts = np.unique(y, return_counts=True)[1]
+    x_cnts = np.unique(x, return_counts=True)[1]
+
+    p_y = y_cnts / y_cnts.sum()
+    p_x = x_cnts / x_cnts.sum()
+
+    return entropy(p_x, p_y, base=2.0).item()
