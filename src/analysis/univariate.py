@@ -34,11 +34,27 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy import ndarray
 from pandas import DataFrame, Index, Series
-from scipy.stats import chisquare, kurtosis, kurtosistest, skew, skewtest
+from scipy.stats import (
+    brunnermunzel,
+    chisquare,
+    kurtosis,
+    kurtosistest,
+    mannwhitneyu,
+    pearsonr,
+    skew,
+    skewtest,
+    spearmanr,
+    ttest_ind,
+)
 from scipy.stats import differential_entropy as dentropy
+from sklearn.feature_selection import f_classif, f_regression
+from sklearn.feature_selection import mutual_info_classif as minfo_cat
+from sklearn.feature_selection import mutual_info_regression as minfo_cont
+from sklearn.preprocessing import LabelEncoder
 from typing_extensions import Literal
 
 from src._types import EstimationMode
+from src.analysis.metrics import auroc, cohens_d
 
 
 def describe_continuous(df: DataFrame, column: str) -> DataFrame:
@@ -196,17 +212,134 @@ def describe_all_features(
     return df_cont, df_cat
 
 
-def feature_target_stats(df: DataFrame) -> DataFrame:
+def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> DataFrame:
+    stats = [
+        "t",
+        "t_p",
+        "U",
+        "U_p",
+        "W",
+        "W_p",
+        "cohen_d",
+        "AUROC",
+        "corr",
+        "corr_p",
+        "mut_info",
+    ]
+
+    idx_level = y == level
+    y_bin = idx_level.astype(float)
+    g0 = x[~idx_level]
+    g1 = x[idx_level]
+    tt_res = ttest_ind(g0, g1, equal_var=False)
+    t, t_p = tt_res.statistic, tt_res.pvalue  # type: ignore
+    U_res = mannwhitneyu(g0, g1)
+    U, U_p = U_res.statistic, U_res.pvalue
+    W_res = brunnermunzel(g0, g1)
+    W, W_p = W_res.statistic, W_res.pvalue
+    r_res = pearsonr(x, y_bin)
+    r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
+
+    data = {
+        "t": t,
+        "t_p": t_p,
+        "U": U,
+        "U_p": U_p,
+        "W": W,
+        "W_p": W_p,
+        "cohen_d": cohens_d(g0, g1),
+        "AUROC": auroc(x, idx_level.astype(int)),
+        "corr": r,
+        "corr_p": r_p,
+        "mut_info": minfo_cat(x.to_frame(), y_bin),
+    }
+
+    return DataFrame(
+        data=data,
+        index=[f"{y.name}_{level}"],
+        columns=stats,
+    )
+
+
+def cont_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
+    stats = [
+        "pearson_r",
+        "pearson_p",
+        "spearman_r",
+        "spearman_p",
+        "F",
+        "F_p",
+        "mut_info",
+    ]
+
+    xx = x.to_numpy().ravel()
+    yy = y.to_numpy().ravel()
+
+    r_res = pearsonr(xx, yy)
+    r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
+    rs_res = spearmanr(xx, yy)
+    rs, rs_p = rs_res.statistic, rs_res.pvalue  # type: ignore
+    F, F_p = f_regression(xx.reshape(-1, 1), yy)
+
+    data = {
+        "pearson_r": r,
+        "pearson_p": r_p,
+        "spearman_r": rs,
+        "spearman_p": rs_p,
+        "F": F,
+        "F_p": F_p,
+        "mut_info": minfo_cont(xx.reshape(-1, 1), yy),
+    }
+
+    return DataFrame(
+        data=data,
+        index=[y.name],
+        columns=stats,
+    )
+
+
+def continuous_feature_target_stats(
+    continuous: DataFrame,
+    column: str,
+    target: Series,
+    mode: EstimationMode,
+) -> DataFrame:
+    ...
+    x = continuous[column]
+    y = target
+    if mode == "classify":
+        levels = np.unique(y).tolist()
+        descs = []
+        for level in levels:
+            desc = cont_feature_cat_target_level_stats(x, y, level=level)
+            descs.append(desc)
+        desc = pd.concat(descs, axis=0)
+        is_multiclass = len(levels) > 2
+        if is_multiclass:
+            # TODO: collect mean stats when this makes sense?
+            # TODO: collect some other fancy stat?
+            ...
+        return desc
+
+    return cont_feature_cont_target_stats(x, y)
+
+
+def feature_target_stats(
+    continuous: DataFrame,
+    categoricals: DataFrame,
+    target: Series,
+    mode: EstimationMode,
+) -> tuple[DataFrame, DataFrame]:
     """
     For each non-categorical (including ordinal) feature:
 
-        Binary classificataion target:
+        Binary classification target:
             - t-test
             - Mann-Whitney U
+            - Brunner-Munzel W
             - Cohen's d
             - AUROC
             - Mutual Info (sklearn.feature_selection.mutual_info_classif)
-            - largest class proportion
 
         Multiclass classification target (for each target class / level):
             - as above
@@ -251,28 +384,42 @@ def feature_target_stats(df: DataFrame) -> DataFrame:
             - Mutual Info (sklearn.feature_selection.mutual_info_regression)
 
     """
-    raise NotImplementedError()
+    df_conts = []
+    for col in continuous.columns:
+        df_conts.append(
+            continuous_feature_target_stats(
+                continuous=continuous,
+                column=col,
+                target=target,
+                mode=mode,
+            )
+        )
+    df_cont = pd.concat(df_conts, axis=0)
+    df_cat = DataFrame()
+
+    return df_cont, df_cat
 
 
-if __name__ == "__main__":
+def test() -> None:
     cat_sizes = np.random.randint(1, 20, 30)
 
-    y_cont = Series(np.random.uniform([250]), name="target")
+    y_cont = Series(np.random.uniform(0, 1, [250]), name="target")
     y_cat = Series(np.random.randint(0, 6, 250), name="target")
     X_cont = np.random.standard_normal([250, 30])
     X_cat = np.full([250, 30], fill_value=np.nan)
     for i, catsize in enumerate(cat_sizes):
         X_cat[:, i] = np.random.randint(0, catsize, X_cat.shape[0])
 
-    cnames = [f"f{i}" for i in range(X_cont.shape[1])]
-    df_cont = DataFrame(data=X_cont, columns=cnames)
-    df_cat = DataFrame(data=X_cat, columns=cnames)
+    cont_names = [f"r{i}" for i in range(X_cont.shape[1])]
+    cat_names = [f"c{i}" for i in range(X_cont.shape[1])]
+    df_cont = DataFrame(data=X_cont, columns=cont_names)
+    df_cat = DataFrame(data=X_cat, columns=cat_names)
 
-    for cname in cnames:
+    for cname in cont_names:
         desc = describe_continuous(df_cont, cname)
         print(desc)
 
-    for cname in cnames:
+    for cname in cat_names:
         desc = describe_categorical(df_cat, cname)
         print(desc)
 
@@ -293,3 +440,16 @@ if __name__ == "__main__":
     )
     print(desc_cont)
     print(desc_cat)
+
+    res = feature_target_stats(
+        continuous=df_cont, categoricals=df_cat, target=y_cat, mode="classify"
+    )
+    print(res[1])
+    res = feature_target_stats(
+        continuous=df_cont, categoricals=df_cat, target=y_cont, mode="regress"
+    )
+    print(res[0])
+
+
+if __name__ == "__main__":
+    test()
