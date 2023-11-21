@@ -10,6 +10,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import os
 import sys
+import warnings
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from enum import Enum
@@ -54,7 +55,7 @@ from sklearn.preprocessing import LabelEncoder
 from typing_extensions import Literal
 
 from src._types import EstimationMode
-from src.analysis.metrics import auroc, cohens_d
+from src.analysis.metrics import auroc, cohens_d, cramer_v
 
 
 def describe_continuous(df: DataFrame, column: str) -> DataFrame:
@@ -256,7 +257,7 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
 
     return DataFrame(
         data=data,
-        index=[f"{y.name}_{level}"],
+        index=[f"{x.name}_{y.name}.{level}"],
         columns=stats,
     )
 
@@ -293,7 +294,7 @@ def cont_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
 
     return DataFrame(
         data=data,
-        index=[y.name],
+        index=[f"{x.name}_{y.name}"],
         columns=stats,
     )
 
@@ -322,6 +323,100 @@ def continuous_feature_target_stats(
         return desc
 
     return cont_feature_cont_target_stats(x, y)
+
+
+def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
+    return DataFrame()
+    raise NotImplementedError()
+    stats = [
+        "pearson_r",
+        "pearson_p",
+        "spearman_r",
+        "spearman_p",
+        "F",
+        "F_p",
+        "mut_info",
+    ]
+
+    xx = x.to_numpy().ravel()
+    yy = y.to_numpy().ravel()
+
+    r_res = pearsonr(xx, yy)
+    r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
+    rs_res = spearmanr(xx, yy)
+    rs, rs_p = rs_res.statistic, rs_res.pvalue  # type: ignore
+    F, F_p = f_regression(xx.reshape(-1, 1), yy)
+
+    data = {
+        "pearson_r": r,
+        "pearson_p": r_p,
+        "spearman_r": rs,
+        "spearman_p": rs_p,
+        "F": F,
+        "F_p": F_p,
+        "mut_info": minfo_cont(xx.reshape(-1, 1), yy),
+    }
+
+    return DataFrame(
+        data=data,
+        index=[f"{x.name}_{y.name}"],
+        columns=stats,
+    )
+
+
+def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str) -> DataFrame:
+    stats = ["cramer_v", "mut_info"]
+
+    xx = x.to_numpy().ravel()
+
+    idx_level = y == level
+    y_bin = idx_level.astype(float)
+    g0 = x[~idx_level]
+    g1 = x[idx_level]
+
+    V = cramer_v(x, y_bin)
+    minfo = minfo_cat(xx.reshape(-1, 1), y_bin, discrete_features=True)
+
+    data = {
+        "cramer_v": V,
+        "mut_into": minfo,
+    }
+
+    return DataFrame(
+        data=data,
+        index=[f"{x.name}_{y.name}.{level}"],
+        columns=stats,
+    )
+
+
+def categorical_feature_target_stats(
+    categoricals: DataFrame,
+    column: str,
+    target: Series,
+    mode: EstimationMode,
+) -> DataFrame:
+    ...
+    x = categoricals[column]
+    y = target
+    if mode == "classify":
+        levels = np.unique(y).tolist()
+        descs = []
+        for level in levels:
+            desc = cat_feature_cat_target_level_stats(x, y, level=level)
+            descs.append(desc)
+        desc = pd.concat(descs, axis=0)
+        is_multiclass = len(levels) > 2
+        if is_multiclass:
+            V = cramer_v(x, y)
+            minfo = minfo_cat(x.to_numpy().reshape(-1, 1), y, discrete_features=True)
+            df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}_{y.name}"])
+            desc = pd.concat([desc, df], axis=0)
+            # TODO: collect mean stats when this makes sense?
+            # TODO: collect some other fancy stat?
+            ...
+        return desc
+
+    return cat_feature_cont_target_stats(x, y)
 
 
 def feature_target_stats(
@@ -385,17 +480,32 @@ def feature_target_stats(
 
     """
     df_conts = []
-    for col in continuous.columns:
-        df_conts.append(
-            continuous_feature_target_stats(
-                continuous=continuous,
-                column=col,
-                target=target,
-                mode=mode,
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        for col in continuous.columns:
+            df_conts.append(
+                continuous_feature_target_stats(
+                    continuous=continuous,
+                    column=col,
+                    target=target,
+                    mode=mode,
+                )
             )
-        )
-    df_cont = pd.concat(df_conts, axis=0)
-    df_cat = DataFrame()
+        df_cont = pd.concat(df_conts, axis=0)
+
+    df_cats = []
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        for col in categoricals.columns:
+            df_cats.append(
+                categorical_feature_target_stats(
+                    categoricals=categoricals,
+                    column=col,
+                    target=target,
+                    mode=mode,
+                )
+            )
+        df_cat = pd.concat(df_cats, axis=0)
 
     return df_cont, df_cat
 
@@ -415,40 +525,40 @@ def test() -> None:
     df_cont = DataFrame(data=X_cont, columns=cont_names)
     df_cat = DataFrame(data=X_cat, columns=cat_names)
 
-    for cname in cont_names:
-        desc = describe_continuous(df_cont, cname)
-        print(desc)
+    # for cname in cont_names:
+    #     desc = describe_continuous(df_cont, cname)
+    #     print(desc)
 
-    for cname in cat_names:
-        desc = describe_categorical(df_cat, cname)
-        print(desc)
+    # for cname in cat_names:
+    #     desc = describe_categorical(df_cat, cname)
+    #     print(desc)
 
-    desc_cont, desc_cat = describe_all_features(
-        continuous=df_cont,
-        categoricals=df_cat,
-        target=y_cont,
-        mode="regress",
-    )
-    print(desc_cont)
-    print(desc_cat)
+    # desc_cont, desc_cat = describe_all_features(
+    #     continuous=df_cont,
+    #     categoricals=df_cat,
+    #     target=y_cont,
+    #     mode="regress",
+    # )
+    # print(desc_cont)
+    # print(desc_cat)
 
-    desc_cont, desc_cat = describe_all_features(
-        continuous=df_cont,
-        categoricals=df_cat,
-        target=y_cat,
-        mode="classify",
-    )
-    print(desc_cont)
-    print(desc_cat)
+    # desc_cont, desc_cat = describe_all_features(
+    #     continuous=df_cont,
+    #     categoricals=df_cat,
+    #     target=y_cat,
+    #     mode="classify",
+    # )
+    # print(desc_cont)
+    # print(desc_cat)
 
     res = feature_target_stats(
         continuous=df_cont, categoricals=df_cat, target=y_cat, mode="classify"
     )
-    print(res[1])
+    print("Categorical target stats:\n", res[1])
     res = feature_target_stats(
         continuous=df_cont, categoricals=df_cat, target=y_cont, mode="regress"
     )
-    print(res[0])
+    print("Continuous target stats:\n", res[0])
 
 
 if __name__ == "__main__":

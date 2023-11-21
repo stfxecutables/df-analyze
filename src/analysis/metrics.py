@@ -31,12 +31,12 @@ from sklearn.metrics import roc_auc_score
 from typing_extensions import Literal
 
 
-def _cramer_v(y1: ndarray, y2: ndarray) -> float:
+def cramer_v(y1: Union[ndarray, Series], y2: Union[ndarray, Series]) -> float:
     if len(np.unique(y1)) == 1 or len(np.unique(y2)) == 1:
         # can't correlate constants...
         return float("nan")
     ct = crosstab(y1, y2)[1]
-    return float(association(observed=ct, correction=False))
+    return float(association(observed=ct, method="cramer", correction=False))
 
 
 def cohens_d(g0: Union[ndarray, Series], g1: Union[ndarray, Series]) -> float:
