@@ -38,6 +38,7 @@ from pandas import DataFrame, Index, Series
 from scipy.stats import (
     brunnermunzel,
     chisquare,
+    kruskal,
     kurtosis,
     kurtosistest,
     mannwhitneyu,
@@ -326,35 +327,22 @@ def continuous_feature_target_stats(
 
 
 def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
-    return DataFrame()
-    raise NotImplementedError()
     stats = [
-        "pearson_r",
-        "pearson_p",
-        "spearman_r",
-        "spearman_p",
-        "F",
-        "F_p",
-        "mut_info",
+        "mut_info",  # sklearn.feature_selection.mutual_info_regression
+        "H",  # Kruskal-Wallace H
+        "H_p",
     ]
 
     xx = x.to_numpy().ravel()
     yy = y.to_numpy().ravel()
 
-    r_res = pearsonr(xx, yy)
-    r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
-    rs_res = spearmanr(xx, yy)
-    rs, rs_p = rs_res.statistic, rs_res.pvalue  # type: ignore
-    F, F_p = f_regression(xx.reshape(-1, 1), yy)
+    minfo = minfo_cont(xx.reshape(-1, 1), y, discrete_features=True)
+    H, H_p = kruskal(x, y)
 
     data = {
-        "pearson_r": r,
-        "pearson_p": r_p,
-        "spearman_r": rs,
-        "spearman_p": rs_p,
-        "F": F,
-        "F_p": F_p,
-        "mut_info": minfo_cont(xx.reshape(-1, 1), yy),
+        "mut_info": minfo,
+        "H": H,
+        "H_p": H_p,
     }
 
     return DataFrame(
