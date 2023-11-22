@@ -73,9 +73,10 @@ def continuous_feature_target_preds(
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
-    for model in models:
-        pbar.set_description(f"Tuning {model.__class__.__name__}")
-        score, spam = model().evaluate(X, y)
+    for model_cls in models:
+        pbar.set_description(f"Tuning {model_cls.__name__}")
+        model = model_cls()
+        score, spam = model.evaluate(X, y)
         score.insert(0, "model", model.short)
         score.index = pd.Index([column], name="feature")
         scores.append(score)
@@ -103,9 +104,10 @@ def categorical_feature_target_preds(
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
-    for model in models:
-        pbar.set_description(f"Tuning {model.__class__.__name__}")
-        score, spam = model().evaluate(X, y)
+    for model_cls in models:
+        pbar.set_description(f"Tuning {model_cls.__name__}")
+        model = model_cls()
+        score, spam = model.evaluate(X, y)
         score.insert(0, "model", model.short)
         score.index = pd.Index([column], name="feature")
         scores.append(score)
