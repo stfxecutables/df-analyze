@@ -68,7 +68,8 @@ def continuous_feature_target_preds(
         y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
         is_multi = len(np.unique(y)) > 2
     models = REG_MODELS if mode == "regress" else CLS_MODELS
-    if is_multi and len(y) > 5000:  # takes way too long
+    # if is_multi and len(y) > 5000:  # takes way too long
+    if len(y) > 5000:  # takes way too long
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
@@ -97,7 +98,8 @@ def categorical_feature_target_preds(
         y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
         is_multi = len(np.unique(y)) > 2
     models = REG_MODELS if mode == "regress" else CLS_MODELS
-    if is_multi and len(y) > 5000:  # takes way too long
+    # if is_multi and len(y) > 5000:  # takes way too long
+    if len(y) > 5000:  # takes way too long
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
