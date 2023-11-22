@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
+from sklearn.model_selection import train_test_split
 
 from src._types import EstimationMode
 from src.analysis.univariate.associate import feature_target_stats
@@ -60,6 +61,11 @@ def test_datasets_predict() -> None:
         if ds.is_classification:
             df, target = encode_target(df, target)
 
+        # make fast
+        strat = target if mode == "classify" else None
+        df = train_test_split(df, train_size=500, stratify=strat)[0]
+        target = target[df.index]
+
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
             categoricals=df[cat_cols],
@@ -69,7 +75,7 @@ def test_datasets_predict() -> None:
         )
         sorter = "acc" if mode == "classify" else "Var exp"
 
-        print(f"Continous prediction stats (5-fold, tuned) for {dsname}:")
+        print(f"Continuous prediction stats (5-fold, tuned) for {dsname}:")
         if df_cont is not None:
             df_cont = df_cont.sort_values(by=sorter, ascending=False).round(5)
         print(df_cont)
