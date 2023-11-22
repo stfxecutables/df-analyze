@@ -66,14 +66,16 @@ def continuous_feature_target_preds(
     y = target
     is_multi = False
     if mode == "classify":
-        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
+        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
         is_multi = len(np.unique(y)) > 2
     models = REG_MODELS if mode == "regress" else CLS_MODELS
     # if is_multi and len(y) > 5000:  # takes way too long
     if len(y.ravel()) > 5000:  # takes way too long
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
-    pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
+    pbar = tqdm(
+        models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+    )
     for model_cls in models:
         pbar.set_description(f"Tuning {model_cls.__name__}")
         model = model_cls()
@@ -95,16 +97,16 @@ def categorical_feature_target_preds(
     """Must be UN-ENCODED categoricals"""
     X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
     y = target
-    is_multi = False
     if mode == "classify":
-        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
-        is_multi = len(np.unique(y)) > 2
+        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
     models = REG_MODELS if mode == "regress" else CLS_MODELS
     # if is_multi and len(y) > 5000:  # takes way too long
     if len(y.ravel()) > 5000:  # takes way too long
         models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
-    pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
+    pbar = tqdm(
+        models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+    )
     for model_cls in models:
         pbar.set_description(f"Tuning {model_cls.__name__}")
         model = model_cls()
@@ -130,9 +132,10 @@ def feature_target_predictions(
 
         for col in tqdm(
             continuous.columns,
-            desc="Predicting continous features",
+            desc="Predicting continuous features",
             total=continuous.shape[1],
             leave=True,
+            position=0,
         ):
             df_conts.append(
                 continuous_feature_target_preds(
@@ -148,6 +151,7 @@ def feature_target_predictions(
             desc="Predicting categorical features",
             total=categoricals.shape[1],
             leave=True,
+            position=0,
         ):
             df_cats.append(
                 categorical_feature_target_preds(

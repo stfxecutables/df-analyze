@@ -41,8 +41,8 @@ def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
         # if dsname in ["elder", "forest_fires"]:
         # if dsname in ["elder", "forest_fires", "community_crime"]:
-        if dsname != "community_crime":
-            continue
+        # if dsname != "community_crime":
+        #     continue
         df = ds.load()
         cats = ds.categoricals
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
@@ -61,10 +61,13 @@ def test_datasets_predict() -> None:
         if ds.is_classification:
             df, target = encode_target(df, target)
 
+        # TODO: make this a CLI option?
         # make fast
         strat = target if mode == "classify" else None
-        df = train_test_split(df, train_size=500, stratify=strat)[0]
-        target = target[df.index]
+        N = min(500, len(df))
+        if N < len(df):
+            df = train_test_split(df, train_size=N, stratify=strat)[0]
+            target = target[df.index]
 
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
@@ -78,12 +81,12 @@ def test_datasets_predict() -> None:
         print(f"Continuous prediction stats (5-fold, tuned) for {dsname}:")
         if df_cont is not None:
             df_cont = df_cont.sort_values(by=sorter, ascending=False).round(5)
-        print(df_cont)
+            print(df_cont.to_markdown(tablefmt="simple", floatfmt="0.4f"))
 
         print(f"Categorical prediction stats (5-fold, tuned) for {dsname}:")
         if df_cat is not None:
             df_cat = df_cat.sort_values(by=sorter, ascending=False).round(5)
-        print(df_cat)
+            print(df_cat.to_markdown(tablefmt="simple", floatfmt="0.4f"))
 
 
 def test_random_associate() -> None:
