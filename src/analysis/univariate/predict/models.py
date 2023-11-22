@@ -134,7 +134,7 @@ class LogisticClassifier(UnivariatePredictor):
             "penalty": ["elasticnet"],
             "l1_ratios": [[0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]],
         }
-        self.fixed_args = dict(cv=5, solver="saga", max_iter=2000)
+        self.fixed_args = dict(cv=5, solver="saga", max_iter=2000, n_jobs=-1)
         self.is_classifier = True
         self.short = "log"
 
