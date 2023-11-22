@@ -38,4 +38,6 @@ class TestDataset:
         return pd.read_parquet(self.datapath)
 
 
-TEST_DATASETS: dict[str, TestDataset] = {p.name: TestDataset(p) for p in ALL}
+__UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
+
+TEST_DATASETS: dict[str, TestDataset] = dict(sorted(__UNSORTED, key=lambda p: p[1].load().shape[0]))
