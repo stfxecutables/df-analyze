@@ -40,6 +40,7 @@ tabulate = "^0.9.0"
 typing-extensions = "^4.8.0"
 python-dateutil = "^2.8.2"
 ucimlrepo = "^0.0.3"
+lightgbm = "^4.1.0"
 
 [tool.poetry.dev-dependencies]
 
