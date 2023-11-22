@@ -39,7 +39,8 @@ def test_datasets_predict() -> None:
         df, drops = remove_timestamps(df, "target")
         cats = list(set(ds.categoricals).difference(drops))
         df = df.drop(columns="target")
-        df, target = encode_target(df, target)
+        if ds.is_classification:
+            df, target = encode_target(df, target)
 
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
