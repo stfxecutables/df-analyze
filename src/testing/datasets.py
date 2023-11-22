@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
@@ -28,6 +29,10 @@ class TestDataset:
         df = df.loc[df["type"] == "categorical"]
         df = df.loc[df["feature_name"] != "target"]
         self.categoricals = df["feature_name"].to_list()
+        self.is_multiclass = False
+        if self.is_classification:
+            df = pd.read_parquet(self.datapath)
+            self.is_multiclass = len(np.unique(df["target"])) > 2
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)

@@ -47,7 +47,12 @@ from tqdm import tqdm
 from typing_extensions import Literal
 
 from src._types import EstimationMode
-from src.analysis.univariate.predict.models import CLS_MODELS, REG_MODELS
+from src.analysis.univariate.predict.models import (
+    CLS_MODELS,
+    REG_MODELS,
+    SVMClassifier,
+    SVMRegressor,
+)
 
 
 def continuous_feature_target_preds(
@@ -58,9 +63,13 @@ def continuous_feature_target_preds(
 ) -> DataFrame:
     X = continuous[column].to_numpy().reshape(-1, 1)
     y = target
+    is_multi = False
     if mode == "classify":
         y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
+        is_multi = len(np.unique(y)) > 2
     models = REG_MODELS if mode == "regress" else CLS_MODELS
+    if is_multi and len(y) > 5000:  # takes way too long
+        models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
     for model in models:
@@ -83,9 +92,13 @@ def categorical_feature_target_preds(
     """Must be UN-ENCODED categoricals"""
     X = pd.get_dummies(categoricals[column], dummy_na=True)
     y = target
+    is_multi = False
     if mode == "classify":
         y = Series(data=LabelEncoder().fit_transform(target), name=target.name)
+        is_multi = len(np.unique(y)) > 2
     models = REG_MODELS if mode == "regress" else CLS_MODELS
+    if is_multi and len(y) > 5000:  # takes way too long
+        models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
     for model in models:
