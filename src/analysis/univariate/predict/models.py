@@ -231,15 +231,16 @@ class LightGBMRegressor(UnivariatePredictor):
 
 REG_MODELS: list[Type[UnivariatePredictor]] = [
     DumbRegressor,
+    ElasticNetRegressor,
     LinearRegressor,
     SVMRegressor,
-    LightGBMRegressor,
+    # LightGBMRegressor,
 ]
 CLS_MODELS: list[Type[UnivariatePredictor]] = [
     DumbClassifier,
     LogisticClassifier,
     SVMClassifier,
-    LightGBMClassifier,
+    # LightGBMClassifier,
 ]
 
 
