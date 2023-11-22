@@ -10,7 +10,7 @@ from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
     encode_categoricals,
     get_clean_data,
-    handle_nans,
+    handle_continuous_nans,
     load_as_df,
     normalize,
     remove_timestamps,
@@ -25,7 +25,7 @@ def test_drop() -> None:
     for data, target in [(MUSHROOM_DATA, "target"), (ELDER_DATA, "temperature")]:
         options = get_options(f"--df {data} --target {target} --nan drop")
         df = load_as_df(data, spreadsheet=False)
-        clean = handle_nans(df, target=options.target, nans=options.nan_handling)
+        clean = handle_continuous_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
 
 
@@ -44,7 +44,7 @@ def test_interpolate(method: str) -> None:
         )
 
         df = encode_categoricals(df, target=options.target, categoricals=cats)[0]
-        clean = handle_nans(df, target=options.target, nans=options.nan_handling)
+        clean = handle_continuous_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
 
 
@@ -66,7 +66,7 @@ def test_multivariate_interpolate(capsys: CaptureFixture) -> None:
         )
         with capsys.disabled():
             df = encode_categoricals(df, target=options.target, categoricals=cats)[0]
-        clean = handle_nans(df, target=options.target, nans=options.nan_handling)
+        clean = handle_continuous_nans(df, target=options.target, nans=options.nan_handling)
         assert clean.isna().sum().sum() == 0
 
 

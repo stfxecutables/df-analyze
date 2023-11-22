@@ -31,12 +31,17 @@ def normalize(df: DataFrame, target: str) -> DataFrame:
     return X_norm
 
 
-def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
+def handle_continuous_nans(
+    df: DataFrame, target: str, cat_cols: list[str], nans: NanHandling
+) -> DataFrame:
     """MUST be on the categorical-encoded df"""
     # drop rows where target is NaN: meaningless
     idx = ~df[target].isna()
     df = df.loc[idx]
-    X = df.drop(columns=target)
+    # NaNs in categoricals are handled as another dummy indicator
+    drops = list(set(cat_cols).union(target))
+    X = df.drop(columns=drops, errors="ignore")
+    X_cat = df[cat_cols]
     y = df[target]
 
     if nans is NanHandling.Drop:
@@ -65,7 +70,8 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
         raise NotImplementedError(f"Unhandled enum case: {nans}")
 
     X_clean[target] = y
-    return X_clean
+
+    return pd.concat([X_cat, X_clean], axis=1)
 
 
 def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
@@ -87,21 +93,8 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
     return df, Series(encoded, name=target.name)
 
 
-def encode_categoricals(
-    df: DataFrame, target: str, categoricals: Union[list[str], int], warn_sus: bool = True
-) -> tuple[DataFrame, DataFrame]:
-    """Treat all features with <= options.cat_threshold as categorical
-
-    Returns
-    -------
-    encoded: DataFrame
-        Pandas DataFrame with categorical variables one-hot encoded
-
-    unencoded: DataFrame
-        Pandas DataFrame with original categorical variables
-
-    """
-    X = df.drop(columns=target).infer_objects().convert_dtypes()
+def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
     unique_counts = {}
     for colname in X.columns:
         try:
@@ -113,27 +106,30 @@ def encode_categoricals(
     # of samples, then in 5-fold, test set will have most levels effectively never
     # seen before (unless distribution of levels is highly skwewed).
     id_cols = [col for col in str_cols if unique_counts[col] >= len(df) // 5]
-    if len(id_cols) > 0:
-        warn(
-            "Found string-valued features with more unique levels than 20%% of "
-            "the total number of samples in the data. This is most likely an "
-            "'identifier' or junk feature which has no predictive value, and most "
-            "likely should be removed from the data. Even if this is not the case, "
-            "with such a large number of levels, then a test set (either in k-fold, "
-            "or holdout) will likely simply contain a large number of values for "
-            "such a categorical variable that were never seen during training. Thus "
-            "these features are likely too sparse to be useful given the amount of data, "
-            "and also massively increase compute costs for likely no gain. We thus "
-            "REMOVE these features and do not one-hot encode them. To silence this "
-            "warning, either remove these features from the data, or manually break "
-            "them into a smaller number of categories. "
-            f"String-valued features with too many levels: {id_cols}"
-        )
-        X = X.drop(columns=id_cols)
-        for col in id_cols:
-            unique_counts.pop(col)
-        str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    if len(id_cols) == 0:
+        return df, []
 
+    warn(
+        "Found string-valued features with more unique levels than 20%% of "
+        "the total number of samples in the data. This is most likely an "
+        "'identifier' or junk feature which has no predictive value, and most "
+        "likely should be removed from the data. Even if this is not the case, "
+        "with such a large number of levels, then a test set (either in k-fold, "
+        "or holdout) will likely simply contain a large number of values for "
+        "such a categorical variable that were never seen during training. Thus "
+        "these features are likely too sparse to be useful given the amount of data, "
+        "and also massively increase compute costs for likely no gain. We thus "
+        "REMOVE these features and do not one-hot encode them. To silence this "
+        "warning, either remove these features from the data, or manually break "
+        "them into a smaller number of categories. "
+        f"String-valued features with too many levels: {id_cols}"
+    )
+    X = X.drop(columns=id_cols)
+    X[target] = df[target]
+    return X, id_cols
+
+
+def detect_big_cats(unique_counts: dict[str, int], str_cols: list[str]) -> list[str]:
     big_cats = [col for col in str_cols if unique_counts[col] >= 50]
     if len(big_cats) > 0:
         warn(
@@ -149,35 +145,15 @@ def encode_categoricals(
             f"String-valued features with over 50 levels: {big_cats}"
         )
 
-    int_cols = X.select_dtypes(include="int").columns.to_list()
+
+def detect_sus_cols(
+    unique_counts: dict[str, int], int_cols: list[str], cats: Union[list[str], int], warn_sus: bool
+) -> list[str]:
     sus_ints = [col for col in int_cols if unique_counts[col] < 5]
-
-    cats = categoricals
-    auto = isinstance(cats, int)
-    # if no threshold specified, only convert what absolutely has to be converted
-    threshold = cats if auto else -1
-    if auto:
-        to_convert = [col for col, cnt in unique_counts.items() if cnt <= threshold]
-        to_convert += str_cols
-        new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
-        new = new.astype(float)
-        new[target] = df[target]
-        return new, X.loc[:, to_convert]
-
-    # warn the user if some int columns look sus, and check for unspecified
-    # categoricals
-    assert isinstance(cats, list)
-    cats = set(cats)
-    unspecified = sorted(set(str_cols).difference(cats))
-    if len(unspecified) > 0:
-        warn(
-            "Found string-valued features not specified with `--categoricals` "
-            "argument. These will be one-hot encoded to allow use in subsequent "
-            "analyses. To silence this warning, specify the categoricals "
-            "manually either via the CLI or in the spreadsheet file header."
-            f"Unspecified string-valued features: {unspecified}"
-        )
-    sus_cols = sorted(set(sus_ints).difference(cats))
+    if isinstance(cats, list):
+        sus_cols = sorted(set(sus_ints).difference(cats))
+    else:
+        sus_cols = sorted(set(sus_ints))
     if len(sus_cols) > 0 and warn_sus:
         warn(
             "Found integer-valued features not specified with `--categoricals` "
@@ -188,8 +164,95 @@ def encode_categoricals(
             "treated as ordinal / continuous. Categorical-like integer-valued "
             f"features: {sus_cols}"
         )
+    return sus_cols
 
-    to_convert = list(set(str_cols).union(cats))
+
+def get_unq_counts(df: DataFrame, target: str) -> dict[str, int]:
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    unique_counts = {}
+    for colname in X.columns:
+        try:
+            unique_counts[colname] = len(np.unique(df[colname]))
+        except TypeError:  # happens when can't sort for unique
+            unique_counts[colname] = len(np.unique(df[colname].astype(str)))
+    return unique_counts
+
+
+def get_cat_cols(df: DataFrame, target: str, categoricals: Union[list[str], int]) -> list[str]:
+    """
+    Parameters
+    ----------
+    df: DataFrame
+        Data. Must contain target.
+
+    target: str
+        Target column name.
+
+    categoricals: Union[list[str], int]
+        User-provided CLI argument to `--categoricals`.
+    """
+    df, drops = drop_id_cols(df, target)
+
+    unique_counts = get_unq_counts(df, target)
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+
+    cats = categoricals
+    auto = isinstance(cats, int)
+    # if no threshold specified, only convert what absolutely has to be converted
+    threshold = cats if auto else -1
+    if auto:
+        cat_cols = [col for col, cnt in unique_counts.items() if cnt <= threshold]
+        cat_cols += str_cols
+    else:
+        # warn the user if some int columns look sus, and check for unspecified
+        # categoricals
+        assert isinstance(cats, list)
+
+        cats = set(cats)
+        unspecified = sorted(set(str_cols).difference(cats))
+        if len(unspecified) > 0:
+            warn(
+                "Found string-valued features not specified with `--categoricals` "
+                "argument. These will be one-hot encoded to allow use in subsequent "
+                "analyses. To silence this warning, specify the categoricals "
+                "manually either via the CLI or in the spreadsheet file header."
+                f"Unspecified string-valued features: {unspecified}"
+            )
+
+        cat_cols = list(set(str_cols).union(cats))
+    cat_cols = list(set(cat_cols).difference(drops))
+    return cat_cols
+
+
+def encode_categoricals(
+    df: DataFrame, target: str, categoricals: Union[list[str], int], warn_sus: bool = True
+) -> tuple[DataFrame, DataFrame]:
+    """Treat all features with <= options.cat_threshold as categorical
+
+    Returns
+    -------
+    encoded: DataFrame
+        Pandas DataFrame with categorical variables one-hot encoded
+
+    unencoded: DataFrame
+        Pandas DataFrame with original categorical variables
+
+    """
+    df, drops = drop_id_cols(df, target)
+    if isinstance(categoricals, list):
+        categoricals = list(set(categoricals).difference(drops))
+
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    unique_counts = get_unq_counts(df=df, target=target)
+    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    int_cols = X.select_dtypes(include="int").columns.to_list()
+
+    detect_big_cats(unique_counts, str_cols)
+    if warn_sus:
+        detect_sus_cols(unique_counts, int_cols, categoricals, warn_sus=True)
+
+    to_convert = get_cat_cols(df=df, target=target, categoricals=categoricals)
     new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
     new = new.astype(float)
     new[target] = df[target]

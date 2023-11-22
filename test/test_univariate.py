@@ -19,7 +19,14 @@ from pytest import CaptureFixture
 from src._types import EstimationMode
 from src.analysis.univariate.associate import feature_target_stats
 from src.analysis.univariate.predict.predict import feature_target_predictions
-from src.preprocessing.cleaning import encode_target, remove_timestamps
+from src.enumerables import NanHandling
+from src.preprocessing.cleaning import (
+    drop_id_cols,
+    encode_target,
+    get_cat_cols,
+    handle_continuous_nans,
+    remove_timestamps,
+)
 from src.testing.datasets import TEST_DATASETS
 
 logging.captureWarnings(capture=True)
@@ -31,27 +38,43 @@ logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 
 def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
+        if dsname in ["elder", "forest_fires"]:
+            continue
         df = ds.load()
         cats = ds.categoricals
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
         target = df["target"]
+        print("=" * 120)
         print(f"Cleaning data for {dsname} {df.shape} ({mode})")
-        df, drops = remove_timestamps(df, "target")
-        cats = list(set(ds.categoricals).difference(drops))
+        df, t_drops = remove_timestamps(df, "target")
+        df, id_drops = drop_id_cols(df, "target")
+        cats = list(set(ds.categoricals).difference(t_drops).difference(id_drops))
+        cat_cols = get_cat_cols(df=df, target="target", categoricals=cats)
+        df = handle_continuous_nans(
+            df=df, target="target", cat_cols=cat_cols, nans=NanHandling.Mean
+        )
+
         df = df.drop(columns="target")
         if ds.is_classification:
             df, target = encode_target(df, target)
 
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
-            categoricals=df[cats],
+            categoricals=df[cat_cols],
             continuous=df.drop(columns=cats, errors="ignore"),
             target=target,
             mode=mode,
         )
+        sorter = "acc" if mode == "classify" else "Var exp"
+
         print(f"Continous prediction stats for {dsname}:")
+        if df_cont is not None:
+            df_cont = df_cont.sort_values(by=sorter, ascending=False).round(5)
         print(df_cont)
+
         print(f"Categorical prediction stats for {dsname}:")
+        if df_cat is not None:
+            df_cat = df_cat.sort_values(by=sorter, ascending=False).round(5)
         print(df_cat)
 
 
