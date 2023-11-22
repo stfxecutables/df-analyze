@@ -8,12 +8,12 @@ from pandas import DataFrame
 from src._constants import ELDER_DATA, ELDER_TYPES, MUSHROOM_DATA, MUSHROOM_TYPES, ROOT
 from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
-    detect_timestamps,
     encode_categoricals,
     get_clean_data,
     handle_nans,
     load_as_df,
     normalize,
+    remove_timestamps,
 )
 
 
@@ -114,8 +114,8 @@ def test_encode_auto() -> None:
 
 def test_timestamp_detection() -> None:
     df = load_as_df(MUSHROOM_DATA, spreadsheet=False)
-    detect_timestamps(df, "target")
+    remove_timestamps(df, "target")
 
     df = load_as_df(ELDER_DATA, spreadsheet=False)
     with pytest.raises(ValueError):
-        detect_timestamps(df, "temperature")
+        remove_timestamps(df, "temperature")

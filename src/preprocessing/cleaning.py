@@ -205,18 +205,24 @@ def is_timelike(s: str) -> bool:
         return False
 
 
-def detect_timestamps(df: DataFrame, target: str) -> None:
+def remove_timestamps(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
     n_subsamp = max(ceil(0.5 * len(df)), 500)
     n_subsamp = min(n_subsamp, len(df))
     # time checks can be very slow, so just check a few for each feature first
-    X = df.drop(columns=target).infer_objects().select_dtypes(include="object").dropna(axis="index")
+    X = (
+        df.drop(columns=target, errors="ignore")
+        .infer_objects()
+        .select_dtypes(include="object")
+        .dropna(axis="index")
+    )
+    drops = []
     for col in X.columns:
         idx = np.random.permutation(len(X))[:n_subsamp]
-        percent = X[col].loc[idx].apply(is_timelike).sum() / n_subsamp
+        percent = X[col].iloc[idx].apply(is_timelike).sum() / n_subsamp
         if percent > 1.0 / 3.0:
             p = X[col].loc[idx].apply(is_timelike).mean()
             if p > 0.3:
-                raise ValueError(
+                warn(
                     f"A significant proportion ({p*100:02f}%) of the data for feature "
                     f"`{col}` appears to be parseable as datetime data. Datetime data "
                     "cannot currently be handled by `df-analyze` (or most AutoML or "
@@ -228,6 +234,9 @@ def detect_timestamps(df: DataFrame, target: str) -> None:
                     "or manually edit the column values so they are clearly interpretable "
                     "as a categorical variable."
                 )
+                drops.append(col)
+
+    return df.drop(columns=drops), drops
 
 
 def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:

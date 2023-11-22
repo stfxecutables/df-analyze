@@ -19,7 +19,7 @@ from pytest import CaptureFixture
 from src._types import EstimationMode
 from src.analysis.univariate.associate import feature_target_stats
 from src.analysis.univariate.predict.predict import feature_target_predictions
-from src.preprocessing.cleaning import encode_target
+from src.preprocessing.cleaning import encode_target, remove_timestamps
 from src.testing.datasets import TEST_DATASETS
 
 logging.captureWarnings(capture=True)
@@ -34,13 +34,18 @@ def test_datasets_predict() -> None:
         df = ds.load()
         cats = ds.categoricals
         target = df["target"]
+        df, drops = remove_timestamps(df, "target")
+        cats = list(set(ds.categoricals).difference(drops))
         df = df.drop(columns="target")
         df, target = encode_target(df, target)
 
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
-            categoricals=df[cats], continuous=df.drop(columns=cats), target=target, mode=mode
+            categoricals=df[cats],
+            continuous=df.drop(columns=cats, errors="ignore"),
+            target=target,
+            mode=mode,
         )
         print(f"Continous prediction stats for {dsname}:")
         print(df_cont)

@@ -92,7 +92,7 @@ class UnivariatePredictor(ABC):
                 refit=self.refit,
                 cv=5,
                 n_jobs=-1,
-                verbose=2,
+                # verbose=2,
             )
         return self.__opt
 

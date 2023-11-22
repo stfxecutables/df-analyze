@@ -93,7 +93,7 @@ def categorical_feature_target_preds(
     mode: EstimationMode,
 ) -> DataFrame:
     """Must be UN-ENCODED categoricals"""
-    X = pd.get_dummies(categoricals[column], dummy_na=True)
+    X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
     y = target
     is_multi = False
     if mode == "classify":
@@ -122,26 +122,26 @@ def feature_target_predictions(
     continuous: DataFrame,
     target: Series,
     mode: EstimationMode,
-) -> tuple[DataFrame, DataFrame]:
+) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_conts = []
         df_cats = []
 
-        for col in tqdm(
-            continuous.columns,
-            desc="Predicting continous features",
-            total=continuous.shape[1],
-            leave=True,
-        ):
-            df_conts.append(
-                continuous_feature_target_preds(
-                    continuous=continuous,
-                    column=col,
-                    target=target,
-                    mode=mode,
-                )
-            )
+        # for col in tqdm(
+        #     continuous.columns,
+        #     desc="Predicting continous features",
+        #     total=continuous.shape[1],
+        #     leave=True,
+        # ):
+        #     df_conts.append(
+        #         continuous_feature_target_preds(
+        #             continuous=continuous,
+        #             column=col,
+        #             target=target,
+        #             mode=mode,
+        #         )
+        #     )
 
         for col in tqdm(
             categoricals.columns,
@@ -158,7 +158,7 @@ def feature_target_predictions(
                 )
             )
 
-        df_cont = pd.concat(df_conts, axis=0)
-        df_cat = pd.concat(df_cats, axis=0)
+        df_cont = pd.concat(df_conts, axis=0) if len(df_conts) != 0 else None
+        df_cat = pd.concat(df_cats, axis=0) if len(df_cats) != 0 else None
 
     return df_cont, df_cat
