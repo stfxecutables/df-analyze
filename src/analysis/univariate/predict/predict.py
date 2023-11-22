@@ -82,7 +82,7 @@ def continuous_feature_target_preds(
         score.index = pd.Index([column], name="feature")
         scores.append(score)
         pbar.update()
-    pbar.close()
+    pbar.clear()
     return pd.concat(scores, axis=0)
 
 
@@ -113,7 +113,7 @@ def categorical_feature_target_preds(
         score.index = pd.Index([column], name="feature")
         scores.append(score)
         pbar.update()
-    pbar.close()
+    pbar.clear()
     return pd.concat(scores, axis=0)
 
 
@@ -128,20 +128,20 @@ def feature_target_predictions(
         df_conts = []
         df_cats = []
 
-        # for col in tqdm(
-        #     continuous.columns,
-        #     desc="Predicting continous features",
-        #     total=continuous.shape[1],
-        #     leave=True,
-        # ):
-        #     df_conts.append(
-        #         continuous_feature_target_preds(
-        #             continuous=continuous,
-        #             column=col,
-        #             target=target,
-        #             mode=mode,
-        #         )
-        #     )
+        for col in tqdm(
+            continuous.columns,
+            desc="Predicting continous features",
+            total=continuous.shape[1],
+            leave=True,
+        ):
+            df_conts.append(
+                continuous_feature_target_preds(
+                    continuous=continuous,
+                    column=col,
+                    target=target,
+                    mode=mode,
+                )
+            )
 
         for col in tqdm(
             categoricals.columns,

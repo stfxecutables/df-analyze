@@ -33,13 +33,14 @@ def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
         df = ds.load()
         cats = ds.categoricals
+        mode: EstimationMode = "classify" if ds.is_classification else "regress"
         target = df["target"]
+        print(f"Cleaning data for {dsname} {df.shape} ({mode})")
         df, drops = remove_timestamps(df, "target")
         cats = list(set(ds.categoricals).difference(drops))
         df = df.drop(columns="target")
         df, target = encode_target(df, target)
 
-        mode: EstimationMode = "classify" if ds.is_classification else "regress"
         print(f"Making univariate predictions for {dsname} {df.shape}")
         df_cont, df_cat = feature_target_predictions(
             categoricals=df[cats],
