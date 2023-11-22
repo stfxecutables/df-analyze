@@ -39,7 +39,7 @@ def handle_continuous_nans(
     idx = ~df[target].isna()
     df = df.loc[idx]
     # NaNs in categoricals are handled as another dummy indicator
-    drops = list(set(cat_cols).union(target))
+    drops = list(set(cat_cols).union([target]))
     X = df.drop(columns=drops, errors="ignore")
     X_cat = df[cat_cols]
     y = df[target]
@@ -94,7 +94,7 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
 
 
 def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
-    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    X = df.drop(columns=target, errors="ignore").infer_objects()
     unique_counts = {}
     for colname in X.columns:
         try:
@@ -178,6 +178,17 @@ def get_unq_counts(df: DataFrame, target: str) -> dict[str, int]:
     return unique_counts
 
 
+def floatify(df: DataFrame) -> DataFrame:
+    df = df.copy()
+    cols = df.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    for col in cols:
+        try:
+            df[col] = df[col].astype(float)
+        except Exception:
+            pass
+    return df
+
+
 def get_cat_cols(df: DataFrame, target: str, categoricals: Union[list[str], int]) -> list[str]:
     """
     Parameters
@@ -194,7 +205,7 @@ def get_cat_cols(df: DataFrame, target: str, categoricals: Union[list[str], int]
     df, drops = drop_id_cols(df, target)
 
     unique_counts = get_unq_counts(df, target)
-    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    X = floatify(df.drop(columns=target, errors="ignore").infer_objects())
     str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
 
     cats = categoricals

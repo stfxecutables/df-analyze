@@ -38,7 +38,9 @@ logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 
 def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
-        if dsname in ["elder", "forest_fires"]:
+        # if dsname in ["elder", "forest_fires"]:
+        # if dsname in ["elder", "forest_fires", "community_crime"]:
+        if dsname != "community_crime":
             continue
         df = ds.load()
         cats = ds.categoricals
@@ -67,12 +69,12 @@ def test_datasets_predict() -> None:
         )
         sorter = "acc" if mode == "classify" else "Var exp"
 
-        print(f"Continous prediction stats for {dsname}:")
+        print(f"Continous prediction stats (5-fold, tuned) for {dsname}:")
         if df_cont is not None:
             df_cont = df_cont.sort_values(by=sorter, ascending=False).round(5)
         print(df_cont)
 
-        print(f"Categorical prediction stats for {dsname}:")
+        print(f"Categorical prediction stats (5-fold, tuned) for {dsname}:")
         if df_cat is not None:
             df_cat = df_cat.sort_values(by=sorter, ascending=False).round(5)
         print(df_cat)
