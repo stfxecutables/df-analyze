@@ -15,7 +15,7 @@ from src._constants import TESTDATA
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
-ALL = list(CLASSIFICATIONS.glob("*")) + list(REGRESSIONS.glob("*"))
+ALL = sorted(list(CLASSIFICATIONS.glob("*")) + list(REGRESSIONS.glob("*")))
 
 
 class TestDataset:
