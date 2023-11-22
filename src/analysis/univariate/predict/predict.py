@@ -41,7 +41,7 @@ from pandas import DataFrame, Series
 from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.linear_model import ElasticNetCV, LinearRegression, LogisticRegressionCV
 from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.svm import SVC, SVR
 from tqdm import tqdm
 from typing_extensions import Literal
@@ -62,6 +62,7 @@ def continuous_feature_target_preds(
     mode: EstimationMode,
 ) -> DataFrame:
     X = continuous[column].to_numpy().reshape(-1, 1)
+    X = MinMaxScaler().fit_transform(X)
     y = target
     is_multi = False
     if mode == "classify":
