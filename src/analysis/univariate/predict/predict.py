@@ -64,7 +64,7 @@ def continuous_feature_target_preds(
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
     for model in models:
-        pbar.set_description(model.__class__.__name__)
+        pbar.set_description(f"Tuning {model.__class__.__name__}")
         score, spam = model.evaluate(X, y)
         score.insert(0, "model", model.short)
         score.index = pd.Index([column], name="feature")
@@ -89,7 +89,7 @@ def categorical_feature_target_preds(
     scores = []
     pbar = tqdm(models, total=len(models), desc=models[0].__class__.__name__, leave=True)
     for model in models:
-        pbar.set_description(model.__class__.__name__)
+        pbar.set_description(f"Tuning {model.__class__.__name__}")
         score, spam = model.evaluate(X, y)
         score.insert(0, "model", model.short)
         score.index = pd.Index([column], name="feature")

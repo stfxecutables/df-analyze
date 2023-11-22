@@ -92,7 +92,7 @@ class UnivariatePredictor(ABC):
                 refit=self.refit,
                 cv=5,
                 n_jobs=-1,
-                # verbose=2,
+                verbose=2,
             )
         return self.__opt
 
@@ -116,9 +116,9 @@ class SVMClassifier(UnivariatePredictor):
         super().__init__()
         self.model = SVC
         self.grid = {
-            "kernel": ["rbf", "linear"],
+            "kernel": ["rbf"],
             "gamma": logspace(-5, 5),
-            "C": logspace(-10, 3),
+            "C": np.logspace(-10, 3, num=10, endpoint=True).tolist(),
         }
         self.fixed_args = dict(probability=True)
         self.is_classifier = True
@@ -193,9 +193,9 @@ class SVMRegressor(UnivariatePredictor):
         super().__init__()
         self.model = SVR
         self.grid = {
-            "kernel": ["rbf", "linear"],
+            "kernel": ["rbf"],
             "gamma": logspace(-5, 5),
-            "C": logspace(-10, 3),
+            "C": np.logspace(-10, 3, num=10, endpoint=True).tolist(),
         }
         self.is_classifier = False
         self.short = "svm"
