@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, Iterable, Optional, Tuple, Union
 from warnings import filterwarnings
 
 import numpy as np
+from lightgbm import LGBMClassifier, LGBMRegressor
 from numpy import ndarray
 from optuna import Trial
 from pandas import DataFrame
@@ -95,9 +96,7 @@ def get_cv(
         y = np.array(y_train).ravel()
         idx = np.arange(y.shape[0])
         return [
-            train_test_split(
-                idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y
-            )
+            train_test_split(idx, test_size=test_size, random_state=SEED, shuffle=True, stratify=y)  # type: ignore
         ]
     cv_method = str(cv_method).lower()  # type: ignore
     if cv_method == "loocv":
@@ -105,14 +104,13 @@ def get_cv(
     if cv_method in ["kfold", "k-fold"]:
         return StratifiedKFold(n_splits=n_folds, random_state=SEED, shuffle=True)
     if cv_method == "mc":
+        raise NotImplementedError()
         return StratifiedShuffleSplit(n_splits=20, test_size=0.2, random_state=SEED)
     raise ValueError(f"Invalid `cv_method`: {cv_method}")
 
 
 def mlp_args(trial: Trial) -> Dict[str, Any]:
-    depth = trial.suggest_int(
-        "depth", low=MLP_DEPTH_MIN, high=MLP_DEPTH_MAX + 1, step=1
-    )
+    depth = trial.suggest_int("depth", low=MLP_DEPTH_MIN, high=MLP_DEPTH_MAX + 1, step=1)
     width = trial.suggest_int("breadth", low=MLP_WIDTH_MIN, high=MLP_WIDTH_MAX, step=4)
     layers = mlp_layers_from_sizes(depth, width)
     args: Dict = dict(
@@ -122,9 +120,7 @@ def mlp_args(trial: Trial) -> Dict[str, Any]:
         alpha=trial.suggest_float("alpha", 1e-6, 1e-1, log=True),
         batch_size=trial.suggest_categorical("batch_size", choices=[16, 32, 64, 128]),
         learning_rate=trial.suggest_categorical("learning_rate", choices=["constant"]),
-        learning_rate_init=trial.suggest_float(
-            "learning_rate_init", 5e-5, 1e-1, log=True
-        ),
+        learning_rate_init=trial.suggest_float("learning_rate_init", 5e-5, 1e-1, log=True),
         max_iter=trial.suggest_categorical("max_iter", [200]),
         early_stopping=trial.suggest_categorical("early_stopping", [False]),
         validation_fraction=trial.suggest_categorical("validation_fraction", [0.1]),
@@ -132,7 +128,7 @@ def mlp_args(trial: Trial) -> Dict[str, Any]:
     return args
 
 
-def mlp_layers_from_sizes(depth: int, breadth: int) -> Dict:
+def mlp_layers_from_sizes(depth: int, breadth: int) -> tuple[int, ...]:
     """Convert the params returned from trial.best_params into a form that can be used by
     MLPClassifier"""
     return tuple([int(breadth) for _ in range(depth)])
@@ -163,9 +159,33 @@ def svm_classifier_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = SVC(cache_size=500, **args)
-        scores = cv(
-            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
+        return float(np.mean(scores["test_score"]))
+
+    return objective
+
+
+# https://neptune.ai/blog/lightgbm-parameters-guide
+# https://medium.com/optuna/lightgbm-tuner-new-optuna-integration-for-hyperparameter-optimization-8b7095e99258
+def lgbm_classifier_objective(
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
+) -> Callable[[Trial], float]:
+    # TODO
+
+    def objective(trial: Trial) -> float:
+        args: Dict = dict(
+            n_estimators=trial.suggest_int("n_estimators", 50, 300, step=50),
+            reg_alpha=trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            reg_lambda=trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            num_leaves=trial.suggest_int("num_leaves", 2, 256, log=True),
+            colsample_bytree=trial.suggest_float("colsample_bytree", 0.4, 1.0),
+            subsample=trial.suggest_float("subsample", 0.4, 1.0),
+            subsample_freq=trial.suggest_int("subsample_freq", 0, 7),
+            min_child_samples=trial.suggest_int("min_child_samples", 5, 100),
         )
+        _cv = get_cv(y_train, cv_method)
+        estimator = LGBMClassifier(**args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -183,9 +203,7 @@ def rf_classifier_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = RF(n_jobs=2, **args)
-        scores = cv(
-            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4
-        )
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -202,9 +220,7 @@ def dtree_classifier_objective(
         )
         _cv = get_cv(y_train, cv_method)
         estimator = DTreeClassifier(**args)
-        scores = cv(
-            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1
-        )
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -223,9 +239,7 @@ def bagging_classifier_objective(
         estimator = BaggingClassifier(
             base_estimator=LR(solver=LR_SOLVER), random_state=SEED, n_jobs=2, **args
         )
-        scores = cv(
-            estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4
-        )
+        scores = cv(estimator, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=4)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -238,9 +252,7 @@ def mlp_classifier_objective(
         mlp = MLP(**mlp_args(trial))
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ[
-            "PYTHONWARNINGS"
-        ] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
         scores = cv(mlp, X=X_train, y=y_train, scoring="accuracy", cv=_cv, n_jobs=-1)
@@ -281,6 +293,32 @@ def svm_regressor_objective(
         _cv = get_cv(y_train, cv_method)
         estimator = SVR(cache_size=500, **args)
         scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)
+        return float(np.mean(scores["test_score"]))
+
+    return objective
+
+
+# https://neptune.ai/blog/lightgbm-parameters-guide
+# https://medium.com/optuna/lightgbm-tuner-new-optuna-integration-for-hyperparameter-optimization-8b7095e99258
+def lgbm_regressor_objective(
+    X_train: DataFrame, y_train: DataFrame, cv_method: CVMethod = 5
+) -> Callable[[Trial], float]:
+    # TODO
+
+    def objective(trial: Trial) -> float:
+        args: Dict = dict(
+            n_estimators=trial.suggest_int("n_estimators", 50, 300, step=50),
+            reg_alpha=trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            reg_lambda=trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            num_leaves=trial.suggest_int("num_leaves", 2, 256, log=True),
+            colsample_bytree=trial.suggest_float("colsample_bytree", 0.4, 1.0),
+            subsample=trial.suggest_float("subsample", 0.4, 1.0),
+            subsample_freq=trial.suggest_int("subsample_freq", 0, 7),
+            min_child_samples=trial.suggest_int("min_child_samples", 5, 100),
+        )
+        _cv = get_cv(y_train, cv_method)
+        estimator = LGBMRegressor(**args)
+        scores = cv(estimator, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=1)
         return float(np.mean(scores["test_score"]))
 
     return objective
@@ -365,9 +403,7 @@ def mlp_regressor_objective(
         mlp = MLPR(**mlp_args(trial))
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ[
-            "PYTHONWARNINGS"
-        ] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
         filterwarnings("ignore", category=ConvergenceWarning)
         _cv = get_cv(y_train, cv_method)
         scores = cv(mlp, X=X_train, y=y_train, scoring=NEG_MAE, cv=_cv, n_jobs=-1)

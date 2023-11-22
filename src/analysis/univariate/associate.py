@@ -199,8 +199,8 @@ def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str) -> Data
 
     data = {
         "cramer_v": cramer_v(x, y_bin),
-        # "kl_div": relative_entropy(x, y_bin),
-        # "mut_into": minfo,
+        # "kl_div": relative_entropy(x, y_bin),  # need x and y have same n_cls
+        # "mut_into": minfo,  # always NaN
     }
 
     return DataFrame(
