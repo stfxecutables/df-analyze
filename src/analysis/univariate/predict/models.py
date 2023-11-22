@@ -229,17 +229,17 @@ class LightGBMRegressor(UnivariatePredictor):
         self.short = "lgbm"
 
 
-REG_MODELS: list[UnivariatePredictor] = [
-    DumbRegressor(),
-    LinearRegressor(),
-    SVMRegressor(),
-    LightGBMRegressor(),
+REG_MODELS: list[Type[UnivariatePredictor]] = [
+    DumbRegressor,
+    LinearRegressor,
+    SVMRegressor,
+    LightGBMRegressor,
 ]
-CLS_MODELS: list[UnivariatePredictor] = [
-    DumbClassifier(),
-    LogisticClassifier(),
-    SVMClassifier(),
-    LightGBMClassifier(),
+CLS_MODELS: list[Type[UnivariatePredictor]] = [
+    DumbClassifier,
+    LogisticClassifier,
+    SVMClassifier,
+    LightGBMClassifier,
 ]
 
 
