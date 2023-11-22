@@ -7,20 +7,27 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent  # isort: ski
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+import os
 import sys
 from abc import ABC, abstractmethod
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Optional, Type, Union
+from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
+from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.dummy import DummyClassifier, DummyRegressor
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import ElasticNetCV, LinearRegression, LogisticRegressionCV
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.svm import SVC, SVR
+from sklearn.utils._testing import ignore_warnings
 
 from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORING
 from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORING
@@ -47,13 +54,25 @@ class UnivariatePredictor(ABC):
         self.fixed_args: dict[str, Any] = {}
         self.is_classifier: bool = False
         self.__opt: Optional[GridSearchCV] = None
+        self.short: str = "abstract"
 
-    def evaluate(self, encoded: DataFrame, target: str) -> DataFrame:
+    def evaluate(self, X: Union[Series, DataFrame], target: Series) -> tuple[DataFrame, str]:
         opt = self.optimizer
-        X = encoded.drop(columns="target")
-        y = encoded[target]
-        opt.fit(X, y)
-        return self.get_best_scores(opt)
+        y = target
+
+        # so much freaking uncatchable spam from this, captuing stdout only way
+        before = os.environ.get("PYTHONWARNINGS", "")
+        os.environ["PYTHONWARNINGS"] = "ignore"
+        f = StringIO()
+        with redirect_stdout(f):
+            opt.fit(X, y)
+        os.environ["PYTHONWARNINGS"] = before
+        res = self.get_best_scores(opt)
+        lines = []
+        for line in f.readlines():
+            if "ConvergenceWarning" in line:
+                continue
+        return res.to_frame().T.copy(deep=True), "\n".join(lines)
 
     @property
     def scorers(self) -> dict[str, Callable]:
@@ -73,6 +92,7 @@ class UnivariatePredictor(ABC):
                 refit=self.refit,
                 cv=5,
                 n_jobs=-1,
+                # verbose=2,
             )
         return self.__opt
 
@@ -91,12 +111,81 @@ def logspace(start: int, stop: int) -> list[float]:
     return np.logspace(start, stop, num=n, endpoint=True).tolist()
 
 
+class SVMClassifier(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = SVC
+        self.grid = {
+            "kernel": ["rbf", "linear"],
+            "gamma": logspace(-5, 5),
+            "C": logspace(-10, 3),
+        }
+        self.fixed_args = dict(probability=True)
+        self.is_classifier = True
+        self.short = "svm"
+
+
+class LogisticClassifier(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = LogisticRegressionCV
+        self.grid = {
+            "Cs": [logspace(-7, 5)],
+            "penalty": ["elasticnet"],
+            "l1_ratios": [[0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]],
+        }
+        self.fixed_args = dict(cv=5, solver="saga", max_iter=2000)
+        self.is_classifier = True
+        self.short = "log"
+
+
+class LightGBMClassifier(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = LGBMClassifier
+        self.grid = {
+            "n_estimators": [50, 200],
+            "reg_alpha": np.logspace(-8, 10, num=4, endpoint=True).tolist(),
+            "reg_lambda": np.logspace(-8, 10, num=4, endpoint=True).tolist(),
+            # "num_leaves": [2, 31],
+            # "colsample_bytree": [0.5, 0.95],
+            # "subsample": [0.5, 0.95],
+            # "subsample_freq": [0, 2, 4, 6],
+            # "min_child_samples": [5, 25, 50],
+        }
+        self.fixed_args = dict(verbosity=-1)
+        self.is_classifier = True
+        self.short = "lgbm"
+        # raise NotImplementedError("This takes too long to fit on each feature")
+
+
+class DumbClassifier(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = DummyClassifier
+        self.grid = {
+            "strategy": ["most_frequent", "prior", "stratified", "uniform"],
+        }
+        self.is_classifier = True
+        self.short = "dummy"
+
+
+class DumbRegressor(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = DummyRegressor
+        self.grid = {"strategy": ["mean", "median", "quantile"], "quantile": [0.1, 0.25, 0.75, 0.9]}
+        self.is_classifier = False
+        self.short = "dummy"
+
+
 class ElasticNetRegressor(UnivariatePredictor):
     def __init__(self) -> None:
         super().__init__()
         self.model = ElasticNetCV
         self.grid = {"l1_ratio": [[0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]]}
         self.is_classifier = False
+        self.short = "elastic"
 
 
 class SVMRegressor(UnivariatePredictor):
@@ -109,33 +198,83 @@ class SVMRegressor(UnivariatePredictor):
             "C": logspace(-10, 3),
         }
         self.is_classifier = False
+        self.short = "svm"
 
 
-class SVMClassifier(UnivariatePredictor):
+class LinearRegressor(UnivariatePredictor):
     def __init__(self) -> None:
         super().__init__()
-        self.model = SVC
+        self.model = LinearRegression
+        self.grid = {}
+        self.is_classifier = False
+        self.short = "linear"
+
+
+class LightGBMRegressor(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = LGBMRegressor
         self.grid = {
-            "kernel": ["rbf", "linear"],
-            "gamma": logspace(-5, 5),
-            "C": logspace(-10, 3),
+            "n_estimators": [50, 200],
+            "reg_alpha": np.logspace(-8, 10, num=4, endpoint=True).tolist(),
+            "reg_lambda": np.logspace(-8, 10, num=4, endpoint=True).tolist(),
+            # "num_leaves": [2, 31],
+            # "colsample_bytree": [0.5, 0.95],
+            # "subsample": [0.5, 0.95],
+            # "subsample_freq": [0, 2, 4, 6],
+            # "min_child_samples": [5, 25, 50],
         }
-        self.fixed_args = dict(probability=True)
-        self.is_classifier = True
+        self.fixed_args = dict(verbosity=-1)
+        self.is_classifier = False
+        self.short = "lgbm"
+
+
+REG_MODELS: list[UnivariatePredictor] = [
+    DumbRegressor(),
+    LinearRegressor(),
+    SVMRegressor(),
+    LightGBMRegressor(),
+]
+CLS_MODELS: list[UnivariatePredictor] = [
+    DumbClassifier(),
+    LogisticClassifier(),
+    SVMClassifier(),
+    LightGBMClassifier(),
+]
 
 
 if __name__ == "__main__":
     X = np.random.uniform(0, 1, [200, 10])
-    y = np.random.standard_exponential([200])
+    ws = np.random.uniform(0, 1, 10)
+    sums = np.dot(X, ws)
+    e = np.random.uniform(0, sums.mean() / 4, 200)
+    y = sums + e
     y_cls = KBinsDiscretizer(n_bins=5, encode="ordinal").fit_transform(y.reshape(-1, 1)).ravel()
     target = "target"
     y = Series(y, name=target)
     y_cls = Series(y_cls, name=target)
     df = pd.concat([DataFrame(X), y], axis=1)
     df_cls = pd.concat([DataFrame(X), y_cls], axis=1)
+    X = DataFrame(X)
 
-    # model = SVMRegressor()
-    # model.evaluate(df, target)
+    models = [
+        DumbRegressor(),
+        SVMRegressor(),
+        LightGBMRegressor(),
+        LinearRegressor(),
+    ]
+    for model in models:
+        print(model.__class__.__name__)
+        res, spam = model.evaluate(X, y)
+        print(res)
 
-    model = SVMClassifier()
-    model.evaluate(df_cls, target)
+    models = [
+        SVMClassifier(),
+        LogisticClassifier(),
+        # LightGBMClassifier(),
+        # DumbClassifier(),
+    ]
+    for model in models:
+        print(model.__class__.__name__)
+        res, spam = model.evaluate(X, y)
+        print(res)

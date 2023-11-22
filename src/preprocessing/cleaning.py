@@ -9,10 +9,10 @@ import numpy as np
 import pandas as pd
 from dateutil.parser import parse
 from numpy import ndarray
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 
 from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE
 from src.cli.cli import CleaningOptions, ProgramOptions
@@ -68,8 +68,23 @@ def handle_nans(df: DataFrame, target: str, nans: NanHandling) -> DataFrame:
     return X_clean
 
 
-def encode_target():
-    ...
+def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
+    unqs, cnts = np.unique(target, return_counts=True)
+    idx = cnts <= 20
+    n_cls = len(unqs)
+    if np.sum(idx) > 0:
+        warn(
+            f"The target variable has a number of class labels ({unqs[idx]}) with "
+            "less than 20 members. This will cause problems with splitting in "
+            "various nested k-fold procedures used in `df-analyze`. We thus "
+            "remove all samples that belong to these labels, bringing the "
+            f"total number of classes down to {n_cls - np.sum(idx)}"
+        )
+        idx_drop = ~target.isin(unqs[idx])
+        df = df.copy().loc[idx_drop]
+        target = target[idx_drop]
+    encoded = np.array(LabelEncoder().fit_transform(target))
+    return df, Series(encoded, name=target.name)
 
 
 def encode_categoricals(

@@ -300,9 +300,11 @@ def feature_target_stats(
             - Mutual Info (sklearn.feature_selection.mutual_info_regression)
 
     """
-    df_conts = []
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
+        df_conts = []
+        df_cats = []
+
         for col in continuous.columns:
             df_conts.append(
                 continuous_feature_target_stats(
@@ -312,11 +314,7 @@ def feature_target_stats(
                     mode=mode,
                 )
             )
-        df_cont = pd.concat(df_conts, axis=0)
 
-    df_cats = []
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=FutureWarning)
         for col in categoricals.columns:
             df_cats.append(
                 categorical_feature_target_stats(
@@ -326,6 +324,8 @@ def feature_target_stats(
                     mode=mode,
                 )
             )
+
+        df_cont = pd.concat(df_conts, axis=0)
         df_cat = pd.concat(df_cats, axis=0)
 
     return df_cont, df_cat

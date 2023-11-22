@@ -18,9 +18,6 @@ from sklearn.metrics import (
 def sensitivity(y_true: ndarray, y_pred: ndarray) -> float:
     return float(recall_score(y_true, y_pred, average="macro"))
 
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, normalize=None).ravel()
-    return tp / (tp + fn)  # type: ignore
-
 
 def specificity(y_true: ndarray, y_pred: ndarray) -> float:
     mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
@@ -28,10 +25,6 @@ def specificity(y_true: ndarray, y_pred: ndarray) -> float:
     fps = mat[:, 0, 1]
     specs = tns / (tns + fps)
     return specs.mean()
-
-
-def auroc(y_true: ndarray, y_pred: ndarray) -> float:
-    return roc_auc_score(y_true=y_true, y_score=y_pred, multi_class="ovr", average="macro").item()
 
 
 accuracy_scorer = make_scorer(accuracy_score)
