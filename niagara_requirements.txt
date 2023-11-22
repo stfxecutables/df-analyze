@@ -13,3 +13,5 @@ typing-extensions
 python-dateutil
 ucimlrepo
 lightgbm
+openpyxl
+fastparquet
