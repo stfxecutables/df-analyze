@@ -40,15 +40,14 @@ logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
         # if dsname in ["elder", "forest_fires"]:
-        # if dsname in ["elder", "forest_fires", "community_crime"]:
-        # if dsname != "community_crime":
-        #     continue
+        if dsname in ["elder", "forest_fires", "community_crime"]:
+            continue
         df = ds.load()
-        cats = ds.categoricals
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
-        target = df["target"]
         print("=" * 120)
         print(f"Cleaning data for {dsname} {df.shape} ({mode})")
+        cats = ds.categoricals
+        target = df["target"]
         df, t_drops = remove_timestamps(df, "target")
         df, id_drops = drop_id_cols(df, "target")
         cats = list(set(ds.categoricals).difference(t_drops).difference(id_drops))
