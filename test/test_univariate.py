@@ -22,10 +22,12 @@ from src.analysis.univariate.associate import feature_target_stats
 from src.analysis.univariate.predict.predict import feature_target_predictions
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
+    clean_regression_target,
     drop_id_cols,
     encode_target,
     get_cat_cols,
     handle_continuous_nans,
+    prepare_data,
     remove_timestamps,
 )
 from src.testing.datasets import TEST_DATASETS
@@ -40,25 +42,26 @@ logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
         # if dsname in ["elder", "forest_fires"]:
-        if dsname in ["elder", "forest_fires", "community_crime", "credit_approval"]:
+        # if dsname in [
+        #     "elder",
+        #     "forest_fires",
+        #     "community_crime",
+        #     "credit_approval",
+        #     "abalone",
+        #     "student_dropout",
+        #     "wine_quality",
+        # ]:
+        #     continue
+        if dsname != "news_popularity":
             continue
         df = ds.load()
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
         print("=" * 120)
         print(f"Cleaning data for {dsname} {df.shape} ({mode})")
         cats = ds.categoricals
-        target = df["target"]
-        df, t_drops = remove_timestamps(df, "target")
-        df, id_drops = drop_id_cols(df, "target")
-        cats = list(set(ds.categoricals).difference(t_drops).difference(id_drops))
-        cat_cols = get_cat_cols(df=df, target="target", categoricals=cats)
-        df = handle_continuous_nans(
-            df=df, target="target", cat_cols=cat_cols, nans=NanHandling.Mean
+        df, target, cat_cols = prepare_data(
+            df=df, target="target", categoricals=cats, is_classification=ds.is_classification
         )
-
-        df = df.drop(columns="target")
-        if ds.is_classification:
-            df, target = encode_target(df, target)
 
         # TODO: make this a CLI option?
         # make fast

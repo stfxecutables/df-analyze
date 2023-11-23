@@ -12,9 +12,10 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
 from src._constants import CLEAN_JSON, DATA_JSON, DATAFILE
+from src._types import EstimationMode
 from src.cli.cli import CleaningOptions, ProgramOptions
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
@@ -93,6 +94,25 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
     return df, Series(encoded, name=target.name)
 
 
+def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
+    """NaN targets cannot be predicted. Remove them, and then robustly
+    normalize target to facilitate convergence and interpretation
+    of metrics
+    """
+    idx_drop = ~target.isna()
+    df = df.loc[idx_drop]
+    target = target[idx_drop]
+
+    y = (
+        RobustScaler(quantile_range=(5.0, 95.0))
+        .fit_transform(target.to_numpy().reshape(-1, 1))
+        .ravel()
+    )
+    target = Series(y, name=target.name)
+
+    return df, target
+
+
 def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
     X = df.drop(columns=target, errors="ignore").infer_objects()
     unique_counts = {}
@@ -144,6 +164,7 @@ def detect_big_cats(unique_counts: dict[str, int], str_cols: list[str]) -> list[
             "`df-analyze` predictive performance and reduce compute times. "
             f"String-valued features with over 50 levels: {big_cats}"
         )
+    return big_cats
 
 
 def detect_sus_cols(
@@ -313,6 +334,26 @@ def remove_timestamps(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]
     return df.drop(columns=drops), drops
 
 
+def prepare_data(
+    df: DataFrame, target: str, categoricals: Union[list[str], int], is_classification: bool
+) -> tuple[DataFrame, Series, list[str]]:
+    y = df[target]
+    df, t_drops = remove_timestamps(df, target)
+    df, id_drops = drop_id_cols(df, target)
+    cats = []
+    if isinstance(categoricals, list):
+        cats = list(set(categoricals).difference(t_drops).difference(id_drops))
+    cat_cols = get_cat_cols(df=df, target=target, categoricals=cats)
+    df = handle_continuous_nans(df=df, target=target, cat_cols=cat_cols, nans=NanHandling.Mean)
+
+    df = df.drop(columns=target)
+    if is_classification:
+        df, y = encode_target(df, y)
+    else:
+        df, y = clean_regression_target(df, y)
+    return df, y, cat_cols
+
+
 def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
     FILETYPES = [".json", ".csv", ".npy", "xlsx", ".parquet"]
     if path.suffix not in FILETYPES:
@@ -342,44 +383,3 @@ def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
     else:
         raise RuntimeError("Unreachable!")
     return df
-
-
-def remove_nan_features(df: DataFrame, target: str) -> DataFrame:
-    """Remove columns (features) that are ALL NaN"""
-    try:
-        y = df[target].to_numpy()
-    except Exception as e:
-        trace = traceback.format_exc()
-        raise ValueError(f"Could not convert target column to NumPy:\n{trace}") from e
-    df = df.drop(columns=target)
-    df = df.dropna(axis=1, how="any")
-    df[target] = y
-    return df
-
-
-def remove_nan_samples(df: DataFrame) -> DataFrame:
-    """Remove rows (samples) that have ANY NaN"""
-    return df.dropna(axis=0, how="any").dropna(axis=0, how="any")
-
-
-# this is usually really fast, no real need to memoize probably
-# @MEMOIZER.cache
-def get_clean_data(options: ProgramOptions) -> DataFrame:
-    """Perform minimal cleaning, like removing NaN features"""
-    df = load_as_df(options.datapath, options.is_spreadsheet)
-    print("Shape before dropping:", df.shape)
-    if options.nan_handling in ["all", "rows"]:
-        df = remove_nan_samples(df)
-    if options.nan_handling in ["all", "cols"]:
-        df = remove_nan_features(df, target=options.target)
-    print("Shape after dropping:", df.shape)
-    if df[options.target].isnull().any():
-        warn(
-            f"DataFrame has NaN values in target variable: {options.target}. "
-            "Currently, most/all classifiers and regressors do not support this. ",
-            category=UserWarning,
-        )
-    return df
-
-
-# https://www.statsmodels.org/stable/imputation.html
