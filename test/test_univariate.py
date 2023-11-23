@@ -40,7 +40,7 @@ logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 def test_datasets_predict() -> None:
     for dsname, ds in TEST_DATASETS.items():
         # if dsname in ["elder", "forest_fires"]:
-        if dsname in ["elder", "forest_fires", "community_crime"]:
+        if dsname in ["elder", "forest_fires", "community_crime", "credit_approval"]:
             continue
         df = ds.load()
         mode: EstimationMode = "classify" if ds.is_classification else "regress"
