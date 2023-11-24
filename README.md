@@ -25,8 +25,6 @@
   - [Completed Features](#completed-features)
     - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
     - [Automated Data Preproccesing](#automated-data-preproccesing)
-      - [Data Cleaning](#data-cleaning)
-      - [](#)
     - [Feature Descriptive Statisics](#feature-descriptive-statisics)
     - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
     - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
@@ -246,8 +244,6 @@ TODO.
 
 ### Automated Data Preproccesing
 
-#### Data Cleaning
-
 - **NaN Removal and Handling**
   - samples with NaN target are dropped (see Target Handling below)
   - for continous features, NaNs can be either dropped, mean, median, or
@@ -300,8 +296,6 @@ TODO.
     metrics (e.g. MAE) more comparable if comparison to different targets is
     desired
 
-
-####
 
 
 ### Feature Descriptive Statisics
