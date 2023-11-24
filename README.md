@@ -24,6 +24,9 @@
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
     - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
+    - [Automated Data Preproccesing](#automated-data-preproccesing)
+      - [Data Cleaning](#data-cleaning)
+      - [](#)
     - [Feature Descriptive Statisics](#feature-descriptive-statisics)
     - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
     - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
@@ -241,6 +244,66 @@ TODO.
   (command line interface remains functional and completely compatible with
   spreadsheet configuration)
 
+### Automated Data Preproccesing
+
+#### Data Cleaning
+
+- **NaN Removal and Handling**
+  - samples with NaN target are dropped (see Target Handling below)
+  - for continous features, NaNs can be either dropped, mean, median, or
+    multiply imputed (default: mean imputation)
+  - categorical features encode NaNs as an additional class / level
+
+- **Bad Feature Detection and Removal**
+  - features containing unusable datetime data (e.g. timeseries data) are
+    automatically detected and removed, with warnings to the user
+  - features containing identifiers (e.g. features that are integer or string
+    and where each sample has a unique value) are automatically detected and
+    removed, with user warnings
+  - extremely large categorical features (more categories than abuot 1/5 of
+    samples, which pose a problem fork 5-fold splitting) are automatically
+    removed with user-warnings
+  - "suspicious" integer features (e.g. features with less than 5 unique
+    values) are detected and the user is warned to check if categorical or
+    ordinal
+
+- **Categorical Feature Handling**
+  - user can
+    - specify categorical feature names explicitly (preferred)
+    - specify a threshold (count) for number of unique values of a feature
+      required to count as categorical
+  - string features (even if not user-specified) are one-hot encoded
+  - NaN values are automatically treated as an additional class level (no
+    dropping of NaN samples required)
+
+- **Continuous Feature Handling**
+  - continuous features are MinMax normalized to be in [0, 1]
+  - this means `df-analyze` is currently **sensitive to extreme values**
+  - TODO: make robust (percentile, or even
+    [quantile](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.QuantileTransformer.html#sklearn.preprocessing.QuantileTransformer))
+    normalization options available, and auto-detect such cases and warn the
+    user
+
+- **Target Handling**
+  - all samples with NaN targets are dropped (categorical or continuous)
+    - rarely makes sense to count correct NaN predictions toward classification
+      performance
+    - imputing NaNs in a regression target (e.g. mean, median) biases estimates
+      of regression performance
+  - categorical targets containing a class with 20 or fewer samples in a level
+    have the samples corresponding to that level dropped, and the user is warned
+    (these cause problems in nested stratified k-fold, and any estimated of any
+    metric or performance on such a small class is essentially meaningless)
+  - continuous or ordinal regression targets are robustly normalized (using 5th
+    and 95th percentile values) to be approximately in [0, 1] to aid in
+    convergence / fitting of scale-sensitive models, and to make prediction
+    metrics (e.g. MAE) more comparable if comparison to different targets is
+    desired
+
+
+####
+
+
 ### Feature Descriptive Statisics
 
 - **Continuous and ordinal features**:
@@ -265,6 +328,7 @@ TODO.
   - Statistical: t-test, Mann-Whitney U, Brunner-Munzel W, Pearson r and
     associated p-values
   - Other: Cohen's d, AUROC, mutual information
+  - for
 
 - **Continuous/Ordinal Feature -> Continuous Target**:
   - Pearson's and Spearman's r and p-values
