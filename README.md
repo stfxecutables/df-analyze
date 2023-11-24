@@ -192,7 +192,15 @@ configuration options and columns specifically formatted for `df-analyze`:
 python df-analyze.py --spreadsheet spreadsheet.xlsx
 ```
 
-Contents of `spreadsheet.xlsx`:
+Example of an Excel spreadsheet formatted for `df-analyze`:
+
+![](./figures/xlsx1.png)
+
+Another valid Excel spreadsheet:
+
+![](./figures/xlsx2.png)
+
+Example of a `.csv` spreadsheet formatted for `df-analyze`:
 
 ```csv
 --categoricals s x0
@@ -212,7 +220,6 @@ male,0,0.739547,0.312496,1.129941,0
 female,0,0.094421,0.817089,1.246469,1
 unspecified,1,0.323189,0.008068,0.472934,0
 male,2,0.570184,0.289003,1.176338,1
-
 ...
 ```
 
