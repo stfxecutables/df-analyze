@@ -21,6 +21,15 @@
     - [Building](#building)
     - [Running](#running)
   - [Parallelization Options](#parallelization-options)
+- [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
+  - [Completed Features](#completed-features)
+    - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
+    - [Feature Descriptive Statisics](#feature-descriptive-statisics)
+    - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
+    - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
+  - [In progress / Partially Completed:](#in-progress--partially-completed)
+  - [To Do (highest priority first):](#to-do-highest-priority-first)
+  - [May Not Implement:](#may-not-implement)
 
 # What it Does
 
@@ -216,3 +225,109 @@ TODO.
 ## Parallelization Options
 
 TODO.
+
+# Currently Implemented Program Features and Analyses
+
+## Completed Features
+
+### Single Spreadsheet for Configuration and Data
+
+- df-analyze can now be completely configured (including data) in a single
+  spreadsheet (.xlsx or .csv)
+- e.g. usage: `python df-analyze.py --spreadsheet df-analyze-formatted.xlsx`
+- CLI args are simply entered as header lines in the sheet
+- user can additionally override spreadsheet args as needed, e.g. `python
+  df-analyze.py --spreadsheet df-analyze-formatted.xlsx --target other_feature`
+  (command line interface remains functional and completely compatible with
+  spreadsheet configuration)
+
+### Feature Descriptive Statisics
+
+- **Continuous and ordinal features**:
+  - Non-robust:
+    - min, mean, max, standard deviation (SD)
+  - Robust:
+    - 5th and 95th percentiles, median, interquartile range (IQR)
+  - Moments/Other:
+    - skew, kurtosis, and p-values that skew/kurtosis differ from Gaussian
+    - entropy (e.g. differential / continuous entropy)
+    - NaN counts and frequency
+
+- **Categorical features**:
+  - number of classes / levels
+  - min, max, and median of class frequencies
+  - heterogeneity (Chi-squared test of equal class sizes) and associated p-value
+  - NaN counts and frequency (treated as another class label)
+
+### Univariate Feature-Target Associations
+
+- **Continuous/Ordinal Feature -> Categorical Target**:
+  - Statistical: t-test, Mann-Whitney U, Brunner-Munzel W, Pearson r and
+    associated p-values
+  - Other: Cohen's d, AUROC, mutual information
+
+- **Continuous/Ordinal Feature -> Continuous Target**:
+  - Pearson's and Spearman's r and p-values
+  - [F-test](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.f_regression.html)
+    and p-value
+  - mutual information
+
+- **Categorical Feature -> Continuous Target**:
+  - [Kruskal-Wallace
+    H](https://en.wikipedia.org/wiki/Kruskal%E2%80%93Wallis_one-way_analysis_of_variance)
+    and p-value
+  - mutual information
+  - **NOTE**: There are relatively few measures of association for
+    categorical-continuous variable pairs. Kruskal-Wallace H has few
+    statistical assumptions, and essentially checks the extent that the medians
+    of each level in the categorical variable differ significantly on the
+    continuous target, and
+
+- **Categorical Feature -> Categorical Target**:
+  - Cramer's V
+
+### Univariate Prediction Metrics for each Feature-Target Pair
+
+- simple predictive models  are hyperparameter tuned (using 5-fold) over a small
+  grid for each feature
+- a dummy regressor or classifier (e.g. predict target mean, predict largest
+  class) is also always fit
+- reported metrics are for the best-tuned model mean performance across the 5
+  folds:
+  - **Continuous/Ordinal Target (e.g. regression)**:
+    - Models: DummyRegressor, ElasticNet, Linear regression, SVM with radial basis
+    - Metrics: accuracy, AUROC (except for SVM), sensitivity, specificity
+  - **Categorical Target (e.g. classification)**:
+    - Models: DummyClassifier, Logistic regression, SVM with radial basis
+    - Metrics: mean abs. error, mean sq. error, median abs. error, mean abs.
+      percentage error, R2, percent variance explained
+
+
+## In progress / Partially Completed:
+
+- expanded documentation of df-analyze features, configuration, and pipeline
+- wrapper feature selection methods
+  - will make use of univariate stats and predictions
+
+## To Do (highest priority first):
+
+1. include predictive **confidence measures** (either directly from models that
+   output probabilities, or via Platt-scaling) in final fit model stats
+1. move / **replicate documentation of df-analyze in a Wiki, README**, or
+   other non-code non-CLI source (currently requires user to run `python
+   df-analyze.py --help` and produces a very large amount of text)
+1. test scikit-rebate
+   [MultiSURF](https://epistasislab.github.io/scikit-rebate/using/#multisurf)
+   for modern
+   **[relief-based](https://en.wikipedia.org/wiki/Relief_(feature_selection))
+   filter feature selection**
+1. **containerze df-analyze** for reliable behaviour on HPC cluster
+
+## May Not Implement:
+
+- output **matrix of feature-feature associations**
+  - a single matrix not useful because categorical / continous feature and
+    target pairings mean that such a matrix would be full of different
+    association measures
+  - would thus require three matrices (cont-cat, cont-cont, cat-cat) to avoid
+    above
