@@ -192,10 +192,9 @@ configuration options and columns specifically formatted for `df-analyze`:
 python df-analyze.py --spreadsheet spreadsheet.xlsx
 ```
 
-TODO: Give much more examples, e.g. an example `.csv` file:
+Contents of `spreadsheet.xlsx`:
 
 ```csv
-
 --categoricals s x0
 --target y
 --mode classify
@@ -209,10 +208,10 @@ TODO: Give much more examples, e.g. an example `.csv` file:
 
 
 s,x0,x1,x2,x3,y
-male,0,0.739547041740053,0.312496254976371,1.12994172215702,0
-female,0,0.0944212786495044,0.817089936489298,1.24646946365929,1
-unspecified,1,0.323189318693224,0.00806880856795284,0.472934559871207,0
-male,2,0.570184677633011,0.289003189610348,1.17633857406493,1
+male,0,0.739547,0.312496,1.129941,0
+female,0,0.094421,0.817089,1.246469,1
+unspecified,1,0.323189,0.008068,0.472934,0
+male,2,0.570184,0.289003,1.176338,1
 
 ...
 ```
