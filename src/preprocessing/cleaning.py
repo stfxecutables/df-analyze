@@ -83,13 +83,23 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
         warn(
             f"The target variable has a number of class labels ({unqs[idx]}) with "
             "less than 20 members. This will cause problems with splitting in "
-            "various nested k-fold procedures used in `df-analyze`. We thus "
-            "remove all samples that belong to these labels, bringing the "
-            f"total number of classes down to {n_cls - np.sum(idx)}"
+            "various nested k-fold procedures used in `df-analyze`. In addition, "
+            "any estimates or metrics produced for such a class will not be "
+            "statistically meaningful (i.e. the uncertainty on those metrics or "
+            "estimates will be exceedingly large). We thus remove all samples "
+            "that belong to these labels, bringing the total number of classes "
+            f"down to {n_cls - np.sum(idx)}"
         )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop]
         target = target[idx_drop]
+
+    # drop NaNs: Makes no sense to count correct NaN predictions toward
+    # classification performance
+    idx_drop = ~target.isna()
+    df = df.copy().loc[idx_drop]
+    target = target[idx_drop]
+
     encoded = np.array(LabelEncoder().fit_transform(target))
     return df, Series(encoded, name=target.name)
 
