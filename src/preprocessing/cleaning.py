@@ -114,7 +114,7 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
     target = target[idx_drop]
 
     y = (
-        RobustScaler(quantile_range=(5.0, 95.0))
+        RobustScaler(quantile_range=(2.5, 97.5))
         .fit_transform(target.to_numpy().reshape(-1, 1))
         .ravel()
     )
