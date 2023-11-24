@@ -192,6 +192,31 @@ configuration options and columns specifically formatted for `df-analyze`:
 python df-analyze.py --spreadsheet spreadsheet.xlsx
 ```
 
+TODO: Give much more examples, e.g. an example `.csv` file:
+
+```csv
+
+--categoricals s x0
+--target y
+--mode classify
+--classifiers svm mlp dummy
+--nan drop
+--feat-select stepup pearson
+--n-feat 2
+--htune
+--htune-trials 50
+--outdir ./results
+
+
+s,x0,x1,x2,x3,y
+male,0,0.739547041740053,0.312496254976371,1.12994172215702,0
+female,0,0.0944212786495044,0.817089936489298,1.24646946365929,1
+unspecified,1,0.323189318693224,0.00806880856795284,0.472934559871207,0
+male,2,0.570184677633011,0.289003189610348,1.17633857406493,1
+
+...
+```
+
 #### Overriding Spreadsheet Options
 
 When spreadsheet and CLI options conflict, the `df-analyze` will prefer the CLI
@@ -287,14 +312,18 @@ TODO.
     - imputing NaNs in a regression target (e.g. mean, median) biases estimates
       of regression performance
   - categorical targets containing a class with 20 or fewer samples in a level
-    have the samples corresponding to that level dropped, and the user is warned
-    (these cause problems in nested stratified k-fold, and any estimated of any
-    metric or performance on such a small class is essentially meaningless)
-  - continuous or ordinal regression targets are robustly normalized (using 5th
-    and 95th percentile values) to be approximately in [0, 1] to aid in
-    convergence / fitting of scale-sensitive models, and to make prediction
-    metrics (e.g. MAE) more comparable if comparison to different targets is
-    desired
+    have the samples corresponding to that level dropped, and the user is
+    warned (these cause problems in nested stratified k-fold, and any estimated
+    of any metric or performance on such a small class is essentially
+    meaningless)
+  - continuous or ordinal regression targets are robustly normalized using
+    2.5th and 97.5th percentile values
+    - with this normalization, 95% of the target values are in [0, 1]
+    - thus an MAE of, say, 0.5, means that the error is about half of the
+      target (robust) range
+    - this also aids in the convergence and fitting of scale-sensitive models
+    - this also makes prediction metrics (e.g. MAE) more comparable across
+      different targets
 
 
 
@@ -379,7 +408,7 @@ TODO.
    for modern
    **[relief-based](https://en.wikipedia.org/wiki/Relief_(feature_selection))
    filter feature selection**
-1. **containerze df-analyze** for reliable behaviour on HPC cluster
+1. **containerize df-analyze** for reliable behaviour on HPC cluster
 
 ## May Not Implement:
 
