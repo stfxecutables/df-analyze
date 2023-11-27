@@ -287,8 +287,8 @@ TODO.
   - features containing identifiers (e.g. features that are integer or string
     and where each sample has a unique value) are automatically detected and
     removed, with user warnings
-  - extremely large categorical features (more categories than abuot 1/5 of
-    samples, which pose a problem fork 5-fold splitting) are automatically
+  - extremely large categorical features (more categories than about 1/5 of
+    samples, which pose a problem for 5-fold splitting) are automatically
     removed with user-warnings
   - "suspicious" integer features (e.g. features with less than 5 unique
     values) are detected and the user is warned to check if categorical or
