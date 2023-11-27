@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from math import isnan
+from typing import Any
 from warnings import warn
 
 
@@ -10,6 +11,31 @@ class NanHandling(Enum):
     Mean = "mean"
     Median = "median"
     Impute = "impute"
+
+
+class WrapperSelection(Enum):
+    StepUp = "step-up"
+    StepDown = "step-down"
+
+
+class FilterSelection(Enum):
+    Relief = "relief"
+    Univariate = "univariate"
+
+
+class EstimatorKind(Enum):
+    Linear = "lin"
+    SVM = "svm"
+    KNN = "knn"
+    RF = "rf"
+    LGBM = "lgbm"
+    MLP = "mlp"
+
+    def regressor(self) -> Any:
+        """Return the regressor form"""
+
+    def classifier(self) -> Any:
+        """Return the classifier form"""
 
 
 class CVSplit(Enum):

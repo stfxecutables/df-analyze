@@ -9,7 +9,8 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pytest
-from testing.datasets import TEST_DATASETS
+
+from src.testing.datasets import TEST_DATASETS
 
 
 def test_loading() -> None:

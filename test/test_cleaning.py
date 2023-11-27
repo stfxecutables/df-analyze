@@ -9,7 +9,6 @@ from src._constants import ELDER_DATA, ELDER_TYPES, MUSHROOM_DATA, MUSHROOM_TYPE
 from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
     encode_categoricals,
-    get_clean_data,
     handle_continuous_nans,
     load_as_df,
     normalize,

@@ -9,9 +9,9 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 from cli_test_helpers import ArgvContext
-from testing.datasets import TEST_DATASETS
 
 from src.cli.cli import get_options
+from src.testing.datasets import TEST_DATASETS
 
 PATH = list(TEST_DATASETS.values())[0].datapath
 
