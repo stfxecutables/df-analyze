@@ -3,11 +3,10 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Callable, Mapping, Optional, Union
+from typing import Mapping, Optional
 
 from optuna import Trial
 
-from pandas import DataFrame, Series  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on

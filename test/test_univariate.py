@@ -14,21 +14,13 @@ from pathlib import Path
 
 import numpy as np
 from pandas import DataFrame, Series
-from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
 from src._types import EstimationMode
 from src.analysis.univariate.associate import feature_target_stats
 from src.analysis.univariate.predict.predict import feature_target_predictions
-from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
-    clean_regression_target,
-    drop_id_cols,
-    encode_target,
-    get_cat_cols,
-    handle_continuous_nans,
     prepare_data,
-    remove_timestamps,
 )
 from src.testing.datasets import TEST_DATASETS
 

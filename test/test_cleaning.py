@@ -5,13 +5,12 @@ import pytest
 from _pytest.capture import CaptureFixture
 from pandas import DataFrame
 
-from src._constants import ELDER_DATA, ELDER_TYPES, MUSHROOM_DATA, MUSHROOM_TYPES, ROOT
+from src._constants import ELDER_DATA, ELDER_TYPES, MUSHROOM_DATA, MUSHROOM_TYPES
 from src.cli.cli import get_options
 from src.preprocessing.cleaning import (
     encode_categoricals,
     handle_continuous_nans,
     load_as_df,
-    normalize,
     remove_timestamps,
 )
 

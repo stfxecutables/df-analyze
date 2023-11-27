@@ -10,9 +10,8 @@ sys.path.append(str(ROOT))  # isort: skip
 
 from argparse import ArgumentParser
 from enum import Enum
-from typing import Generic, Mapping, Type, TypeVar
+from typing import Generic, Mapping, TypeVar
 
-from openpyxl.cell.cell import Cell
 
 T = TypeVar("T")
 

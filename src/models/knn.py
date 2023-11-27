@@ -3,11 +3,11 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Callable, Mapping, Union
+from typing import Callable, Mapping
 
 from optuna import Trial
 
-from pandas import DataFrame, Series  # isort: skip
+from pandas import DataFrame  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
@@ -15,7 +15,6 @@ sys.path.append(str(ROOT))  # isort: skip
 from typing import Optional
 
 import numpy as np
-from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances, manhattan_distances
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.model_selection import cross_validate as cv

@@ -31,7 +31,7 @@ from sklearn.feature_selection import mutual_info_classif as minfo_cat
 from sklearn.feature_selection import mutual_info_regression as minfo_cont
 
 from src._types import EstimationMode
-from src.analysis.metrics import auroc, cohens_d, cramer_v, relative_entropy
+from src.analysis.metrics import auroc, cohens_d, cramer_v
 
 
 def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> DataFrame:

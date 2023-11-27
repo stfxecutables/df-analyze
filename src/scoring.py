@@ -1,7 +1,6 @@
 from numpy import ndarray
 from sklearn.metrics import (
     accuracy_score,
-    confusion_matrix,
     explained_variance_score,
     make_scorer,
     mean_absolute_error,

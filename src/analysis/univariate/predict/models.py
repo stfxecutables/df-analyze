@@ -9,25 +9,21 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import os
 import sys
-from abc import ABC, abstractmethod
+from abc import ABC
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from typing import Any, Callable, Optional, Type, Union
-from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
-from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.dummy import DummyClassifier, DummyRegressor
-from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import ElasticNetCV, LinearRegression, LogisticRegressionCV
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.svm import SVC, SVR
-from sklearn.utils._testing import ignore_warnings
 
 from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORING
 from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORING
