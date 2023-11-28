@@ -59,6 +59,7 @@ from torch.nn import (
 )
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from tqdm import tqdm
 from typing_extensions import Literal
 
 from src.models.base import DfAnalyzeModel
@@ -127,19 +128,21 @@ Dropout rate                [0.0, 0.8]
 
 """
 
-NETWORK_DEPTH = 8
+NETWORK_MAX_DEPTH = 8
+NETWORK_MIN_DEPTH = 3
+NETWORK_MAX_WIDTH = 512
+NETWORK_MIN_WIDTH = 32
 BATCH_SIZE = 128
 
 
 class SkorchMLP(Module):
     def __init__(
         self,
-        width: int = 512,
+        width: int = NETWORK_MAX_WIDTH,
+        depth: int = NETWORK_MAX_DEPTH,
         use_bn: bool = True,
         use_wd: bool = True,
         use_drop: bool = True,
-        lr: float = 1e-3,
-        wd: float = 1e-4,
         dropout: float = 0.4,
         num_classes: int = 2,
     ) -> None:
@@ -149,8 +152,6 @@ class SkorchMLP(Module):
             use_bn=use_bn,
             use_wd=use_wd,
             use_drop=use_drop,
-            lr=lr,
-            wd=wd,
             dropout=dropout,
         )
         self.num_classes = num_classes
@@ -161,11 +162,11 @@ class SkorchMLP(Module):
         D = dropout
         self.input = LazyLinear(out_features=width)
         self.layers = ModuleList()
-        for i in range(NETWORK_DEPTH):
+        for i in range(depth):
             self.layers.append(Linear(W, W, bias=not use_bn))
             if use_bn:
                 self.layers.append(BatchNorm1d(W))
-            if use_drop and i != NETWORK_DEPTH - 1:
+            if use_drop and i != depth - 1:
                 self.layers.append(Dropout(D))
             self.layers.append(LeakyReLU())
 
@@ -212,52 +213,62 @@ if __name__ == "__main__":
     y_test = y[1000:]
     wd = 1e-4
     lr = 1e-3
-    T0, n_batches = get_T0(X, n_epochs=8, val_split=0.2)
-    sched = LRScheduler(
-        policy=CosineAnnealingWarmRestarts,  # type: ignore
-        T_0=T0,
-        T_mult=2,
-        eta_min=1e-7,
-        verbose=True,
-        step_every="epoch",
-    )
-    lrs = sched.simulate(steps=50 * n_batches, initial_lr=lr)
-    epochs = [int(i / n_batches) for i, lr in enumerate(lrs)]
-    plt.plot(epochs, lrs, color="black")
-    plt.show()
-    sys.exit()
-
-    with catch_warnings():
-        simplefilter("ignore", UserWarning)
-        net = NeuralNetClassifier(
-            module=SkorchMLP,
-            module__width=512,
-            module__use_bn=True,
-            module__use_wd=True,
-            module__use_drop=True,
-            module__lr=lr,
-            module__wd=wd,
-            module__dropout=0.4,
-            module__num_classes=2,
-            criterion=CrossEntropyLoss,  # type: ignore
-            criterion__weight=None,
-            optimizer=AdamW,
-            optimizer__weight_decay=wd,
-            optimizer__lr=lr,
-            callbacks=[
-                sched,
-                # Effectively min_epochs=20
-                # EarlyStopping(patience=20, load_best=False),
-            ],
-            max_epochs=50,
-            batch_size=BATCH_SIZE,
-            # train_split=None,  # we do all tuning with 5-fold anyway...
-            device="cpu",
+    for lr in tqdm([1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]):
+        T0, n_batches = get_T0(X, n_epochs=8, val_split=0.2)
+        sched = LRScheduler(
+            policy=CosineAnnealingWarmRestarts,  # type: ignore
+            T_0=T0,
+            T_mult=2,
+            eta_min=1e-6,
+            verbose=False,
+            step_every="step",
         )
-        net.fit(X_train, y_train)
-        probs = net.predict_proba(X_test)
-        print(probs[:10])
-        preds = net.predict(X_test)
-        print(preds[:10])
-        print("Acc:", net.score(X_test, y_test))
-        net.history
+        # lrs = sched.simulate(steps=50 * n_batches, initial_lr=lr)
+        # epochs = [int(i / n_batches) for i in range(len(lrs))]
+        # plt.plot(epochs, lrs, color="black")
+        # plt.xlabel("Epoch")
+        # plt.ylabel("LR")
+        # plt.show()
+        # plt.close()
+        # sys.exit()
+
+        with catch_warnings():
+            simplefilter("ignore", UserWarning)
+            net = NeuralNetClassifier(
+                module=SkorchMLP,
+                module__width=128,
+                module__use_bn=False,
+                module__use_wd=True,
+                module__use_drop=True,
+                module__lr=lr,
+                module__wd=wd,
+                module__dropout=0.4,
+                module__num_classes=2,
+                criterion=CrossEntropyLoss,  # type: ignore
+                criterion__weight=None,
+                optimizer=AdamW,
+                optimizer__weight_decay=wd,
+                optimizer__lr=lr,
+                callbacks=[
+                    sched,
+                    # Effectively min_epochs=20
+                    EarlyStopping(patience=20, load_best=False),
+                ],
+                max_epochs=50,
+                batch_size=BATCH_SIZE,
+                # train_split=None,  # we do all tuning with 5-fold anyway...
+                device="cpu",
+                verbose=0,
+            )
+            net.fit(X_train, y_train)
+            # probs = net.predict_proba(X_test)
+            # print(probs[:10])
+            # preds = net.predict(X_test)
+            # print(preds[:10])
+            print("Acc:", net.score(X_test, y_test))
+            fig, ax = plt.subplots()
+            ax.plot(net.history[:, "train_loss"], color="black", label="train")
+            ax.plot(net.history[:, "valid_loss"], color="orange", label="val")
+            ax.set_title(f"LR={lr}")
+            plt.show(block=False)
+    plt.show()
