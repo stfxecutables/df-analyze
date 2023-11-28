@@ -51,6 +51,7 @@ torchvision = [
   { version = "=0.16.1+cpu", source = "pytorch", platform = "linux" },
   { version = "=0.16.1+cpu", source = "pytorch", platform = "win32" },
 ]
+skorch = "^0.15.0"
 
 
 [[tool.poetry.source]]
