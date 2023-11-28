@@ -41,12 +41,34 @@ typing-extensions = "^4.8.0"
 python-dateutil = "^2.8.2"
 ucimlrepo = "^0.0.3"
 lightgbm = "^4.1.0"
+torch = [
+  { version = "=2.1.1", source = "pypi", platform = "darwin" },
+  { version = "=2.1.1+cpu", source = "pytorch", platform = "linux" },
+  { version = "=2.1.1+cpu", source = "pytorch", platform = "win32" },
+]
+torchvision = [
+  { version = "=0.16.1", source = "pypi", platform = "darwin" },
+  { version = "=0.16.1+cpu", source = "pytorch", platform = "linux" },
+  { version = "=0.16.1+cpu", source = "pytorch", platform = "win32" },
+]
+
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cpu/"
+priority = "primary"
+
+
+[[tool.poetry.source]]
+name = "PyPI"
+priority = "primary"
 
 [tool.poetry.dev-dependencies]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.5"
 cli-test-helpers = "^3.4.0"
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
