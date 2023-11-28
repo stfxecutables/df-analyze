@@ -41,7 +41,7 @@ class SVMClassifier(SVMEstimator):
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
             kwargs = {**self.fixed_args, **self.model_args}
-            if self.needs_proba:
+            if self.needs_calibration:
                 kwargs["probability"] = True
             self.model = self.model_cls(**kwargs)
         self.model.fit(X_train, y_train)

@@ -28,13 +28,14 @@ class KNNEstimator(DfAnalyzeModel):
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
+        self.needs_calibration = False
         self.fixed_args = dict()
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
             n_neighbors=trial.suggest_int("n_neighbors", 1, 50, 1),
             weights=trial.suggest_categorical("weights", ["uniform", "distance"]),
-            metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "corr"]),
+            metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "correlation"]),
         )
 
     def optuna_objective(
@@ -46,7 +47,7 @@ class KNNEstimator(DfAnalyzeModel):
             "cosine": cosine_distances(X_train),
             "l1": manhattan_distances(X_train),
             "l2": euclidean_distances(X_train),
-            "corr": np.abs(np.corrcoef(X_train)),
+            "correlation": np.abs(np.corrcoef(X_train)),
         }
 
         def objective(trial: Trial) -> float:

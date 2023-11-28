@@ -29,12 +29,15 @@ class DfAnalyzeModel(ABC):
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__()
         self.is_classifier: bool = True
-        self.needs_proba: bool = False  # NOTE: maybe unneeded?
+        self.needs_calibration: bool = False
         self.model_cls: Type[Any]
         self.model: Optional[Any] = None
         self.fixed_args: dict[str, Any] = {}
         self.default_args: dict[str, Any] = {}
-        self.model_args: Mapping = model_args or dict()
+        self.model_args: Mapping = model_args or {}
+        self.tuned_args: Optional[Mapping] = None
+
+        self.is_refit = False
 
     def optuna_objective(
         self, X_train: DataFrame, y_train: Series, n_folds: int = 3
@@ -68,10 +71,16 @@ class DfAnalyzeModel(ABC):
         n_trials: int = 100,
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
+        if self.tuned_args is not None:
+            raise RuntimeError(
+                f"Model {self.__class__.__name__} has already been tuned with Optuna"
+            )
+
         study = create_study(direction="maximize", sampler=TPESampler())
         optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(X_train=X_train, y_train=y_train)
         study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        self.tuned_args = study.best_params
         return study
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
@@ -79,6 +88,33 @@ class DfAnalyzeModel(ABC):
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
             self.model = self.model_cls(**kwargs)
         self.model.fit(X_train, y_train)
+
+    def refit(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
+        overrides = overrides or {}
+        kwargs = {
+            **self.fixed_args,
+            **self.default_args,
+            **self.model_args,
+            **overrides,
+        }
+        self.model = self.model_cls(**kwargs)
+        self.model.fit(X, y)
+
+    def htune_eval(
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        X_test: DataFrame,
+        y_test: Series,
+    ) -> Any:
+        # TODO: need to specify valiation method, and return confidences, etc.
+        # Actually maybe just want to call refit in here...
+        if self.tuned_args is None:
+            raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
+
+        self.refit(X_train, y_train, overrides=self.tuned_args)
+        # TODO: return Platt-scaling or probability estimates
+        return self.score(X_test, y_test)
 
     def score(self, X: DataFrame, y: Series) -> float:
         if self.model is None:

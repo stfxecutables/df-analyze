@@ -13,7 +13,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from numpy import ndarray
 from pandas import DataFrame, Series
+from pytest import CaptureFixture
+from sklearn.preprocessing import KBinsDiscretizer
 from typing_extensions import Literal
 
 from src.models.base import DfAnalyzeModel
@@ -28,37 +31,74 @@ from src.models.linear import ElasticNetRegressor, LRClassifier
 from src.models.svm import SVMClassifier, SVMRegressor
 
 
-def fake_data(mode: Literal["classify", "regress"]) -> tuple[DataFrame, Series]:
+def fake_data(
+    mode: Literal["classify", "regress"], noise: float = 1.0
+) -> tuple[DataFrame, DataFrame, Series, Series]:
     N = 100
     C = 20
-    y = np.random.standard_exponential(N) if mode == "regress" else np.random.randint(0, 2, N)
-    target = Series(y, name="target")
 
-    X_cont = np.random.standard_normal([N, C])
+    X_cont_tr = np.random.standard_normal([N, C])
+    X_cont_test = np.random.standard_normal([N, C])
+
     cat_sizes = np.random.randint(2, 20, C)
-    cats = [np.random.randint(0, c) for c in cat_sizes]
-    X_cat = np.empty([N, C])
-    for i, cat in enumerate(cats):
-        X_cat[:, i] = cat
-    df_cat = pd.get_dummies(DataFrame(X_cat))
-    df_cont = DataFrame(X_cont)
-    df = pd.concat([df_cont, df_cat], axis=1)
-    cols = [f"f{i}" for i in range(df.shape[1])]
-    df.columns = cols
-    return df, target
+    cats_tr = [np.random.randint(0, c) for c in cat_sizes]
+    cats_test = [np.random.randint(0, c) for c in cat_sizes]
+
+    X_cat_tr = np.empty([N, C])
+    for i, cat in enumerate(cats_tr):
+        X_cat_tr[:, i] = cat
+
+    X_cat_test = np.empty([N, C])
+    for i, cat in enumerate(cats_test):
+        X_cat_test[:, i] = cat
+
+    df_cat_tr = pd.get_dummies(DataFrame(X_cat_tr))
+    df_cat_test = pd.get_dummies(DataFrame(X_cat_test))
+
+    df_cont_tr = DataFrame(X_cont_tr)
+    df_cont_test = DataFrame(X_cont_test)
+
+    df_tr = pd.concat([df_cont_tr, df_cat_tr], axis=1)
+    df_test = pd.concat([df_cont_test, df_cat_test], axis=1)
+
+    cols = [f"f{i}" for i in range(df_tr.shape[1])]
+    df_tr.columns = cols
+    df_test.columns = cols
+
+    weights = np.random.uniform(0, 1, 2 * C)
+    y_tr = np.dot(df_tr.values, weights) + np.random.normal(0, noise, N)
+    y_test = np.dot(df_test.values, weights) + np.random.normal(0, noise, N)
+
+    if mode == "classify":
+        encoder = KBinsDiscretizer(n_bins=2, encode="ordinal")
+        encoder.fit(y_tr.reshape(-1, 1))
+        y_tr = encoder.transform(y_tr.reshape(-1, 1))
+        y_test = encoder.transform(y_test.reshape(-1, 1))
+
+    target_tr = Series(np.asarray(y_tr).ravel(), name="target")
+    target_test = Series(np.asarray(y_test).ravel(), name="target")
+
+    return df_tr, df_test, target_tr, target_test
 
 
 def check_basics(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) -> None:
-    X_tr, y_tr = fake_data(mode)
-    X_test, y_test = fake_data(mode)
+    X_tr, X_test, y_tr, y_test = fake_data(mode)
     model.fit(X_train=X_tr, y_train=y_tr)
     model.predict(X_test)
     model.score(X_test, y_test)
 
 
-def check_optuna_tune(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) -> None:
-    X_tr, y_tr = fake_data(mode)
-    model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
+def check_optuna_tune(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) -> float:
+    X_tr, X_test, y_tr, y_test = fake_data(mode)
+    study = model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
+
+    overrides = study.best_params
+    model.refit(X_tr, y_tr, overrides=overrides)
+    score = model.score(X_test, y_test)
+    s = score if model.is_classifier else -score
+    lab = "Acc" if model.is_classifier else "MAE"
+    print(f"\n{model.__class__.__name__}: {lab}={s:0.4f}")
+    return score
 
 
 class TestLinear:
@@ -70,13 +110,15 @@ class TestLinear:
         model = ElasticNetRegressor()
         check_basics(model, "regress")
 
-    def test_lin_cls_tune(self) -> None:
+    def test_lin_cls_tune(self, capsys: CaptureFixture) -> None:
         model = LRClassifier()
-        check_optuna_tune(model, "classify")
+        with capsys.disabled():
+            check_optuna_tune(model, "classify")
 
-    def test_lin_reg_tune(self) -> None:
+    def test_lin_reg_tune(self, capsys: CaptureFixture) -> None:
         model = ElasticNetRegressor()
-        check_optuna_tune(model, "regress")
+        with capsys.disabled():
+            check_optuna_tune(model, "regress")
 
 
 class TestKNN:
@@ -88,13 +130,15 @@ class TestKNN:
         model = KNNRegressor()
         check_basics(model, "regress")
 
-    def test_knn_cls_tune(self) -> None:
+    def test_knn_cls_tune(self, capsys: CaptureFixture) -> None:
         model = KNNClassifier()
-        check_optuna_tune(model, "classify")
+        with capsys.disabled():
+            check_optuna_tune(model, "classify")
 
-    def test_knn_reg_tune(self) -> None:
+    def test_knn_reg_tune(self, capsys: CaptureFixture) -> None:
         model = KNNRegressor()
-        check_optuna_tune(model, "regress")
+        with capsys.disabled():
+            check_optuna_tune(model, "regress")
 
 
 class TestSVM:
@@ -106,13 +150,15 @@ class TestSVM:
         model = SVMRegressor()
         check_basics(model, "regress")
 
-    def test_svm_cls_tune(self) -> None:
+    def test_svm_cls_tune(self, capsys: CaptureFixture) -> None:
         model = SVMClassifier()
-        check_optuna_tune(model, "classify")
+        with capsys.disabled():
+            check_optuna_tune(model, "classify")
 
-    def test_svm_reg_tune(self) -> None:
+    def test_svm_reg_tune(self, capsys: CaptureFixture) -> None:
         model = SVMRegressor()
-        check_optuna_tune(model, "regress")
+        with capsys.disabled():
+            check_optuna_tune(model, "regress")
 
 
 class TestLightGBM:
@@ -132,18 +178,22 @@ class TestLightGBM:
         model = LightGBMRFRegressor()
         check_basics(model, "regress")
 
-    def test_lgbm_cls_tune(self) -> None:
+    def test_lgbm_cls_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMClassifier()
-        check_optuna_tune(model, "classify")
+        with capsys.disabled():
+            check_optuna_tune(model, "classify")
 
-    def test_lgbm_reg_tune(self) -> None:
+    def test_lgbm_reg_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRegressor()
-        check_optuna_tune(model, "regress")
+        with capsys.disabled():
+            check_optuna_tune(model, "regress")
 
-    def test_lgbm_rf_cls_tune(self) -> None:
+    def test_lgbm_rf_cls_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRFClassifier()
-        check_optuna_tune(model, "classify")
+        with capsys.disabled():
+            check_optuna_tune(model, "classify")
 
-    def test_lgbm_rf_reg_tune(self) -> None:
+    def test_lgbm_rf_reg_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRFRegressor()
-        check_optuna_tune(model, "regress")
+        with capsys.disabled():
+            check_optuna_tune(model, "regress")
