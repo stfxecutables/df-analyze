@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import numpy as np
 import pytest
 
 from src.testing.datasets import TEST_DATASETS
@@ -28,7 +29,11 @@ def test_categoricals() -> None:
 
 def test_splitting() -> None:
     for name, ds in TEST_DATASETS.items():
-        ds.train_test_split()
+        X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+        if ds.is_classification:
+            assert num_classes == len(np.unique(np.concatenate([y_tr, y_test])))
+        assert np.isnan(np.ravel(X_tr)).sum() == 0
+        assert np.isnan(np.ravel(X_test)).sum() == 0
 
 
 if __name__ == "__main__":

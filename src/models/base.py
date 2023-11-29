@@ -131,7 +131,7 @@ class DfAnalyzeModel(ABC):
     ) -> Series:
         raise NotImplementedError()
 
-    def predict_proba(self, X: DataFrame, y: Series) -> Series:
+    def predict_proba(self, X: DataFrame) -> Series:
         if not self.is_classifier:
             raise ValueError("Cannot get probabilities for a regression model.")
 
@@ -140,4 +140,4 @@ class DfAnalyzeModel(ABC):
 
         if not hasattr(self.model, "predict_proba"):
             raise AttributeError(f"No `predict_proba` method found on model {self.model}")
-        return self.model.predict_proba(X, y)
+        return self.model.predict_proba(X)

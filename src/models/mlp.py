@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Mapping, Optional, overload
 
 from optuna import Trial
 
@@ -12,9 +12,14 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+import matplotlib as mpl
+
+mpl.rcParams["axes.formatter.useoffset"] = False
+
 import os
 import sys
 from argparse import ArgumentParser, Namespace
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -41,6 +46,8 @@ from matplotlib.figure import Figure
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
+from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import cross_validate as cv
 from sklearn.svm import SVC, SVR
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
@@ -50,6 +57,8 @@ from torch.nn import (
     BatchNorm1d,
     CrossEntropyLoss,
     Dropout,
+    Flatten,
+    HuberLoss,
     LazyLinear,
     LeakyReLU,
     Linear,
@@ -62,7 +71,8 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 from typing_extensions import Literal
 
-from src.models.base import DfAnalyzeModel
+from src._constants import SEED
+from src.models.base import NEG_MAE, DfAnalyzeModel
 
 """
 See:
@@ -134,6 +144,9 @@ NETWORK_MAX_WIDTH = 512
 NETWORK_MIN_WIDTH = 32
 BATCH_SIZE = 128
 
+torch.set_num_threads(1)
+torch.set_num_interop_threads(1)
+
 
 class SkorchMLP(Module):
     def __init__(
@@ -141,8 +154,6 @@ class SkorchMLP(Module):
         width: int = NETWORK_MAX_WIDTH,
         depth: int = NETWORK_MAX_DEPTH,
         use_bn: bool = True,
-        use_wd: bool = True,
-        use_drop: bool = True,
         dropout: float = 0.4,
         num_classes: int = 2,
     ) -> None:
@@ -150,8 +161,6 @@ class SkorchMLP(Module):
         self.hparams = dict(
             width=width,
             use_bn=use_bn,
-            use_wd=use_wd,
-            use_drop=use_drop,
             dropout=dropout,
         )
         self.num_classes = num_classes
@@ -159,14 +168,14 @@ class SkorchMLP(Module):
         self.out_channels = num_classes
 
         W = width
-        D = dropout
+        D = dropout if dropout > 0.0 else 0.0
         self.input = LazyLinear(out_features=width)
         self.layers = ModuleList()
         for i in range(depth):
             self.layers.append(Linear(W, W, bias=not use_bn))
             if use_bn:
                 self.layers.append(BatchNorm1d(W))
-            if use_drop and i != depth - 1:
+            if depth - 1:
                 self.layers.append(Dropout(D))
             self.layers.append(LeakyReLU())
 
@@ -177,15 +186,13 @@ class SkorchMLP(Module):
         x = self.input(x)
         x = self.backbone(x)
         x = self.output(x)
-        return x
-
-
-class CosineAnnealingLRWarm(LRScheduler):
-    pass
+        if self.is_classification:
+            return x
+        return torch.flatten(x)
 
 
 def get_T0(
-    X: ndarray,
+    X: Union[ndarray, DataFrame],
     n_epochs: int,
     batch_size: int = BATCH_SIZE,
     val_split: Optional[Union[int, float]] = None,
@@ -203,6 +210,129 @@ def get_T0(
     return n_epochs * n_batches, n_batches
 
 
+class MLPEstimator(DfAnalyzeModel):
+    def __init__(self, num_classes: int, model_args: Mapping | None = None) -> None:
+        super().__init__(model_args)
+        self.is_classifier = num_classes > 1
+        self.model_cls = NeuralNetClassifier if self.is_classifier else NeuralNetRegressor
+        self.model: Union[NeuralNetClassifier, NeuralNetRegressor]
+        self.fixed_args = dict(
+            module=SkorchMLP,
+            module__num_classes=num_classes,
+            criterion=CrossEntropyLoss if self.is_classifier else HuberLoss,
+            optimizer=AdamW,
+            max_epochs=50,
+            batch_size=BATCH_SIZE,
+            # iterator_train__num_workers=1,  # for some reason causes huge slow
+            device="cpu",
+            verbose=0,
+        )
+
+    def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+        widths = (16, 32, 64, 128, 256, 512)
+        bools = (True, False)
+        return dict(
+            # SkorchMLP args
+            module__width=trial.suggest_categorical("module__width", widths),
+            module__depth=trial.suggest_int("module__depth", 3, 8),
+            module__use_bn=trial.suggest_categorical("module__use_bn", bools),
+            module__dropout=trial.suggest_float("module__dropout", 0.0, 0.7, step=0.1),
+            # NeuralNet[Estimator] args
+            early_stopping=trial.suggest_categorical("early_stopping", bools),
+            restarts=trial.suggest_categorical("restarts", bools),
+            optimizer__lr=trial.suggest_float("optimizer__lr", 1e-5, 1e-1, log=True),
+            optimizer__weight_decay=trial.suggest_float(
+                "optimizer__weight_decay", 1e-7, 1e-1, log=True
+            ),
+        )
+
+    def _get_scheduler(
+        self, X_train: DataFrame, restarts: bool, val_split: bool
+    ) -> Union[CosineAnnealingWarmRestarts, CosineAnnealingLR]:
+        cls = CosineAnnealingWarmRestarts if restarts else CosineAnnealingLR
+        split = 0.2 if val_split else None
+        n_epochs = 8 if restarts else 50  # "period" of the annealing
+        period = get_T0(X_train, n_epochs=n_epochs, val_split=split)[0]
+        shared: Mapping = dict(eta_min=0, verbose=False, step_every="step")
+        return (
+            LRScheduler(policy=cls, T_0=period, T_mult=2, **shared)  # type: ignore
+            if restarts
+            else LRScheduler(policy=cls, T_max=period, **shared)  # type: ignore
+        )
+
+    @overload
+    def _to_torch(self, X: DataFrame) -> Tensor:
+        ...
+
+    @overload
+    def _to_torch(self, X: DataFrame, y: Series) -> tuple[Tensor, Tensor]:
+        ...
+
+    def _to_torch(
+        self, X: DataFrame, y: Optional[Series] = None
+    ) -> Union[tuple[Tensor, Tensor], Tensor]:
+        Xt = torch.from_numpy(X.to_numpy()).to(dtype=torch.float32)
+        if y is None:
+            return Xt
+
+        if self.is_classifier:
+            yt = torch.from_numpy(y.to_numpy()).to(dtype=torch.int64)
+        else:
+            yt = torch.from_numpy(y.to_numpy()).to(dtype=torch.float32)
+        return Xt, yt
+
+    def fit(self, X_train: DataFrame, y_train: Series) -> None:
+        if self.model is None:
+            kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
+            self.model = self.model_cls(**kwargs)
+        X, y = self._to_torch(X_train, y_train)
+        self.model.fit(X, y)
+
+    def predict(self, X: DataFrame) -> ndarray:
+        Xt = self._to_torch(X)
+        return self.model.predict(Xt)
+
+    def predict_proba(self, X: DataFrame) -> ndarray:
+        Xt = self._to_torch(X)
+        return self.model.predict_proba(Xt)
+
+    def optuna_objective(
+        self, X_train: DataFrame, y_train: Series, n_folds: int = 3
+    ) -> Callable[[Trial], float]:
+        X, y = self._to_torch(X_train, y_train)
+
+        def objective(trial: Trial) -> float:
+            raw_args = self.optuna_args(trial)
+            final_args: dict[str, Any] = deepcopy(raw_args)
+            restarts = final_args.pop("restarts")
+            early = final_args.pop("early_stopping")
+
+            callbacks: list[Any] = [EarlyStopping(patience=20)] if early else []
+            sched = self._get_scheduler(X_train, restarts=restarts, val_split=early)
+            callbacks.append(sched)
+
+            final_args["callbacks"] = callbacks
+            args = {**self.fixed_args, **self.default_args, **final_args}
+            estimator = self.model_cls(**args)
+
+            scoring = "accuracy" if self.is_classifier else NEG_MAE
+            kf = StratifiedKFold if self.is_classifier else KFold
+            _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
+            # TODO: maybe use NeuralNet class cv option?
+            # TODO: maybe not use k-fold here due to costs, or e.g. 2-fold
+            scores = cv(
+                estimator,  # type: ignore
+                X=X,
+                y=y,
+                scoring=scoring,
+                cv=_cv,
+                n_jobs=1,
+            )
+            return float(np.mean(scores["test_score"]))
+
+        return objective
+
+
 if __name__ == "__main__":
     X, y = make_classification(2000, 20, n_informative=10, random_state=0)
     X = X.astype(np.float32)
@@ -213,21 +343,35 @@ if __name__ == "__main__":
     y_test = y[1000:]
     wd = 1e-4
     lr = 1e-3
-    for lr in tqdm([1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]):
+    # for lr in tqdm([1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]):
+    for lr in tqdm([1e-4]):
         T0, n_batches = get_T0(X, n_epochs=8, val_split=0.2)
         sched = LRScheduler(
             policy=CosineAnnealingWarmRestarts,  # type: ignore
             T_0=T0,
             T_mult=2,
-            eta_min=1e-6,
+            eta_min=0,
             verbose=False,
+            step_every="step",
+        )
+        T0, n_batches = get_T0(X, n_epochs=50, val_split=0.2)
+        sched = LRScheduler(
+            policy=CosineAnnealingLR,  # type: ignore
+            # T_max=T0,
+            T_max=T0,
+            eta_min=0,
+            verbose=True,
             step_every="step",
         )
         # lrs = sched.simulate(steps=50 * n_batches, initial_lr=lr)
         # epochs = [int(i / n_batches) for i in range(len(lrs))]
-        # plt.plot(epochs, lrs, color="black")
-        # plt.xlabel("Epoch")
-        # plt.ylabel("LR")
+        # ax: Axes
+        # fig, ax = plt.subplots()
+        # ax.plot(epochs, lrs, color="black")
+        # ax.set_xlabel("Epoch")
+        # ax.set_ylabel("LR")
+        # ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0), useOffset=False)
+        # ax.set_yscale("log")
         # plt.show()
         # plt.close()
         # sys.exit()
@@ -237,8 +381,7 @@ if __name__ == "__main__":
             net = NeuralNetClassifier(
                 module=SkorchMLP,
                 module__width=128,
-                module__use_bn=False,
-                module__use_wd=True,
+                module__use_bn=True,
                 module__use_drop=True,
                 module__lr=lr,
                 module__wd=wd,

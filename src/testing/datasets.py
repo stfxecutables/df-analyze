@@ -47,14 +47,15 @@ class TestDataset:
         self.is_multiclass = False
         if self.is_classification:
             df = pd.read_parquet(self.datapath)
-            self.is_multiclass = len(np.unique(df["target"])) > 2
+            num_classes = len(np.unique(df["target"]))
+            self.is_multiclass = num_classes > 2
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)
 
     def train_test_split(
         self, test_size: float = 0.2
-    ) -> tuple[DataFrame, DataFrame, Series, Series]:
+    ) -> tuple[DataFrame, DataFrame, Series, Series, int]:
         df = self.load()
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
@@ -80,7 +81,8 @@ class TestDataset:
                 strat = KBinsDiscretizer(n_bins=3, encode="ordinal").fit_transform(yy)
                 strat = strat.ravel()
         X_tr, X_test, y_tr, y_test = tt_split(X, y, test_size=test_size, stratify=strat)
-        return X_tr, X_test, y_tr, y_test
+        num_classes = len(np.unique(y)) if self.is_classification else 1
+        return X_tr, X_test, y_tr, y_test, num_classes
 
 
 __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]

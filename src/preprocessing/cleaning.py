@@ -292,7 +292,8 @@ def encode_categoricals(
     to_convert = get_cat_cols(df=df, target=target, categoricals=categoricals)
     new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
     new = new.astype(float)
-    new[target] = df[target]
+    new = pd.concat([new, df[target]], axis=1)
+    # new[target] = df[target]
     return new, X.loc[:, to_convert]
 
 
