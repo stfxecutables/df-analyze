@@ -26,5 +26,10 @@ def test_categoricals() -> None:
         assert all(isinstance(c, str) for c in ds.categoricals)
 
 
+def test_splitting() -> None:
+    for name, ds in TEST_DATASETS.items():
+        ds.train_test_split()
+
+
 if __name__ == "__main__":
     pytest.main()
