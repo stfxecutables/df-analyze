@@ -112,3 +112,42 @@ def test_mlp_classifier_tune(capsys: CaptureFixture) -> None:
                 print(f"Tuned score: {score}")
             except Exception as e:
                 raise RuntimeError(f"Got error tuning model on {dsname}") from e
+
+
+def test_mlp_regressor_tune(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        for dsname, ds in TEST_DATASETS.items():
+            if ds.is_classification:
+                continue
+            X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+            if len(X_tr) > MAX_N:
+                X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N)
+
+            try:
+                model = MLPEstimator(
+                    num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
+                )
+                model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=1, verbosity=1)
+                score = model.htune_eval(X_train=X_tr, y_train=y_tr, X_test=X_test, y_test=y_test)
+                print(f"Tuned score: {score}")
+            except Exception as e:
+                raise RuntimeError(f"Got error tuning model on {dsname}") from e
+
+
+def test_mlp_tune_parallel(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        for dsname, ds in TEST_DATASETS.items():
+            X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+            if len(X_tr) > MAX_N:
+                strat = y_tr if ds.is_classification else None
+                X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N, stratify=strat)
+
+            try:
+                model = MLPEstimator(
+                    num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
+                )
+                model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=-1, verbosity=1)
+                score = model.htune_eval(X_train=X_tr, y_train=y_tr, X_test=X_test, y_test=y_test)
+                print(f"Tuned score: {score}")
+            except Exception as e:
+                raise RuntimeError(f"Got error tuning model on {dsname}") from e
