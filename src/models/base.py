@@ -35,7 +35,7 @@ class DfAnalyzeModel(ABC):
         self.fixed_args: dict[str, Any] = {}
         self.default_args: dict[str, Any] = {}
         self.model_args: Mapping = model_args or {}
-        self.tuned_args: Optional[Mapping] = None
+        self.tuned_args: Optional[dict[str, Any]] = None
 
         self.is_refit = False
 
@@ -69,6 +69,7 @@ class DfAnalyzeModel(ABC):
         X_train: DataFrame,
         y_train: Series,
         n_trials: int = 100,
+        n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
         if self.tuned_args is not None:
@@ -79,7 +80,7 @@ class DfAnalyzeModel(ABC):
         study = create_study(direction="maximize", sampler=TPESampler())
         optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(X_train=X_train, y_train=y_train)
-        study.optimize(objective, n_trials=n_trials, n_jobs=-1)
+        study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
         self.tuned_args = study.best_params
         return study
 
