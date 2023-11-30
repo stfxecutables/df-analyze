@@ -72,15 +72,52 @@ def main() -> None:
     # dsname, ds = [*TEST_DATASETS.items()][2]
     X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
 
-    C = 1e3
-    # for C in [1e3, 1e4, 1e5]:
-    #     svc = SVC(kernel="rbf", C=C, probability=False)
-    #     svc.fit(X_tr, y_tr)
-    #     score = svc.score(X_test, y_test)
-    #     print(f"C={C:1.1e} Acc: {score:0.3f}")
-    # sys.exit()
-    svc = SVC(kernel="rbf", C=C, probability=False)
-    svp = SVC(kernel="rbf", C=C, probability=True)
+    # C = 1e3
+    """
+    C=1e0, gamma=1e-3, time:  2.3873, Acc: 0.676
+    C=1e0, gamma=1e-2, time:  1.9640, Acc: 0.697
+    C=1e0, gamma=1e-1, time:  1.9769, Acc: 0.751
+    C=1e1, gamma=1e-4, time:  2.3879, Acc: 0.676
+    C=1e1, gamma=1e-3, time:  1.9439, Acc: 0.702
+    C=1e1, gamma=1e-2, time:  1.6249, Acc: 0.771
+    C=1e1, gamma=1e-1, time:  2.3689, Acc: 0.746
+    C=1e2, gamma=1e-5, time:  2.3852, Acc: 0.676
+    C=1e2, gamma=1e-4, time:  1.9410, Acc: 0.702
+    C=1e2, gamma=1e-3, time:  1.5933, Acc: 0.775
+    C=1e2, gamma=1e-2, time:  1.7900, Acc: 0.759
+    C=1e2, gamma=1e-1, time:  2.3846, Acc: 0.721
+    C=1e3, gamma=1e-6, time:  2.3799, Acc: 0.675
+    C=1e3, gamma=1e-5, time:  1.9431, Acc: 0.702
+    C=1e3, gamma=1e-4, time:  1.5920, Acc: 0.773
+    C=1e3, gamma=1e-3, time:  1.7631, Acc: 0.775
+    C=1e3, gamma=1e-2, time:  2.6966, Acc: 0.734
+    C=1e3, gamma=1e-1, time:  2.3175, Acc: 0.720
+    C=1e4, gamma=1e-7, time:  2.3752, Acc: 0.675
+    C=1e4, gamma=1e-6, time:  1.9323, Acc: 0.702
+    C=1e4, gamma=1e-5, time:  1.5921, Acc: 0.773
+    C=1e4, gamma=1e-4, time:  1.7763, Acc: 0.767
+    C=1e4, gamma=1e-3, time:  3.6912, Acc: 0.765
+    C=1e4, gamma=1e-2, time:  3.0300, Acc: 0.690
+    C=1e4, gamma=1e-1, time:  2.3028, Acc: 0.719
+    C=1e5, gamma=1e-7, time:  1.9390, Acc: 0.702
+    C=1e5, gamma=1e-6, time:  1.5879, Acc: 0.772
+    C=1e5, gamma=1e-5, time:  1.7750, Acc: 0.766
+    C=1e5, gamma=1e-4, time:  3.7669, Acc: 0.767
+    C=1e5, gamma=1e-3, time: 11.4467, Acc: 0.733
+    """
+    for C in [1e-1, 1e0, 1e1, 1e2, 1e3, 1e4, 1e5]:
+        for gamma in [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3]:
+            svc = SVC(kernel="rbf", C=C, gamma=gamma, probability=False)
+            start = time.time()
+            svc.fit(X_tr, y_tr)
+            duration = time.time() - start
+            score = svc.score(X_test, y_test)
+            print(f"C={C:1.1e}, gamma={gamma:1.1e}, time: {duration:0.4f}, Acc: {score:0.3f}")
+    sys.exit()
+
+    # C=1e3, gamma=1e-3, time:  1.7631, Acc: 0.775
+    svc = SVC(kernel="rbf", C=1e-3, gamma=1e-3, probability=False)
+    svp = SVC(kernel="rbf", C=1e-3, gamma=1e-3, probability=True)
 
     start = time.time()
     svc.fit(X_tr, y_tr)
@@ -120,6 +157,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    main()
+    sys.exit()
     dsname, ds = [*TEST_DATASETS.items()][5]
     # dsname, ds = [*TEST_DATASETS.items()][2]
 

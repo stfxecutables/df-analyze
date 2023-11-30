@@ -26,6 +26,7 @@ from src.preprocessing.cleaning import (
     encode_categoricals,
     encode_target,
     handle_continuous_nans,
+    normalize,
     remove_timestamps,
 )
 
@@ -65,6 +66,7 @@ class TestDataset:
             cats = list(set(cats).difference(dropped))
             df = handle_continuous_nans(df, target="target", cat_cols=cats, nans=NanHandling.Median)
             df = encode_categoricals(df, target="target", categoricals=cats)[0]
+            df = normalize(df, "target")
             df = df.copy(deep=True)
 
             X = df.drop(columns="target")
