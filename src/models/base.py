@@ -8,15 +8,17 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import sys
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Type, Union
+from typing import Any, Callable, Generic, Mapping, Optional, Type, TypeVar, Union
 
 import numpy as np
 import optuna
 from optuna import Study, Trial, create_study
 from optuna.samplers import TPESampler
 from pandas import DataFrame, Series
+from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.model_selection import cross_validate as cv
 
@@ -30,13 +32,14 @@ class DfAnalyzeModel(ABC):
         super().__init__()
         self.is_classifier: bool = True
         self.needs_calibration: bool = False
-        self.model_cls: Type[Any]
+        self.model_cls: Type[Any] = type(None)
         self.model: Optional[Any] = None
         self.fixed_args: dict[str, Any] = {}
         self.default_args: dict[str, Any] = {}
         self.model_args: Mapping = model_args or {}
-        self.tuned_args: Optional[dict[str, Any]] = None
 
+        self.tuned_args: Optional[dict[str, Any]] = None
+        self.tuned_model: Optional[Any] = None
         self.is_refit = False
 
     def optuna_objective(
@@ -48,6 +51,7 @@ class DfAnalyzeModel(ABC):
             args = {**self.fixed_args, **self.default_args, **self.optuna_args(trial)}
             estimator = self.model_cls(**args)
             scoring = "accuracy" if self.is_classifier else NEG_MAE
+            time.sleep(1)  # secs
             scores = cv(
                 estimator,  # type: ignore
                 X=X_train,
@@ -56,6 +60,7 @@ class DfAnalyzeModel(ABC):
                 cv=_cv,
                 n_jobs=1,
             )
+            time.sleep(1)  # secs
             return float(np.mean(scores["test_score"]))
 
         return objective
@@ -81,7 +86,10 @@ class DfAnalyzeModel(ABC):
         optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(X_train=X_train, y_train=y_train)
         study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
+        print("Optuna tuning completed")
         self.tuned_args = study.best_params
+        self.refit(X=X_train, y=y_train, overrides=self.tuned_args)
+
         return study
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
@@ -98,8 +106,12 @@ class DfAnalyzeModel(ABC):
             **self.model_args,
             **overrides,
         }
-        self.model = self.model_cls(**kwargs)
-        self.model.fit(X, y)
+        self.tuned_model = self.model_cls(**kwargs)
+
+        if self.needs_calibration:
+            self.tuned_model = CVCalibrate(self.tuned_model, method="sigmoid", cv=5, n_jobs=5)
+
+        self.tuned_model.fit(X, y)
 
     def htune_eval(
         self,
@@ -136,9 +148,7 @@ class DfAnalyzeModel(ABC):
         if not self.is_classifier:
             raise ValueError("Cannot get probabilities for a regression model.")
 
-        if self.model is None:
-            raise RuntimeError("Need to call `model.fit()` before calling `.predict_proba()`")
+        if self.tuned_args is None or self.tuned_model is None:
+            raise RuntimeError("Need to tune estimator before calling `.predict_proba()`")
 
-        if not hasattr(self.model, "predict_proba"):
-            raise AttributeError(f"No `predict_proba` method found on model {self.model}")
-        return self.model.predict_proba(X)
+        return self.tuned_model.predict_proba(X)
