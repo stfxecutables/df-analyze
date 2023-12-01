@@ -98,7 +98,7 @@ class DfAnalyzeModel(ABC):
         ...
 
     def optuna_objective(
-        self, X_train: DataFrame, y_train: Series, n_folds: int = 3
+        self, X_train: DataFrame, y_train: Series, n_folds: int = 5
     ) -> Callable[[Trial], float]:
         X = np.asarray(X_train)
         y = np.asarray(y_train)
