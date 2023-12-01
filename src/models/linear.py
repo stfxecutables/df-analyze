@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional, Type
 
 from optuna import Trial
 
@@ -25,6 +25,9 @@ class ElasticNetRegressor(DfAnalyzeModel):
         self.model_cls = ElasticNet
         self.fixed_args = dict(max_iter=2000)
 
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
+
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
             alpha=trial.suggest_float("alpha", 0.01, 1.0),
@@ -39,6 +42,9 @@ class LRClassifier(DfAnalyzeModel):
         self.model_cls = LogisticRegression
         self.fixed_args = dict(max_iter=2000, penalty="elasticnet", solver="saga")
         self.default_args = dict(l1_ratio=0.5)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(

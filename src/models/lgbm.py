@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+from typing import Any, Type
+
 from lightgbm import LGBMClassifier, LGBMRegressor
 
 from src.models.base import DfAnalyzeModel
@@ -21,6 +23,10 @@ class LightGBMEstimator(DfAnalyzeModel):
         super().__init__(model_args)
         self.is_classifier = False
         self.fixed_args = dict(verbosity=-1)
+        self.model_cls: Type[Any] = type(None)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
 
     # https://neptune.ai/blog/lightgbm-parameters-guide
     # https://medium.com/optuna/lightgbm-tuner-new-optuna-integration-for-hyperparameter-optimization-8b7095e99258
@@ -44,6 +50,10 @@ class LightGBMRFEstimator(DfAnalyzeModel):
         # https://github.com/microsoft/LightGBM/issues/1333
         self.fixed_args = dict(verbosity=-1)
         self.default_args = dict(bagging_freq=1, bagging_fraction=0.75)
+        self.model_cls: Type[Any] = type(None)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
 
     # https://neptune.ai/blog/lightgbm-parameters-guide
     # https://medium.com/optuna/lightgbm-tuner-new-optuna-integration-for-hyperparameter-optimization-8b7095e99258

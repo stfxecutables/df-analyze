@@ -293,7 +293,7 @@ class MLPEstimator(DfAnalyzeModel):
         X, y = self._to_torch(X_train, y_train)
         self.model.fit(X, y)
 
-    def refit(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
+    def refit_tuned(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
         overrides = overrides or {}
         kwargs = {
             **self.fixed_args,
@@ -381,7 +381,7 @@ class MLPEstimator(DfAnalyzeModel):
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
 
         args = self._to_model_args(self.tuned_args, X_train)
-        self.refit(X_train, y_train, overrides=args)
+        self.refit_tuned(X_train, y_train, overrides=args)
         # TODO: return Platt-scaling or probability estimates
         return self.score(X_test, y_test)
 

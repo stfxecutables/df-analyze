@@ -9,14 +9,17 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 import time
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from pathlib import Path
 from typing import Any, Callable, Generic, Mapping, Optional, Type, TypeVar, Union
 
 import numpy as np
 import optuna
 from optuna import Study, Trial, create_study
+from optuna.logging import _get_library_root_logger
+from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
+from optuna.trial import FrozenTrial
 from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.model_selection import KFold, StratifiedKFold
@@ -26,13 +29,47 @@ from src._constants import SEED
 
 NEG_MAE = "neg_mean_absolute_error"
 
+OPT_LOGGER = _get_library_root_logger()
+
+
+class EarlyStopping:
+    # TODO: return k-fold values as they come in and do early stopping on
+    # trials with a bad initial fold?
+    def __init__(self, patience: int = 10, min_trials: int = 20) -> None:
+        self.patience: int = patience
+        self.min_trials: int = min_trials
+        self.has_stopped: bool = False
+
+    def __call__(self, study: Study, trial: FrozenTrial) -> None:
+        """https://github.com/optuna/optuna/issues/1001#issuecomment-1351766030"""
+        if self.has_stopped:
+            # raise optuna.exceptions.TrialPruned()
+            study.stop()
+
+        current_trial = trial.number
+        if current_trial < self.min_trials:
+            return
+        best_trial = study.best_trial.number
+
+        # best_score = study.best_value  # TODO: patience
+        should_stop = (current_trial - best_trial) >= self.patience
+        if should_stop:
+            if not self.has_stopped:
+                OPT_LOGGER.info(
+                    f"Completed {self.patience} trials without metric improvement. "
+                    f"Stopping early at trial {current_trial}. Some trials may still "
+                    "need to finish, and produce a better result. If so, that better "
+                    f"result will be used rather than trial {current_trial}."
+                )
+            self.has_stopped = True
+            study.stop()
+
 
 class DfAnalyzeModel(ABC):
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__()
         self.is_classifier: bool = True
         self.needs_calibration: bool = False
-        self.model_cls: Type[Any] = type(None)
         self.model: Optional[Any] = None
         self.fixed_args: dict[str, Any] = {}
         self.default_args: dict[str, Any] = {}
@@ -42,26 +79,49 @@ class DfAnalyzeModel(ABC):
         self.tuned_model: Optional[Any] = None
         self.is_refit = False
 
+    @abstractmethod
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[Type[Any], dict[str, Any]]:
+        """Allows for conditioning the model based on args (e.g. SVC vs. LinearSVC
+        depending on kernel, and also subsequent removal or addition of necessary
+        args because of this.
+
+        Returns
+        -------
+        model_cls: Type[Any]
+            The model class needed based on `full_args`
+
+        clean_args: dict[str, Any]
+            The args that now work for the returned `model_cls`
+
+        """
+        ...
+
     def optuna_objective(
         self, X_train: DataFrame, y_train: Series, n_folds: int = 3
     ) -> Callable[[Trial], float]:
+        X = np.asarray(X_train)
+        y = np.asarray(y_train)
+
         def objective(trial: Trial) -> float:
             kf = StratifiedKFold if self.is_classifier else KFold
             _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
-            args = {**self.fixed_args, **self.default_args, **self.optuna_args(trial)}
-            estimator = self.model_cls(**args)
-            scoring = "accuracy" if self.is_classifier else NEG_MAE
-            time.sleep(1)  # secs
-            scores = cv(
-                estimator,  # type: ignore
-                X=X_train,
-                y=y_train,
-                scoring=scoring,
-                cv=_cv,
-                n_jobs=1,
-            )
-            time.sleep(1)  # secs
-            return float(np.mean(scores["test_score"]))
+            opt_args = self.optuna_args(trial)
+            full_args = {**self.fixed_args, **self.default_args, **opt_args}
+            scores = []
+            for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
+                X_tr, y_tr = X[idx_train], y[idx_train]
+                X_test, y_test = X[idx_test], y[idx_test]
+                model_cls, clean_args = self.model_cls_args(full_args)
+                estimator = model_cls(**clean_args)
+                estimator.fit(X_tr, y_tr)
+                score = estimator.score(X_test, y_test)
+                score = score if self.is_classifier else -score
+                scores.append(score)
+                # allows pruning
+                trial.report(float(np.mean(scores)), step=step)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+            return float(np.mean(scores))
 
         return objective
 
@@ -82,23 +142,35 @@ class DfAnalyzeModel(ABC):
                 f"Model {self.__class__.__name__} has already been tuned with Optuna"
             )
 
-        study = create_study(direction="maximize", sampler=TPESampler())
+        study = create_study(
+            direction="maximize",
+            sampler=TPESampler(),
+            pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
+        )
         optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(X_train=X_train, y_train=y_train)
-        study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
+        study.optimize(
+            objective,
+            n_trials=n_trials,
+            callbacks=[EarlyStopping(patience=10, min_trials=30)],
+            timeout=64_800,  # 18h * 60min/h * 60 sec/min, leave 6 hr on 24-hour job
+            n_jobs=n_jobs,
+            gc_after_trial=True,
+            show_progress_bar=True,
+        )
         print("Optuna tuning completed")
         self.tuned_args = study.best_params
-        self.refit(X=X_train, y=y_train, overrides=self.tuned_args)
+        self.refit_tuned(X=X_train, y=y_train, overrides=self.tuned_args)
 
         return study
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
-            self.model = self.model_cls(**kwargs)
+            self.model = self.model_cls_args(kwargs)[0](**kwargs)
         self.model.fit(X_train, y_train)
 
-    def refit(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
+    def refit_tuned(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
         overrides = overrides or {}
         kwargs = {
             **self.fixed_args,
@@ -106,7 +178,7 @@ class DfAnalyzeModel(ABC):
             **self.model_args,
             **overrides,
         }
-        self.tuned_model = self.model_cls(**kwargs)
+        self.tuned_model = self.model_cls_args(kwargs)[0](**kwargs)
 
         if self.needs_calibration:
             self.tuned_model = CVCalibrate(self.tuned_model, method="sigmoid", cv=5, n_jobs=5)
@@ -122,17 +194,21 @@ class DfAnalyzeModel(ABC):
     ) -> Any:
         # TODO: need to specify valiation method, and return confidences, etc.
         # Actually maybe just want to call refit in here...
-        if self.tuned_args is None:
+        if self.tuned_model is None:
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
 
-        self.refit(X_train, y_train, overrides=self.tuned_args)
         # TODO: return Platt-scaling or probability estimates
-        return self.score(X_test, y_test)
+        return self.tuned_score(X_test, y_test)
 
     def score(self, X: DataFrame, y: Series) -> float:
         if self.model is None:
             raise RuntimeError("Need to call `model.fit()` before calling `.score()`")
         return self.model.score(X, y)
+
+    def tuned_score(self, X: DataFrame, y: Series) -> float:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to tune model before calling `.tuned_score()`")
+        return self.tuned_model.score(X, y)
 
     def predict(self, X: DataFrame) -> Series:
         if self.model is None:

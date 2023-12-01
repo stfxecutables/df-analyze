@@ -93,8 +93,8 @@ def check_optuna_tune(model: DfAnalyzeModel, mode: Literal["classify", "regress"
     study = model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
 
     overrides = study.best_params
-    model.refit(X_tr, y_tr, overrides=overrides)
-    score = model.score(X_test, y_test)
+    model.refit_tuned(X_tr, y_tr, overrides=overrides)
+    score = model.tuned_score(X_test, y_test)
     s = score if model.is_classifier else -score
     lab = "Acc" if model.is_classifier else "MAE"
     print(f"\n{model.__class__.__name__}: {lab}={s:0.4f}")

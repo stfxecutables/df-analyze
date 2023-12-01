@@ -2,8 +2,9 @@ from __future__ import annotations
 
 # fmt: off
 import sys  # isort: skip
+from copy import deepcopy
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping, Type
 
 from optuna import Trial
 
@@ -15,6 +16,7 @@ sys.path.append(str(ROOT))  # isort: skip
 from typing import Optional
 
 import numpy as np
+import optuna
 from sklearn.metrics.pairwise import cosine_distances, euclidean_distances, manhattan_distances
 from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.model_selection import cross_validate as cv
@@ -30,6 +32,10 @@ class KNNEstimator(DfAnalyzeModel):
         self.is_classifier = False
         self.needs_calibration = False
         self.fixed_args = dict()
+        self.model_cls: Type[Any] = type(None)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, {}
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
@@ -38,37 +44,58 @@ class KNNEstimator(DfAnalyzeModel):
             metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "correlation"]),
         )
 
-    def optuna_objective(
-        self, X_train: DataFrame, y_train: DataFrame, n_folds: int = 3
-    ) -> Callable[[Trial], float]:
-        # precompute to save huge amounts of compute at cost of potentially GBs
-        # of memory
-        distances = {
-            "cosine": cosine_distances(X_train),
-            "l1": manhattan_distances(X_train),
-            "l2": euclidean_distances(X_train),
-            "correlation": np.abs(np.corrcoef(X_train)),
-        }
+    # def optuna_objective(
+    #     self, X_train: DataFrame, y_train: DataFrame, n_folds: int = 3
+    # ) -> Callable[[Trial], float]:
+    #     # precompute to save huge amounts of compute at cost of potentially GBs
+    #     # of memory
+    #     distances = {
+    #         "cosine": cosine_distances(X_train),
+    #         "l1": manhattan_distances(X_train),
+    #         "l2": euclidean_distances(X_train),
+    #         "correlation": np.abs(np.corrcoef(X_train)),
+    #     }
+    #     y = np.asarray(y_train)
 
-        def objective(trial: Trial) -> float:
-            kf = StratifiedKFold if self.is_classifier else KFold
-            _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
-            trial_args = self.optuna_args(trial)
-            metric = str(trial_args.pop("metric"))
-            # NOTE: we force precomputed for repeated trials
-            estimator = self.model_cls(**self.fixed_args, **trial_args, metric="precomputed")
-            scoring = "accuracy" if self.is_classifier else NEG_MAE
-            scores = cv(
-                estimator,  # type: ignore
-                X=distances[metric],
-                y=y_train,
-                scoring=scoring,
-                cv=_cv,
-                n_jobs=1,
-            )
-            return float(np.mean(scores["test_score"]))
+    #     def objective(trial: Trial) -> float:
+    #         kf = StratifiedKFold if self.is_classifier else KFold
+    #         _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
+    #         opt_args = self.optuna_args(trial)
+    #         metric = str(opt_args.pop("metric"))
+    #         clean_args = {**self.fixed_args, **self.default_args, **opt_args}
+    #         clean_args["metric"] = "precomputed"
+    #         # NOTE: we force precomputed for repeated trials
+    #         X = distances[metric]
 
-        return objective
+    #         scores = []
+    #         for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
+    #             X_tr, y_tr = X[idx_train][:, idx_train], y[idx_train]
+    #             X_test, y_test = X[idx_test][:, idx_test], y[idx_test]
+    #             estimator = self.model_cls(**clean_args)
+    #             estimator.fit(X_tr, y_tr)
+    #             score = estimator.score(np.copy(X_test), np.copy(y_test))
+    #             score = score if self.is_classifier else -score
+    #             scores.append(score)
+    #             # allows pruning
+    #             trial.report(float(np.mean(scores)), step=step)
+    #             if trial.should_prune():
+    #                 raise optuna.TrialPruned()
+    #         return float(np.mean(scores))
+
+    #         estimator = self.model_cls(**full_args)
+
+    #         scoring = "accuracy" if self.is_classifier else NEG_MAE
+    #         scores = cv(
+    #             estimator,  # type: ignore
+    #             X=distances[metric],
+    #             y=y_train,
+    #             scoring=scoring,
+    #             cv=_cv,
+    #             n_jobs=1,
+    #         )
+    #         return float(np.mean(scores["test_score"]))
+
+    #     return objective
 
 
 class KNNClassifier(KNNEstimator):

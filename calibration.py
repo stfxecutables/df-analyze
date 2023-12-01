@@ -1,10 +1,9 @@
 import os
 
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-
+# os.environ["OPENBLAS_NUM_THREADS"] = "1"
+# os.environ["MKL_NUM_THREADS"] = "1"
+# os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import sys
 import time
 from argparse import ArgumentParser, Namespace
@@ -157,8 +156,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
-    sys.exit()
+    # main()
+    # sys.exit()
     dsname, ds = [*TEST_DATASETS.items()][5]
     # dsname, ds = [*TEST_DATASETS.items()][2]
 
@@ -166,5 +165,5 @@ if __name__ == "__main__":
     model = SVMClassifier()
     # model = KNNClassifier()
     model.htune_optuna(X_tr, y_tr, n_trials=48, n_jobs=-1, verbosity=1)
-    calibration_plot(model, X_test, y_true=y_test, num_classes=num_classes)
+    # calibration_plot(model, X_test, y_true=y_test, num_classes=num_classes)
     ...
