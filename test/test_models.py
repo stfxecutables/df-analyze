@@ -10,6 +10,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 from pathlib import Path
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,6 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
-from typing_extensions import Literal
 
 from src.models.base import DfAnalyzeModel
 from src.models.knn import KNNClassifier, KNNRegressor
@@ -88,17 +88,19 @@ def check_basics(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) ->
     model.score(X_test, y_test)
 
 
-def check_optuna_tune(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) -> float:
+def check_optuna_tune(
+    model: DfAnalyzeModel, mode: Literal["classify", "regress"]
+) -> tuple[float, Optional[ndarray]]:
     X_tr, X_test, y_tr, y_test = fake_data(mode)
     study = model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
 
     overrides = study.best_params
     model.refit_tuned(X_tr, y_tr, overrides=overrides)
     score = model.tuned_score(X_test, y_test)
-    s = score if model.is_classifier else -score
-    lab = "Acc" if model.is_classifier else "MAE"
-    print(f"\n{model.__class__.__name__}: {lab}={s:0.4f}")
-    return score
+    if model.is_classifier:
+        probs = model.predict_proba(X_test)
+        return score, probs
+    return score, None
 
 
 class TestLinear:

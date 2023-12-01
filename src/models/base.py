@@ -15,6 +15,7 @@ from typing import Any, Callable, Generic, Mapping, Optional, Type, TypeVar, Uni
 
 import numpy as np
 import optuna
+from numpy import ndarray
 from optuna import Study, Trial, create_study
 from optuna.logging import _get_library_root_logger
 from optuna.pruners import MedianPruner
@@ -220,7 +221,7 @@ class DfAnalyzeModel(ABC):
     ) -> Series:
         raise NotImplementedError()
 
-    def predict_proba(self, X: DataFrame) -> Series:
+    def predict_proba(self, X: DataFrame) -> ndarray:
         if not self.is_classifier:
             raise ValueError("Cannot get probabilities for a regression model.")
 
