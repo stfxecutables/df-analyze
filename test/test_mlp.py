@@ -8,12 +8,11 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import numpy as np
-import torch
 from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
 from src.models.mlp import MLPEstimator
-from src.testing.datasets import TEST_DATASETS, fake_data
+from src.testing.datasets import TEST_DATASETS
 
 MAX_N = 1000
 MAX_EPOCHS = 10

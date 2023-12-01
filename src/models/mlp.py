@@ -5,7 +5,7 @@ import sys  # isort: skip
 from pathlib import Path
 from typing import Mapping, Optional, overload
 
-from optuna import Study, Trial
+from optuna import Trial
 
 from pandas import DataFrame, Series  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
@@ -16,42 +16,24 @@ import matplotlib as mpl
 
 mpl.rcParams["axes.formatter.useoffset"] = False
 
-import os
 import sys
-from argparse import ArgumentParser, Namespace
 from copy import deepcopy
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
     Callable,
-    Dict,
-    List,
     Optional,
-    Sequence,
-    Tuple,
     Union,
-    cast,
-    no_type_check,
 )
 from warnings import catch_warnings, simplefilter
 
 import matplotlib.pyplot as plt
 import numpy as np
-import optuna
-import pandas as pd
 import torch
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy import ndarray
-from optuna import create_study
-from optuna.samplers import TPESampler
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
 from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.model_selection import cross_validate as cv
-from sklearn.svm import SVC, SVR
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
@@ -60,7 +42,6 @@ from torch.nn import (
     BatchNorm1d,
     CrossEntropyLoss,
     Dropout,
-    Flatten,
     HuberLoss,
     LazyLinear,
     LeakyReLU,
@@ -72,7 +53,6 @@ from torch.nn import (
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
-from typing_extensions import Literal
 
 from src._constants import SEED
 from src.models.base import NEG_MAE, DfAnalyzeModel

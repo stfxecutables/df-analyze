@@ -1,4 +1,3 @@
-import os
 
 # os.environ["OPENBLAS_NUM_THREADS"] = "1"
 # os.environ["MKL_NUM_THREADS"] = "1"
@@ -6,38 +5,15 @@ import os
 # os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import sys
 import time
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.calibration import CalibrationDisplay
 from sklearn.metrics import brier_score_loss
 from sklearn.svm import SVC
-from typing_extensions import Literal
 
 from src.models.base import DfAnalyzeModel
-from src.models.knn import KNNClassifier
-from src.models.linear import LRClassifier
 from src.models.svm import SVMClassifier
 from src.testing.datasets import TEST_DATASETS
 

@@ -14,9 +14,8 @@ from warnings import catch_warnings, filterwarnings
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split as tt_split
-from sklearn.preprocessing import KBinsDiscretizer, MinMaxScaler
+from sklearn.preprocessing import KBinsDiscretizer
 
 from src._constants import TESTDATA
 from src.enumerables import NanHandling

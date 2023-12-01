@@ -2,28 +2,20 @@ from __future__ import annotations
 
 # fmt: off
 import sys  # isort: skip
-from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Mapping, Type
+from typing import Any, Mapping, Type
 
 from optuna import Trial
 
-from pandas import DataFrame  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 from typing import Optional
 
-import numpy as np
-import optuna
-from sklearn.metrics.pairwise import cosine_distances, euclidean_distances, manhattan_distances
-from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.model_selection import cross_validate as cv
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 
-from src._constants import SEED
-from src.models.base import NEG_MAE, DfAnalyzeModel
+from src.models.base import DfAnalyzeModel
 
 
 class KNNEstimator(DfAnalyzeModel):

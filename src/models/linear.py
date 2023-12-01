@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Any, Mapping, Optional, Type
+from typing import Any, Mapping, Optional
 
 from optuna import Trial
 

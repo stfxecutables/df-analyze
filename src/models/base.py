@@ -8,10 +8,9 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import sys
-import time
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Generic, Mapping, Optional, Type, TypeVar, Union
+from typing import Any, Callable, Mapping, Optional, Type, Union
 
 import numpy as np
 import optuna
@@ -24,7 +23,6 @@ from optuna.trial import FrozenTrial
 from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.model_selection import KFold, StratifiedKFold
-from sklearn.model_selection import cross_validate as cv
 
 from src._constants import SEED
 
