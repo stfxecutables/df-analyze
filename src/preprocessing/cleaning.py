@@ -1,6 +1,6 @@
 from math import ceil
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 from warnings import warn
 
 import numpy as np
@@ -14,6 +14,11 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
+from src.preprocessing.inspection import inspect_str_columns
+
+
+class DataCleaningWarning(UserWarning):
+    """For when df-analyze significantly and automatically alters input data"""
 
 
 def normalize(df: DataFrame, target: str) -> DataFrame:
@@ -30,7 +35,7 @@ def normalize(df: DataFrame, target: str) -> DataFrame:
 def handle_continuous_nans(
     df: DataFrame, target: str, cat_cols: list[str], nans: NanHandling
 ) -> DataFrame:
-    """MUST be on the categorical-encoded df"""
+    """Impute or drop nans based on values not in `cat_cols`"""
     # drop rows where target is NaN: meaningless
     idx = ~df[target].isna()
     df = df.loc[idx]
@@ -83,7 +88,8 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
             "statistically meaningful (i.e. the uncertainty on those metrics or "
             "estimates will be exceedingly large). We thus remove all samples "
             "that belong to these labels, bringing the total number of classes "
-            f"down to {n_cls - np.sum(idx)}"
+            f"down to {n_cls - np.sum(idx)}",
+            category=DataCleaningWarning,
         )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop]
@@ -135,7 +141,7 @@ def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
         return df, []
 
     warn(
-        "Found string-valued features with more unique levels than 20%% of "
+        r"Found string-valued features with more unique levels than 20% of "
         "the total number of samples in the data. This is most likely an "
         "'identifier' or junk feature which has no predictive value, and most "
         "likely should be removed from the data. Even if this is not the case, "
@@ -155,7 +161,7 @@ def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
 
 
 def detect_big_cats(unique_counts: dict[str, int], str_cols: list[str]) -> list[str]:
-    big_cats = [col for col in str_cols if unique_counts[col] >= 50]
+    big_cats = [col for col in str_cols if unique_counts[col] >= 20]
     if len(big_cats) > 0:
         warn(
             "Found string-valued features with more than 50 unique levels. "
@@ -288,6 +294,7 @@ def encode_categoricals(
     detect_big_cats(unique_counts, str_cols)
     if warn_sus:
         detect_sus_cols(unique_counts, int_cols, categoricals, warn_sus=True)
+        inspect_str_columns(X, unique_counts, str_cols)
 
     to_convert = get_cat_cols(df=df, target=target, categoricals=categoricals)
     new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
