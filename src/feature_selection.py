@@ -20,6 +20,9 @@ from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from typing_extensions import Literal
 
+from legacy.src.classifiers import get_classifier_constructor
+from legacy.src.cleaning import get_clean_data
+from legacy.src.regressors import get_regressor_constructor
 from src._constants import SEED
 from src._setup import MEMOIZER
 from src._types import (
@@ -29,10 +32,7 @@ from src._types import (
     FeatureSelection,
     UnivariateMetric,
 )
-from src.classifiers import get_classifier_constructor
-from src.cleaning import get_clean_data
 from src.cli.cli import ProgramOptions, SelectionOptions
-from src.regressors import get_regressor_constructor
 from src.saving import FileType, try_save
 from src.sklearn_pasta._sequential import SequentialFeatureSelector
 

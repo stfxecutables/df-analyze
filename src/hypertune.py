@@ -25,10 +25,8 @@ from sklearn.model_selection import (
     train_test_split,
 )
 
-from src._constants import SEED, VAL_SIZE
-from src._types import Classifier, CVMethod, EstimationMode, Estimator, Regressor
-from src.classifiers import get_classifier_constructor
-from src.objectives import (
+from legacy.src.classifiers import get_classifier_constructor
+from legacy.src.objectives import (
     adaboost_regressor_objective,
     bagging_classifier_objective,
     dtree_classifier_objective,
@@ -44,7 +42,9 @@ from src.objectives import (
     svm_classifier_objective,
     svm_regressor_objective,
 )
-from src.regressors import get_regressor_constructor
+from legacy.src.regressors import get_regressor_constructor
+from src._constants import SEED, VAL_SIZE
+from src._types import Classifier, CVMethod, EstimationMode, Estimator, Regressor
 from src.scoring import (
     accuracy_scorer,
     auc_scorer,
