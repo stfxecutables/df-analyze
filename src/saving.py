@@ -23,7 +23,7 @@ class FileType(Enum):
     Final = "final"
     Feature = "feature"
     Params = "params"
-    Univariate = "univariatae"
+    Univariate = "univariate"
 
 
 @dataclass
@@ -68,7 +68,7 @@ def try_save(
     file_stem: str,
     file_type: FileType,
     selection: Optional[FeatureSelection] = None,
-    cleaning: Tuple[FeatureCleaning] = (),
+    cleaning: Tuple[FeatureCleaning, ...] = (),
 ) -> None:
     if file_type is FileType.Interim:
         outdir = program_dirs.interim_results
