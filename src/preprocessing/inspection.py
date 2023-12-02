@@ -1,5 +1,7 @@
 from math import ceil
 from pathlib import Path
+from shutil import get_terminal_size
+from textwrap import dedent
 from typing import Optional, Union
 from warnings import warn
 
@@ -20,11 +22,43 @@ class MessyDataWarning(UserWarning):
     """For when df-analyze detects (but does not resolve) data problems"""
 
     def __init__(self, message: str) -> None:
-        sep = "=" * 81
+        cols = get_terminal_size((81, 24))[0]
+        sep = "=" * cols
         self.message = f"\n{sep}\n{self.__class__.__name__}:\n{message}\n{sep}"
 
     def __str__(self) -> str:
         return str(self.message)
+
+
+def is_timelike(s: str) -> bool:
+    # https://stackoverflow.com/a/25341965 for this...
+    try:
+        int(s)
+        return False
+    except Exception:
+        ...
+    try:
+        parse(s, fuzzy=False)
+        return True
+    except ValueError:
+        return False
+
+
+def looks_timelike(series: Series) -> tuple[bool, str]:
+    series = series.apply(str)
+    N = len(series)
+    n_subsamp = max(ceil(0.5 * N), 500)
+    n_subsamp = min(n_subsamp, N)
+    idx = np.random.permutation(N)[:n_subsamp]
+
+    percent = series.iloc[idx].apply(is_timelike).sum() / n_subsamp
+    if percent >= 1.0:
+        return True, "100% of data parses as datetime"
+    if percent > (1.0 / 3.0):
+        p = series.loc[idx].apply(is_timelike).mean()
+        if p > 0.5:
+            return True, f"{p*100:02f}% of data appears parseable as datetime data"
+    return False, ""
 
 
 def looks_id_like(series: Series) -> tuple[bool, str]:
@@ -185,7 +219,7 @@ def looks_floatlike(series: Series) -> tuple[bool, str]:
         return False, "Converts to int"
     try:
         series.astype(float)
-        return True, "All values convert to float without error"
+        return True, "All values are not integers and convert to float"
     except Exception:
         pass
 
@@ -205,8 +239,10 @@ def looks_floatlike(series: Series) -> tuple[bool, str]:
 
 
 def inspect_str_columns(
-    df: DataFrame, str_cols: list[str]
-) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    df: DataFrame,
+    str_cols: list[str],
+    _warn: bool = True,
+) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
     """
     Returns
     -------
@@ -216,11 +252,19 @@ def inspect_str_columns(
         Columns that may be ordinal
     id_cols: dict[str, str]
         Columns that may be identifiers
+    time_cols: dict[str, str]
+        Columns that may be timestamps or timedeltas
     """
     float_cols: dict[str, str] = {}
     ord_cols: dict[str, str] = {}
     id_cols: dict[str, str] = {}
+    time_cols: dict[str, str] = {}
     for col in str_cols:
+        maybe_time, desc = looks_timelike(df[col])
+        if maybe_time:
+            time_cols[col] = desc
+            continue  # time is bad enough we don't need other checks
+
         maybe_ord, desc = looks_ordinal(df[col])
         if maybe_ord:
             ord_cols[col] = desc
@@ -234,8 +278,10 @@ def inspect_str_columns(
         maybe_float, desc = looks_floatlike(df[col])
         if maybe_float:
             float_cols[col] = desc
+    if not _warn:
+        return float_cols, ord_cols, id_cols, time_cols
 
-    all_cols = {**float_cols, **ord_cols, **id_cols}
+    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols}
     if len(all_cols) > 0:
         w = max(len(col) for col in all_cols) + 2
     else:
@@ -243,12 +289,13 @@ def inspect_str_columns(
     if len(float_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in float_cols.items()])
         warn(
-            "Found string-valued features that seem to mostly contain continuous values. "
-            "This likely means these columns are formatted oddly (e.g. all values might "
-            "be quoted) or that there is a typo or strange value in the column. df-analyze "
-            "will automatically treat these columns as continuous to prevent wasted compute "
-            "resources that would be incurred with encoding them as categorical, however, "
-            "this might be an error. "
+            "Found string-valued features that seem to mostly contain "
+            "continuous values. This likely means these columns are formatted "
+            "oddly (e.g. all values might be quoted) or that there is a typo "
+            "or strange value in the column. df-analyze will automatically "
+            "treat these columns as continuous to prevent wasted compute "
+            "resources that would be incurred with encoding them as "
+            "categorical, however, this might be an error. "
             f"Columns that may be continuous:\n\n{info}",
             category=MessyDataWarning,
         )
@@ -256,9 +303,10 @@ def inspect_str_columns(
     if len(ord_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in ord_cols.items()])
         warn(
-            "Found string-valued features that could contain ordinal values (i.e. "
-            "non-categorical integer values). Make sure that you have NOT identified "
-            "these values as `--categorical` when configuring df-analyze."
+            "Found string-valued features that could contain ordinal values "
+            "(i.e. non-categorical integer values). Make sure you have NOT "
+            "identified these values as `--categorical` when configuring "
+            "df-analyze. "
             f"Columns that may be ordinal:\n\n{info}",
             category=MessyDataWarning,
         )
@@ -266,13 +314,59 @@ def inspect_str_columns(
     if len(id_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in id_cols.items()])
         warn(
-            "Found string-valued features that likely contain identifiers (i.e. unique "
-            "string or integer values that are assigned arbitrarily). These have no "
-            "predictive value and must be removed from your data in order not to waste "
-            "compute resources. df-analyze will do this automatically, but you should "
-            "remove them from your data yourself to silence this warning. "
-            f"Columns that likely are identifiers:\n\n{info}",
+            "Found string-valued features likely containing identifiers (i.e. "
+            "unique string or integer values that are assigned arbitrarily). "
+            "These have no predictive value and must be removed from your data "
+            "in order not to waste compute resources. df-analyze will do this "
+            "automatically, but you should inspect these features yourself and "
+            "ensure that they are in fact identifiers, and, if so, remove them "
+            "from your data to silence this warning."
+            f"Columns that likely are identifiers:\n\n{info} ",
             category=MessyDataWarning,
         )
 
-    return float_cols, ord_cols, id_cols
+    if len(time_cols) > 0:
+        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in time_cols.items()])
+        warn(
+            "Found string-valued features that appear to be datetime data or "
+            "time differences. Datetime data cannot currently be handled by "
+            "`df-analyze` (or most AutoML or or most automated predictive "
+            "approaches) due to special data preprocessing needs (e.g. "
+            "Fourier features), splitting (e.g. time-based cross-validation, "
+            "forecasting, hindcasting) and in the models used (ARIMA, VAR, "
+            "etc.).\n\n "
+            f"Columns that are likely timestamps:\n\n{info}\n\n"
+            ""
+            "To remove this warning, DELETE these columns from your data, "
+            "or manually edit or convert the column values so they are "
+            "interpretable as a categorical or continuous variable reflecting "
+            "some kind of cyclicality that may be relevant to the predictive "
+            "task. E.g. a variable that stores the time a sample was recorded "
+            "might be converted to categorical variable like:\n\n"
+            ""
+            "  - morning, afternoon, evening, night (for daily data)\n"
+            "  - day of the week (for monthly data)\n"
+            "  - month (for yearly data)\n"
+            "  - season (for multi-year data)\n\n"
+            ""
+            "Or to continuous / ordinal cyclical versions of these, like:\n\n"
+            ""
+            "  - values from 0 to 23 for ordinal representation of day hour\n"
+            "  - values from 0.0 to 23.99 for continuous version of above\n"
+            "  - values from 0 to 7 for day of the week, 0 to 365 for year\n\n"
+            ""
+            "It is possible to convert a single time feature into all of the "
+            "above, i.e. to expand the feature into multiple cyclical features. "
+            "This would be a variant of Fourier features (see e.g.\n\n"
+            ""
+            "\tTian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong "
+            'Jin:\n\t"FEDformer: Frequency Enhanced Decomposed Transformer\n\tfor '
+            'Long-term Series Forecasting", 2022;\n\t'
+            "[http://arxiv.org/abs/2201.12740].\n\n "
+            ""
+            "`df-analyze` may in the future attempt to automate this via "
+            "`sktime` (https://www.sktime.net). ",
+            category=MessyDataWarning,
+        )
+
+    return float_cols, ord_cols, id_cols, time_cols

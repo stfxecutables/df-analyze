@@ -58,32 +58,36 @@ def test_na_handling() -> None:
 
 
 def test_multivariate_interpolate(capsys: CaptureFixture) -> None:
-    for dsname, ds in TEST_DATASETS.items():
-        if dsname in ["community_crime", "news_popularity"]:
-            continue  # extremely slow
-        df = ds.load()
-        cats = ds.categoricals
-        X_cats = df.loc[:, ["target", *cats]]
-        cat_nan_idx = X_cats.isna().to_numpy()
+    with pytest.warns(UserWarning, match="Using experimental multivariate"):
+        for dsname, ds in TEST_DATASETS.items():
+            if dsname in ["community_crime", "news_popularity"]:
+                continue  # extremely slow
+            df = ds.load()
+            cats = ds.categoricals
+            X_cats = df.loc[:, ["target", *cats]]
+            cat_nan_idx = X_cats.isna().to_numpy()
 
-        nans = NanHandling.Impute
-        with capsys.disabled():
-            print(f"Performing multivariate imputation for data: {dsname}")
-        dfc = handle_continuous_nans(df, target="target", cat_cols=cats, nans=nans)
-        clean = dfc.drop(columns=["target", *cats])
-        assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
+            nans = NanHandling.Impute
+            # with capsys.disabled():
+            #     print(f"Performing multivariate imputation for data: {dsname}")
+            dfc = handle_continuous_nans(df, target="target", cat_cols=cats, nans=nans)
+            clean = dfc.drop(columns=["target", *cats])
+            assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
 
-        # Check that categorical and target NaNs unaffected
-        X_cat_clean = dfc.loc[:, ["target", *cats]]
-        cat_nan_idx_clean = X_cat_clean.isna().to_numpy()
-        np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
+            # Check that categorical and target NaNs unaffected
+            X_cat_clean = dfc.loc[:, ["target", *cats]]
+            cat_nan_idx_clean = X_cat_clean.isna().to_numpy()
+            np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
 
 
 def test_encode() -> None:
     for dsname, ds in TEST_DATASETS.items():
         df = ds.load()
         cats = ds.categoricals
-        enc = encode_categoricals(df, target="target", categoricals=cats, warn_sus=False)[0]
+        try:
+            enc = encode_categoricals(df, target="target", categoricals=cats, _warn=False)[0]
+        except Exception as e:
+            raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
         assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
 
 
@@ -94,7 +98,10 @@ def test_encode_warn() -> None:
         df = ds.load()
         cats = ds.categoricals
         with pytest.warns(UserWarning, match="Found string-valued"):
-            enc = encode_categoricals(df, target="target", categoricals=cats, warn_sus=True)[0]
+            try:
+                enc = encode_categoricals(df, target="target", categoricals=cats, _warn=True)[0]
+            except Exception as e:
+                raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
         assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
 
 
@@ -139,7 +146,7 @@ def test_detect_probably_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords, ids = inspect_str_columns(df, str_cols=str_cols)[1:]
+        ords, ids = inspect_str_columns(df, str_cols=["ints"])[1:-1]
     assert "ints" in ords
     assert "ints" in ids
     assert "All unique values in large range" in ords["ints"]

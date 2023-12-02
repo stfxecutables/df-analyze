@@ -14,7 +14,7 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
-from src.preprocessing.inspection import inspect_str_columns
+from src.preprocessing.inspection import inspect_str_columns, looks_timelike
 
 
 class DataCleaningWarning(UserWarning):
@@ -161,7 +161,7 @@ def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
 
 
 def detect_big_cats(unique_counts: dict[str, int], str_cols: list[str]) -> list[str]:
-    big_cats = [col for col in str_cols if unique_counts[col] >= 20]
+    big_cats = [col for col in str_cols if (col in unique_counts) and (unique_counts[col] >= 20)]
     if len(big_cats) > 0:
         warn(
             "Found string-valued features with more than 50 unique levels. "
@@ -269,7 +269,7 @@ def get_cat_cols(df: DataFrame, target: str, categoricals: Union[list[str], int]
 
 
 def encode_categoricals(
-    df: DataFrame, target: str, categoricals: Union[list[str], int], warn_sus: bool = True
+    df: DataFrame, target: str, categoricals: Union[list[str], int], _warn: bool = True
 ) -> tuple[DataFrame, DataFrame]:
     """Treat all features with <= options.cat_threshold as categorical
 
@@ -282,35 +282,36 @@ def encode_categoricals(
         Pandas DataFrame with original categorical variables
 
     """
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    int_cols = X.select_dtypes(include="int").columns.to_list()
+
+    floats, ords, ids, times = inspect_str_columns(X, str_cols, _warn=_warn)
+
     df, drops = drop_id_cols(df, target)
     if isinstance(categoricals, list):
         categoricals = list(set(categoricals).difference(drops))
 
-    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
     unique_counts = get_unq_counts(df=df, target=target)
-    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
-    int_cols = X.select_dtypes(include="int").columns.to_list()
 
     detect_big_cats(unique_counts, str_cols)
-    if warn_sus:
-        detect_sus_cols(unique_counts, int_cols, categoricals, warn_sus=True)
-        inspect_str_columns(X, unique_counts, str_cols)
+    detect_sus_cols(unique_counts, int_cols, categoricals, warn_sus=_warn)
 
     to_convert = get_cat_cols(df=df, target=target, categoricals=categoricals)
-    new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
-    new = new.astype(float)
+    # below will FAIL if we didn't remove timestamps or etc.
+    try:
+        new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
+        new = new.astype(float)
+    except TypeError:
+        inspect_str_columns(X, str_cols, _warn=True)
+        raise RuntimeError(
+            "Could not convert data to floating point after cleaning. Some "
+            "messy data must be removed or cleaned before `df-analyze` can "
+            "continue. See information above."
+        )
     new = pd.concat([new, df[target]], axis=1)
     # new[target] = df[target]
     return new, X.loc[:, to_convert]
-
-
-def is_timelike(s: str) -> bool:
-    # https://stackoverflow.com/a/25341965 for this...
-    try:
-        parse(s, fuzzy=False)
-        return True
-    except ValueError:
-        return False
 
 
 def remove_timestamps(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
@@ -325,24 +326,9 @@ def remove_timestamps(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]
     )
     drops = []
     for col in X.columns:
-        idx = np.random.permutation(len(X))[:n_subsamp]
-        percent = X[col].iloc[idx].apply(is_timelike).sum() / n_subsamp
-        if percent > 1.0 / 3.0:
-            p = X[col].loc[idx].apply(is_timelike).mean()
-            if p > 0.3:
-                warn(
-                    f"A significant proportion ({p*100:02f}%) of the data for feature "
-                    f"`{col}` appears to be parseable as datetime data. Datetime data "
-                    "cannot currently be handled by `df-analyze` (or most AutoML or "
-                    "or most automated predictive approaches) due to special requirements "
-                    "in data preprocessing (e.g. Fourier features), splitting (e.g. time-"
-                    "based cross-validation, forecasting, hindcasting) and in the models "
-                    "used (e.g. ARIMA, VAR, etc.).\n\n"
-                    f"To remove this error, either DELETE the `{col}` column from your data, "
-                    "or manually edit the column values so they are clearly interpretable "
-                    "as a categorical variable."
-                )
-                drops.append(col)
+        maybe_time = looks_timelike(X[col])[0]
+        if maybe_time:
+            drops.append(col)
 
     return df.drop(columns=drops), drops
 
