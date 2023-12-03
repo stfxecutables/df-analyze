@@ -1,3 +1,4 @@
+import sys
 from math import ceil
 from pathlib import Path
 from shutil import get_terminal_size
@@ -24,10 +25,20 @@ class MessyDataWarning(UserWarning):
     def __init__(self, message: str) -> None:
         cols = get_terminal_size((81, 24))[0]
         sep = "=" * cols
-        self.message = f"\n{sep}\n{self.__class__.__name__}:\n{message}\n{sep}"
+        underline = "." * (len(self.__class__.__name__) + 1)
+        self.message = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
 
     def __str__(self) -> str:
         return str(self.message)
+
+
+def messy_inform(message: str) -> None:
+    cols = get_terminal_size((81, 24))[0]
+    sep = "=" * cols
+    title = "Found Messy Data"
+    underline = "." * (len(title) + 1)
+    message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
+    print(message, file=sys.stderr)
 
 
 def is_timelike(s: str) -> bool:
@@ -71,6 +82,9 @@ def looks_id_like(series: Series) -> tuple[bool, str]:
     desc: str
         A string describing why the variable looks like an identifier
     """
+    if looks_floatlike(series)[0]:
+        return False, "Appears float-like"
+
     cnts = np.unique(series.apply(str), return_counts=True)[1]
     if np.all(cnts == 1):  # obvious case
         return True, "All values including possible NaNs are unique"
@@ -80,9 +94,12 @@ def looks_id_like(series: Series) -> tuple[bool, str]:
         # seems unlikely only half of data would have identifier info?
         return False, "More than half of data is NaN"
 
-    cnts = np.unique(dropped, return_counts=True)[1]
+    unqs, cnts = np.unique(dropped, return_counts=True)
     if np.all(cnts == 1):  # also obvious case
         return True, "All non-NaN values are unique"
+
+    if len(unqs) >= (len(dropped) / 2):
+        return True, "More unique values than one half of number of non-NaN samples"
 
     return False, ""
 
@@ -217,6 +234,9 @@ def looks_floatlike(series: Series) -> tuple[bool, str]:
     # for some reasons Python None converts inconsistently to NaN...
     if converts_to_int(series):
         return False, "Converts to int"
+    if looks_ordinal(series)[0]:
+        return False, "Looks ordinal"
+
     try:
         series.astype(float)
         return True, "All values are not integers and convert to float"
@@ -238,11 +258,35 @@ def looks_floatlike(series: Series) -> tuple[bool, str]:
     return False, r"Less than 20% of values parse as floats"
 
 
+def looks_categorical(series: Series) -> tuple[bool, str]:
+    if looks_floatlike(series)[0]:
+        return False, "Converts to float"
+    if looks_timelike(series)[0]:
+        return False, "Looks timelike"
+    if looks_id_like(series)[0]:
+        return False, "Looks identifier-like"
+
+    if not converts_to_int(series):  # already checked not float
+        return True, "String data"
+
+    # Now we have something that converts to int, and doesn't look like an
+    # identifier. It could be a small ordinal or a categorical, but generally
+    # there is no way to be sure. All we can say is if it does NOT look ordinal
+    # then we definitely want to label it as categorical. Otherwise, we should
+    # still flag it.
+    if not looks_ordinal(series)[0]:
+        return True, "Integer data but not ordinal-like"
+
+    return True, "Either categorical or ordinal"
+
+
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
+    categoricals: list[str],
+    ordinals: list[str],
     _warn: bool = True,
-) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
     """
     Returns
     -------
@@ -254,11 +298,16 @@ def inspect_str_columns(
         Columns that may be identifiers
     time_cols: dict[str, str]
         Columns that may be timestamps or timedeltas
+    cat_cols: dict[str, str]
+        Columns that may be categorical and not specified in `--categoricals`
     """
     float_cols: dict[str, str] = {}
     ord_cols: dict[str, str] = {}
     id_cols: dict[str, str] = {}
     time_cols: dict[str, str] = {}
+    cat_cols: dict[str, str] = {}
+    cats = set(categoricals)
+    ords = set(ordinals)
     for col in str_cols:
         maybe_time, desc = looks_timelike(df[col])
         if maybe_time:
@@ -266,76 +315,90 @@ def inspect_str_columns(
             continue  # time is bad enough we don't need other checks
 
         maybe_ord, desc = looks_ordinal(df[col])
-        if maybe_ord:
+        if maybe_ord and (col not in ords) and (col not in cats):
             ord_cols[col] = desc
+
         maybe_id, desc = looks_id_like(df[col])
         if maybe_id:
             id_cols[col] = desc
 
-        if maybe_ord or maybe_id:
-            continue
-
         maybe_float, desc = looks_floatlike(df[col])
         if maybe_float:
             float_cols[col] = desc
-    if not _warn:
-        return float_cols, ord_cols, id_cols, time_cols
 
-    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols}
+        if maybe_float or maybe_id or maybe_time:
+            continue
+
+        maybe_cat, desc = looks_categorical(df[col])
+        if maybe_cat and (col not in ords) and (col not in cats):
+            cat_cols[col] = desc
+
+    if not _warn:
+        return float_cols, ord_cols, id_cols, time_cols, cat_cols
+
+    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols, **cat_cols}
     if len(all_cols) > 0:
         w = max(len(col) for col in all_cols) + 2
     else:
         w = 0
     if len(float_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in float_cols.items()])
-        warn(
+        messy_inform(
             "Found string-valued features that seem to mostly contain "
             "continuous values. This likely means these columns are formatted "
             "oddly (e.g. all values might be quoted) or that there is a typo "
             "or strange value in the column. df-analyze will automatically "
             "treat these columns as continuous to prevent wasted compute "
             "resources that would be incurred with encoding them as "
-            "categorical, however, this might be an error. "
-            f"Columns that may be continuous:\n\n{info}",
-            category=MessyDataWarning,
+            "categorical, however, this might be an error.\n\n"
+            f"Columns that may be continuous:\n{info}"
         )
 
     if len(ord_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in ord_cols.items()])
-        warn(
+        messy_inform(
             "Found string-valued features that could contain ordinal values "
-            "(i.e. non-categorical integer values). Make sure you have NOT "
-            "identified these values as `--categorical` when configuring "
-            "df-analyze. "
-            f"Columns that may be ordinal:\n\n{info}",
-            category=MessyDataWarning,
+            "(i.e. non-categorical integer values) NOT specified with the "
+            "`--ordinals` option. Check if these features are ordinal or "
+            "categorical, and then explicitly pass them to either the "
+            "`--categoricals` or `--ordinals` options when configuring "
+            "df-analyze.\n\n"
+            f"Columns that may be ordinal:\n{info}"
         )
 
     if len(id_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in id_cols.items()])
-        warn(
+        messy_inform(
             "Found string-valued features likely containing identifiers (i.e. "
-            "unique string or integer values that are assigned arbitrarily). "
-            "These have no predictive value and must be removed from your data "
-            "in order not to waste compute resources. df-analyze will do this "
-            "automatically, but you should inspect these features yourself and "
-            "ensure that they are in fact identifiers, and, if so, remove them "
-            "from your data to silence this warning."
-            f"Columns that likely are identifiers:\n\n{info} ",
-            category=MessyDataWarning,
+            "unique string or integer values that are assigned arbitrarily), "
+            "or which have more levels (unique values) than one half of the "
+            "number of (non-NaN) samples in the data. This is most likely an "
+            "identifier or junk feature which has no predictive value, and thus "
+            "should be removed from the data. Even if the feature is not an "
+            "identifer, with such a large number of levels, then a test set "
+            "(either in k-fold, or holdout) will, on average, mostly contain "
+            "values that were never seen during training. Thus, these features "
+            "are essentially undersampled, and too sparse to be useful given "
+            "the amount of data. Encoding this many values also massively "
+            "increases compute costs for little gain. We thus REMOVE these "
+            "features. However, but you should inspect these features "
+            "yourself and ensure these features are not better described as "
+            "either ordinal or continuous. If so, specify them using the  "
+            "`--ordinals` or `--continous` options to df-analyze.\n\n"
+            f"Columns that likely are identifiers:\n{info} "
         )
 
     if len(time_cols) > 0:
         info = "\n".join([f"{col:<{w}} {desc}" for col, desc in time_cols.items()])
-        warn(
+        messy_inform(
             "Found string-valued features that appear to be datetime data or "
             "time differences. Datetime data cannot currently be handled by "
             "`df-analyze` (or most AutoML or or most automated predictive "
             "approaches) due to special data preprocessing needs (e.g. "
             "Fourier features), splitting (e.g. time-based cross-validation, "
             "forecasting, hindcasting) and in the models used (ARIMA, VAR, "
-            "etc.).\n\n "
-            f"Columns that are likely timestamps:\n\n{info}\n\n"
+            "etc.).\n\n"
+            f"Columns that are likely timestamps:\n{info}\n\n"
             ""
             "To remove this warning, DELETE these columns from your data, "
             "or manually edit or convert the column values so they are "
@@ -362,11 +425,46 @@ def inspect_str_columns(
             "\tTian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong "
             'Jin:\n\t"FEDformer: Frequency Enhanced Decomposed Transformer\n\tfor '
             'Long-term Series Forecasting", 2022;\n\t'
-            "[http://arxiv.org/abs/2201.12740].\n\n "
+            "[http://arxiv.org/abs/2201.12740].\n\n"
             ""
             "`df-analyze` may in the future attempt to automate this via "
-            "`sktime` (https://www.sktime.net). ",
-            category=MessyDataWarning,
+            "`sktime` (https://www.sktime.net). "
+        )
+    if len(cat_cols) > 0:
+        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in cat_cols.items()])
+        messy_inform(
+            "Found string-valued features not specified with `--categoricals` "
+            "argument, and that look categorical. These will be one-hot "
+            "encoded to allow use in subsequent analyses. To silence this "
+            "warning, specify them as categoricals or ordinals manually "
+            "either via the CLI or in the spreadsheet file header, "
+            "using the `--categoricals` and/or `--ordinals` option.\n\n"
+            f"Features that look categorical not specified by `--categoricals`:\n{info}"
         )
 
-    return float_cols, ord_cols, id_cols, time_cols
+    return float_cols, ord_cols, id_cols, time_cols, cat_cols
+
+
+def inspect_int_columns(
+    df: DataFrame,
+    int_cols: list[str],
+    categoricals: list[str],
+    ordinals: list[str],
+    _warn: bool = True,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Returns
+    -------
+    ord_cols: dict[str, str]
+        Columns that may be ordinal
+    id_cols: dict[str, str]
+        Columns that may be identifiers
+    """
+    ords, ints = inspect_str_columns(
+        df,
+        str_cols=int_cols,
+        categoricals=categoricals,
+        ordinals=ordinals,
+        _warn=_warn,
+    )[1:3]
+    return ords, ints

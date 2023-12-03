@@ -9,6 +9,8 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 from math import ceil
+from shutil import get_terminal_size
+from sys import stderr
 
 import numpy as np
 import pytest
@@ -20,6 +22,7 @@ from src.cli.cli import get_options
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     encode_categoricals,
+    get_str_cols,
     get_unq_counts,
     handle_continuous_nans,
     inspect_str_columns,
@@ -27,7 +30,7 @@ from src.preprocessing.cleaning import (
     remove_timestamps,
 )
 from src.preprocessing.inspection import inspect_str_columns
-from src.testing.datasets import TEST_DATASETS, fake_data
+from src.testing.datasets import TEST_DATASETS, TestDataset, fake_data
 
 
 def no_cats(df: DataFrame, target: str) -> bool:
@@ -80,15 +83,18 @@ def test_multivariate_interpolate(capsys: CaptureFixture) -> None:
             np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
 
 
-def test_encode() -> None:
-    for dsname, ds in TEST_DATASETS.items():
-        df = ds.load()
-        cats = ds.categoricals
-        try:
-            enc = encode_categoricals(df, target="target", categoricals=cats, _warn=False)[0]
-        except Exception as e:
-            raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
-        assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
+@pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
+def test_encode(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    df = ds.load()
+    cats = ds.categoricals
+    try:
+        enc = encode_categoricals(df, target="target", categoricals=cats, ordinals=[], _warn=False)[
+            0
+        ]
+    except Exception as e:
+        raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
+    assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
 
 
 def test_encode_warn() -> None:
@@ -99,7 +105,9 @@ def test_encode_warn() -> None:
         cats = ds.categoricals
         with pytest.warns(UserWarning, match="Found string-valued"):
             try:
-                enc = encode_categoricals(df, target="target", categoricals=cats, _warn=True)[0]
+                enc = encode_categoricals(
+                    df, target="target", categoricals=cats, ordinals=[], _warn=True
+                )[0]
             except Exception as e:
                 raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
         assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
@@ -110,8 +118,9 @@ def test_timestamp_detection() -> None:
         if dsname not in ["elder"]:
             continue
         df = ds.load()
-        with pytest.warns(UserWarning, match="A significant proportion"):
-            enc, dropped = remove_timestamps(df, target="target")
+        str_cols = get_str_cols(df, "target")
+        times = inspect_str_columns(df, str_cols, ds.categoricals, ordinals=[], _warn=False)[3]
+        assert len(times) == 1
 
 
 def test_str_continuous_warn() -> None:
@@ -124,7 +133,9 @@ def test_str_continuous_warn() -> None:
         cols = X.select_dtypes(include=dtypes).columns.tolist()
 
         # with pytest.warns(UserWarning, match=".*converted into floating.*"):
-        inspect_str_columns(df, str_cols=cols)
+        inspect_str_columns(
+            df, str_cols=cols, categoricals=ds.categoricals, ordinals=[], _warn=False
+        )
 
 
 def test_detect_ordinal() -> None:
@@ -134,8 +145,9 @@ def test_detect_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     str_cols = ["ints"]
+    other: dict = dict(categoricals=[], ordinals=[])
     with pytest.warns(UserWarning, match=".*Columns that may be ordinal.*"):
-        ords = inspect_str_columns(df, str_cols=str_cols)[1]
+        ords = inspect_str_columns(df, str_cols=str_cols, **other)[1]
     assert "ints" in ords
 
 
@@ -146,7 +158,8 @@ def test_detect_probably_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords, ids = inspect_str_columns(df, str_cols=["ints"])[1:-1]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ords, ids = inspect_str_columns(df, str_cols=["ints"], **other)[1:3]
     assert "ints" in ords
     assert "ints" in ids
     assert "All unique values in large range" in ords["ints"]
@@ -160,7 +173,8 @@ def test_detect_heuristically_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords = inspect_str_columns(df, str_cols=["ints"])[1]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
     assert "ints" in ords
     assert "common 0-indexed Likert" in ords["ints"], ords["ints"]
 
@@ -170,7 +184,8 @@ def test_detect_heuristically_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords = inspect_str_columns(df, str_cols=["ints"])[1]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
     assert "ints" in ords
     assert "common Likert" in ords["ints"], ords["ints"]
 
@@ -180,7 +195,8 @@ def test_detect_heuristically_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords = inspect_str_columns(df, str_cols=["ints"])[1]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
     assert "ints" in ords
     assert "common scale max" in ords["ints"], ords["ints"]
 
@@ -190,7 +206,8 @@ def test_detect_heuristically_ordinal() -> None:
         columns=["ints"],
     ).astype(int)
     with pytest.warns(UserWarning):
-        ords = inspect_str_columns(df, str_cols=["ints"])[1]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
     assert "ints" in ords
     assert "common 0-indexed scale max" in ords["ints"], ords["ints"]
 
@@ -202,20 +219,26 @@ def test_detect_ids() -> None:
     )
     str_cols = ["ints"]
     with pytest.warns(UserWarning, match=".*Columns that likely are identifiers.*"):
-        ids = inspect_str_columns(df, str_cols=str_cols)[2]
+        other: dict = dict(categoricals=[], ordinals=[])
+        ids = inspect_str_columns(df, str_cols=str_cols, **other)[2]
     assert "ints" in ids
 
 
 if __name__ == "__main__":
     for dsname, ds in TEST_DATASETS.items():
-        if dsname != "community_crime":
-            continue
+        # if dsname != "forest_fires":
+        #     continue
         df = ds.load()
         X = df.drop(columns="target")
         dtypes = ["object", "string[python]"]
         unqs = get_unq_counts(df, "target")
         str_cols = X.select_dtypes(include=dtypes).columns.tolist()
 
-        print(f"Inspecting string/object columns of {dsname}")
-        inspect_str_columns(df, str_cols=str_cols)
+        # print(f"Inspecting string/object columns of {dsname}")
+        # inspect_str_columns(df, str_cols=str_cols, categoricals=ds.categoricals)
+        w = get_terminal_size((81, 24))[0]
+        print("#" * w, file=stderr)
+        print(f"Checking {dsname}", file=stderr)
+        encode_categoricals(df, "target", ds.categoricals, [])
+        print("#" * w, file=stderr)
         # input("Continue?")

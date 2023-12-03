@@ -21,7 +21,7 @@ from src._constants import TESTDATA
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
-    drop_id_cols,
+    drop_cols,
     encode_categoricals,
     encode_target,
     handle_continuous_nans,
@@ -61,7 +61,7 @@ class TestDataset:
             filterwarnings("ignore", category=UserWarning)
             df, dropped = remove_timestamps(df, target="target")
             cats = list(set(self.categoricals).difference(dropped))
-            df, dropped = drop_id_cols(df, "target")
+            df, dropped = drop_cols(df, "target")
             cats = list(set(cats).difference(dropped))
             df = handle_continuous_nans(df, target="target", cat_cols=cats, nans=NanHandling.Median)
             df = encode_categoricals(df, target="target", categoricals=cats)[0]

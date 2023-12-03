@@ -1,5 +1,8 @@
+import sys
+from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
+from shutil import get_terminal_size
 from typing import Optional, Union
 from warnings import warn
 
@@ -14,11 +17,47 @@ from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
-from src.preprocessing.inspection import inspect_str_columns, looks_timelike
+from src.preprocessing.inspection import (
+    MessyDataWarning,
+    inspect_int_columns,
+    inspect_str_columns,
+    looks_timelike,
+    messy_inform,
+)
 
 
 class DataCleaningWarning(UserWarning):
     """For when df-analyze significantly and automatically alters input data"""
+
+    def __init__(self, message: str) -> None:
+        cols = get_terminal_size((81, 24))[0]
+        sep = "=" * cols
+        underline = "." * (len(self.__class__.__name__) + 1)
+        self.message = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
+
+    def __str__(self) -> str:
+        return str(self.message)
+
+
+@dataclass
+class InspectionResults:
+    floats: dict[str, str]
+    ords: dict[str, str]
+    ids: dict[str, str]
+    times: dict[str, str]
+    cats: dict[str, str]
+    int_ords: dict[str, str]
+    int_ids: dict[str, str]
+    big_cats: dict[str, str]
+
+
+def cleaning_inform(message: str) -> None:
+    cols = get_terminal_size((81, 24))[0]
+    sep = "=" * cols
+    title = "Removing Data Feature"
+    underline = "." * (len(title) + 1)
+    message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
+    print(message, file=sys.stderr)
 
 
 def normalize(df: DataFrame, target: str) -> DataFrame:
@@ -80,7 +119,7 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
     idx = cnts <= 20
     n_cls = len(unqs)
     if np.sum(idx) > 0:
-        warn(
+        cleaning_inform(
             f"The target variable has a number of class labels ({unqs[idx]}) with "
             "less than 20 members. This will cause problems with splitting in "
             "various nested k-fold procedures used in `df-analyze`. In addition, "
@@ -88,8 +127,7 @@ def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
             "statistically meaningful (i.e. the uncertainty on those metrics or "
             "estimates will be exceedingly large). We thus remove all samples "
             "that belong to these labels, bringing the total number of classes "
-            f"down to {n_cls - np.sum(idx)}",
-            category=DataCleaningWarning,
+            f"down to {n_cls - np.sum(idx)}"
         )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop]
@@ -124,79 +162,58 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
     return df, target
 
 
-def drop_id_cols(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
-    X = df.drop(columns=target, errors="ignore").infer_objects()
-    unique_counts = {}
-    for colname in X.columns:
-        try:
-            unique_counts[colname] = len(np.unique(df[colname]))
-        except TypeError:  # happens when can't sort for unique
-            unique_counts[colname] = len(np.unique(df[colname].astype(str)))
-    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
-    # Reasoning: if there are more levels in a categorical than 1/5 of the number
-    # of samples, then in 5-fold, test set will have most levels effectively never
-    # seen before (unless distribution of levels is highly skwewed).
-    id_cols = [col for col in str_cols if unique_counts[col] >= len(df) // 5]
-    if len(id_cols) == 0:
-        return df, []
+def drop_cols(
+    df: DataFrame,
+    kind: str,
+    categoricals: list[str],
+    ordinals: list[str],
+    *col_dicts: dict[str, str],
+) -> tuple[DataFrame, list[str], list[str]]:
+    cols = set()
+    cols_descs = []
+    for d in col_dicts:
+        for col, desc in d.items():
+            cols.add(col)
+            cols_descs.append((col, desc))
+    cols_descs = sorted(cols_descs, key=lambda pair: pair[0])
 
-    warn(
-        r"Found string-valued features with more unique levels than 20% of "
-        "the total number of samples in the data. This is most likely an "
-        "'identifier' or junk feature which has no predictive value, and most "
-        "likely should be removed from the data. Even if this is not the case, "
-        "with such a large number of levels, then a test set (either in k-fold, "
-        "or holdout) will likely simply contain a large number of values for "
-        "such a categorical variable that were never seen during training. Thus "
-        "these features are likely too sparse to be useful given the amount of data, "
-        "and also massively increase compute costs for likely no gain. We thus "
-        "REMOVE these features and do not one-hot encode them. To silence this "
-        "warning, either remove these features from the data, or manually break "
-        "them into a smaller number of categories. "
-        f"String-valued features with too many levels: {id_cols}"
+    if len(cols) <= 0:  # nothing to drop
+        return df, categoricals, ordinals
+
+    w = max(len(col) for col in cols) + 2
+    info = "\n".join([f"{col:<{w}} {desc}" for col, desc in cols_descs])
+    cleaning_inform(
+        f"Dropping features that appear to be {kind}. Additional information "
+        "should be available above.\n\n"
+        f"Dropped features:\n{info}"
     )
-    X = X.drop(columns=id_cols)
-    X[target] = df[target]
-    return X, id_cols
+    drops = list(cols)
+    categoricals = list(set(categoricals).difference(drops))
+    ordinals = list(set(ordinals).difference(drops))
+
+    df = df.drop(columns=drops, errors="ignore")
+    return df, categoricals, ordinals
 
 
-def detect_big_cats(unique_counts: dict[str, int], str_cols: list[str]) -> list[str]:
+def detect_big_cats(
+    unique_counts: dict[str, int], str_cols: list[str], _warn: bool = True
+) -> dict[str, str]:
     big_cats = [col for col in str_cols if (col in unique_counts) and (unique_counts[col] >= 20)]
-    if len(big_cats) > 0:
-        warn(
+    if len(big_cats) > 0 and _warn:
+        messy_inform(
             "Found string-valued features with more than 50 unique levels. "
-            "Unless you have an extremely large number of samples, or if these "
-            "features have a highly imbalanced / skewed distribution, then they "
-            "will cause sparseness after one-hot encoding. This is generally not "
-            "beneficial to most algorithms. You should inspect these features and "
-            "think if it makes sense if they would be predictively useful for the "
-            "given target. If they are unlikely to be useful, consider removing "
-            "them from the data. This will also likely considerably improve "
-            "`df-analyze` predictive performance and reduce compute times. "
+            "Unless you have a large number of samples, or if these features "
+            "have a highly imbalanced / skewed distribution, then they will "
+            "cause sparseness after one-hot encoding. This is generally not "
+            "beneficial to most algorithms. You should inspect these features "
+            "and think if it makes sense if they would be predictively useful "
+            "for the given target. If they are unlikely to be useful, consider "
+            "removing them from the data. This will also likely considerably "
+            "improve `df-analyze` predictive performance and reduce compute "
+            "times. However, we do NOT remove these features automatically\n\n"
             f"String-valued features with over 50 levels: {big_cats}"
         )
-    return big_cats
-
-
-def detect_sus_cols(
-    unique_counts: dict[str, int], int_cols: list[str], cats: Union[list[str], int], warn_sus: bool
-) -> list[str]:
-    sus_ints = [col for col in int_cols if unique_counts[col] < 5]
-    if isinstance(cats, list):
-        sus_cols = sorted(set(sus_ints).difference(cats))
-    else:
-        sus_cols = sorted(set(sus_ints))
-    if len(sus_cols) > 0 and warn_sus:
-        warn(
-            "Found integer-valued features not specified with `--categoricals` "
-            "argument, and which have less than 5 levels (classes) each. "
-            "These features may in fact be categoricals, and if so, should be "
-            "specified as such manually either via the CLI or in the "
-            "spreadsheet file header. Otherwise, they will be left as is, and "
-            "treated as ordinal / continuous. Categorical-like integer-valued "
-            f"features: {sus_cols}"
-        )
-    return sus_cols
+    return {col: f"{unique_counts[col]} levels" for col in big_cats}
 
 
 def get_unq_counts(df: DataFrame, target: str) -> dict[str, int]:
@@ -221,55 +238,87 @@ def floatify(df: DataFrame) -> DataFrame:
     return df
 
 
-def get_cat_cols(df: DataFrame, target: str, categoricals: Union[list[str], int]) -> list[str]:
-    """
-    Parameters
-    ----------
-    df: DataFrame
-        Data. Must contain target.
+def get_str_cols(df: DataFrame, target: str) -> list[str]:
+    X = df.drop(columns=target, errors="ignore")
+    return X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
 
-    target: str
-        Target column name.
 
-    categoricals: Union[list[str], int]
-        User-provided CLI argument to `--categoricals`.
-    """
-    df, drops = drop_id_cols(df, target)
+def get_int_cols(df: DataFrame, target: str) -> list[str]:
+    X = df.drop(columns=target, errors="ignore")
+    return X.select_dtypes(include="int").columns.tolist()
 
-    unique_counts = get_unq_counts(df, target)
-    X = floatify(df.drop(columns=target, errors="ignore").infer_objects())
-    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
 
+def inspect_data(
+    df: DataFrame,
+    target: str,
+    categoricals: Optional[list[str]] = None,
+    ordinals: Optional[list[str]] = None,
+    _warn: bool = True,
+) -> InspectionResults:
+    categoricals = categoricals or []
+    ordinals = ordinals or []
+
+    str_cols = get_str_cols(df, target)
+    int_cols = get_int_cols(df, target)
+
+    df = df.drop(columns=target)
+
+    floats, ords, ids, times, cats = inspect_str_columns(
+        df, str_cols, categoricals, ordinals=ordinals, _warn=_warn
+    )
+    int_ords, int_ids = inspect_int_columns(
+        df, int_cols, categoricals, ordinals=ordinals, _warn=_warn
+    )
+
+    all_cats = [*categoricals, *cats.keys()]
+    unique_counts = get_unq_counts(df=df, target=target)
+    bigs = detect_big_cats(unique_counts, all_cats, _warn=_warn)
+
+    all_ordinals = set(ords.keys()).union(int_ords.keys())
+    ambiguous = all_ordinals.intersection(cats)
+    ambiguous.difference_update(categoricals)
+    ambiguous.difference_update(ordinals)
+    ambiguous = sorted(ambiguous)
+    if len(ambiguous) > 0:
+        raise TypeError(
+            "Cannot automatically determine the cardinality of features: "
+            f"{ambiguous}. Specify each of these as either ordinal or "
+            "categorical using the `--ordinals` and `--categoricals` options "
+            "to df-analyze."
+        )
+
+    return InspectionResults(
+        floats=floats,
+        ords=ords,
+        ids=ids,
+        times=times,
+        cats=cats,
+        int_ords=int_ords,
+        int_ids=int_ids,
+        big_cats=bigs,
+    )
+
+
+def drop_unusable(
+    df: DataFrame,
+    results: InspectionResults,
+    categoricals: list[str],
+    ordinals: list[str],
+) -> tuple[DataFrame, list[str], list[str]]:
     cats = categoricals
-    auto = isinstance(cats, int)
-    # if no threshold specified, only convert what absolutely has to be converted
-    threshold = cats if auto else -1
-    if auto:
-        cat_cols = [col for col, cnt in unique_counts.items() if cnt <= threshold]
-        cat_cols += str_cols
-    else:
-        # warn the user if some int columns look sus, and check for unspecified
-        # categoricals
-        assert isinstance(cats, list)
-
-        cats = set(cats)
-        unspecified = sorted(set(str_cols).difference(cats))
-        if len(unspecified) > 0:
-            warn(
-                "Found string-valued features not specified with `--categoricals` "
-                "argument. These will be one-hot encoded to allow use in subsequent "
-                "analyses. To silence this warning, specify the categoricals "
-                "manually either via the CLI or in the spreadsheet file header."
-                f"Unspecified string-valued features: {unspecified}"
-            )
-
-        cat_cols = list(set(str_cols).union(cats))
-    cat_cols = list(set(cat_cols).difference(drops))
-    return cat_cols
+    ords = ordinals
+    ids, int_ids, times = results.ids, results.int_ids, results.times
+    df, cats, ords = drop_cols(df, "identifiers", cats, ords, ids, int_ids)
+    df, cats, ords = drop_cols(df, "datetime data", cats, ords, times)
+    return df, cats, ords
 
 
 def encode_categoricals(
-    df: DataFrame, target: str, categoricals: Union[list[str], int], _warn: bool = True
+    df: DataFrame,
+    target: str,
+    results: InspectionResults,
+    categoricals: list[str],
+    ordinals: list[str],
 ) -> tuple[DataFrame, DataFrame]:
     """Treat all features with <= options.cat_threshold as categorical
 
@@ -280,69 +329,42 @@ def encode_categoricals(
 
     unencoded: DataFrame
         Pandas DataFrame with original categorical variables
-
     """
-    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
-    str_cols = X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
-    int_cols = X.select_dtypes(include="int").columns.to_list()
 
-    floats, ords, ids, times = inspect_str_columns(X, str_cols, _warn=_warn)
+    y = df[target]
+    df = df.drop(columns=target)
+    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+    to_convert = [*cats, *results.cats.keys()]
 
-    df, drops = drop_id_cols(df, target)
-    if isinstance(categoricals, list):
-        categoricals = list(set(categoricals).difference(drops))
-
-    unique_counts = get_unq_counts(df=df, target=target)
-
-    detect_big_cats(unique_counts, str_cols)
-    detect_sus_cols(unique_counts, int_cols, categoricals, warn_sus=_warn)
-
-    to_convert = get_cat_cols(df=df, target=target, categoricals=categoricals)
     # below will FAIL if we didn't remove timestamps or etc.
     try:
-        new = pd.get_dummies(X, columns=to_convert, dummy_na=True, dtype=float)
+        new = pd.get_dummies(df, columns=to_convert, dummy_na=True, dtype=float)
         new = new.astype(float)
     except TypeError:
-        inspect_str_columns(X, str_cols, _warn=True)
+        inspect_data(df, target, categoricals, ordinals, _warn=True)
         raise RuntimeError(
             "Could not convert data to floating point after cleaning. Some "
             "messy data must be removed or cleaned before `df-analyze` can "
             "continue. See information above."
         )
-    new = pd.concat([new, df[target]], axis=1)
-    # new[target] = df[target]
-    return new, X.loc[:, to_convert]
-
-
-def remove_timestamps(df: DataFrame, target: str) -> tuple[DataFrame, list[str]]:
-    n_subsamp = max(ceil(0.5 * len(df)), 500)
-    n_subsamp = min(n_subsamp, len(df))
-    # time checks can be very slow, so just check a few for each feature first
-    X = (
-        df.drop(columns=target, errors="ignore")
-        .infer_objects()
-        .select_dtypes(include="object")
-        .dropna(axis="index")
-    )
-    drops = []
-    for col in X.columns:
-        maybe_time = looks_timelike(X[col])[0]
-        if maybe_time:
-            drops.append(col)
-
-    return df.drop(columns=drops), drops
+    new = pd.concat([new, y], axis=1)
+    return new, df.loc[:, to_convert]
 
 
 def prepare_data(
-    df: DataFrame, target: str, categoricals: Union[list[str], int], is_classification: bool
+    df: DataFrame,
+    target: str,
+    categoricals: list[str],
+    ordinals: list[str],
+    is_classification: bool,
+    _warn: bool = True,
 ) -> tuple[DataFrame, Series, list[str]]:
     y = df[target]
-    df, t_drops = remove_timestamps(df, target)
-    df, id_drops = drop_id_cols(df, target)
+    results = inspect_data(df, target, categoricals, ordinals, _warn=_warn)
+    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+    raise NotImplementedError()
+
     cats = []
-    if isinstance(categoricals, list):
-        cats = list(set(categoricals).difference(t_drops).difference(id_drops))
-    cat_cols = get_cat_cols(df=df, target=target, categoricals=cats)
     df = handle_continuous_nans(df=df, target=target, cat_cols=cat_cols, nans=NanHandling.Mean)
 
     df = df.drop(columns=target)
