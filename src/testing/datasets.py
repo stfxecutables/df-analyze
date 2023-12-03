@@ -22,12 +22,13 @@ from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
     drop_cols,
+    drop_unusable,
     encode_categoricals,
     encode_target,
     handle_continuous_nans,
     normalize,
-    remove_timestamps,
 )
+from src.preprocessing.inspection import inspect_data
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
@@ -59,12 +60,15 @@ class TestDataset:
         df = self.load()
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
-            df, dropped = remove_timestamps(df, target="target")
-            cats = list(set(self.categoricals).difference(dropped))
-            df, dropped = drop_cols(df, "target")
-            cats = list(set(cats).difference(dropped))
-            df = handle_continuous_nans(df, target="target", cat_cols=cats, nans=NanHandling.Median)
-            df = encode_categoricals(df, target="target", categoricals=cats)[0]
+            results = inspect_data(df, "target", self.categoricals, [], _warn=False)
+            df, cats, ords = drop_unusable(df, results, self.categoricals, [])
+
+            df = handle_continuous_nans(
+                df, target="target", categoricals=cats, nans=NanHandling.Median
+            )
+            df = encode_categoricals(
+                df, target="target", results=results, categoricals=cats, ordinals=ords
+            )[0]
             df = normalize(df, "target")
             df = df.copy(deep=True)
 
@@ -84,6 +88,8 @@ class TestDataset:
         X_tr, X_test, y_tr, y_test = tt_split(X, y, test_size=test_size, stratify=strat)
         num_classes = len(np.unique(y)) if self.is_classification else 1
         return X_tr, X_test, y_tr, y_test, num_classes
+
+    __test__ = False  # https://stackoverflow.com/a/59888230
 
 
 __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
