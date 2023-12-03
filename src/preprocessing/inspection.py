@@ -1,22 +1,27 @@
 import sys
+from dataclasses import dataclass
 from math import ceil
-from pathlib import Path
 from shutil import get_terminal_size
-from textwrap import dedent
-from typing import Optional, Union
-from warnings import warn
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 from dateutil.parser import parse
-from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.impute import IterativeImputer, SimpleImputer
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
-from src.enumerables import NanHandling
-from src.loading import load_spreadsheet
+
+
+@dataclass
+class InspectionResults:
+    floats: dict[str, str]
+    ords: dict[str, str]
+    ids: dict[str, str]
+    times: dict[str, str]
+    cats: dict[str, str]
+    int_ords: dict[str, str]
+    int_ids: dict[str, str]
+    big_cats: dict[str, str]
 
 
 class MessyDataWarning(UserWarning):
@@ -39,6 +44,27 @@ def messy_inform(message: str) -> None:
     underline = "." * (len(title) + 1)
     message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
     print(message, file=sys.stderr)
+
+
+def get_str_cols(df: DataFrame, target: str) -> list[str]:
+    X = df.drop(columns=target, errors="ignore")
+    return X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+
+
+def get_int_cols(df: DataFrame, target: str) -> list[str]:
+    X = df.drop(columns=target, errors="ignore")
+    return X.select_dtypes(include="int").columns.tolist()
+
+
+def get_unq_counts(df: DataFrame, target: str) -> dict[str, int]:
+    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+    unique_counts = {}
+    for colname in X.columns:
+        try:
+            unique_counts[colname] = len(np.unique(df[colname]))
+        except TypeError:  # happens when can't sort for unique
+            unique_counts[colname] = len(np.unique(df[colname].astype(str)))
+    return unique_counts
 
 
 def is_timelike(s: str) -> bool:
@@ -280,6 +306,27 @@ def looks_categorical(series: Series) -> tuple[bool, str]:
     return True, "Either categorical or ordinal"
 
 
+def detect_big_cats(
+    unique_counts: dict[str, int], str_cols: list[str], _warn: bool = True
+) -> dict[str, str]:
+    big_cats = [col for col in str_cols if (col in unique_counts) and (unique_counts[col] >= 20)]
+    if len(big_cats) > 0 and _warn:
+        messy_inform(
+            "Found string-valued features with more than 50 unique levels. "
+            "Unless you have a large number of samples, or if these features "
+            "have a highly imbalanced / skewed distribution, then they will "
+            "cause sparseness after one-hot encoding. This is generally not "
+            "beneficial to most algorithms. You should inspect these features "
+            "and think if it makes sense if they would be predictively useful "
+            "for the given target. If they are unlikely to be useful, consider "
+            "removing them from the data. This will also likely considerably "
+            "improve `df-analyze` predictive performance and reduce compute "
+            "times. However, we do NOT remove these features automatically\n\n"
+            f"String-valued features with over 50 levels: {big_cats}"
+        )
+    return {col: f"{unique_counts[col]} levels" for col in big_cats}
+
+
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
@@ -468,3 +515,54 @@ def inspect_int_columns(
         _warn=_warn,
     )[1:3]
     return ords, ints
+
+
+def inspect_data(
+    df: DataFrame,
+    target: str,
+    categoricals: Optional[list[str]] = None,
+    ordinals: Optional[list[str]] = None,
+    _warn: bool = True,
+) -> InspectionResults:
+    categoricals = categoricals or []
+    ordinals = ordinals or []
+
+    str_cols = get_str_cols(df, target)
+    int_cols = get_int_cols(df, target)
+
+    df = df.drop(columns=target)
+
+    floats, ords, ids, times, cats = inspect_str_columns(
+        df, str_cols, categoricals, ordinals=ordinals, _warn=_warn
+    )
+    int_ords, int_ids = inspect_int_columns(
+        df, int_cols, categoricals, ordinals=ordinals, _warn=_warn
+    )
+
+    all_cats = [*categoricals, *cats.keys()]
+    unique_counts = get_unq_counts(df=df, target=target)
+    bigs = detect_big_cats(unique_counts, all_cats, _warn=_warn)
+
+    all_ordinals = set(ords.keys()).union(int_ords.keys())
+    ambiguous = all_ordinals.intersection(cats)
+    ambiguous.difference_update(categoricals)
+    ambiguous.difference_update(ordinals)
+    ambiguous = sorted(ambiguous)
+    if len(ambiguous) > 0:
+        raise TypeError(
+            "Cannot automatically determine the cardinality of features: "
+            f"{ambiguous}. Specify each of these as either ordinal or "
+            "categorical using the `--ordinals` and `--categoricals` options "
+            "to df-analyze."
+        )
+
+    return InspectionResults(
+        floats=floats,
+        ords=ords,
+        ids=ids,
+        times=times,
+        cats=cats,
+        int_ords=int_ords,
+        int_ids=int_ids,
+        big_cats=bigs,
+    )

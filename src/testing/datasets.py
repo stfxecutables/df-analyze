@@ -21,7 +21,6 @@ from src._constants import TESTDATA
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
-    drop_cols,
     drop_unusable,
     encode_categoricals,
     encode_target,
