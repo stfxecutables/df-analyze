@@ -55,23 +55,26 @@ If an integer, and `--df` is a NumPy array only, specifies the column index.
 """
 
 CATEGORICAL_HELP_STR = """
-If an integer, specifies the count threshold for a feature to be treated as
-categorical (i.e. converted to one-hot). Regardless of the user-specified
-integer value, features with string values will be treated as categorical.
-This is a quick and automatic method that will cause ordinal features (e.g.
-user ratings, Likert-like ratings, self-reported ratings, etc.) to be
-converted to categoricals, which will in general not be desirable if the
-ordinal feature has a large range. Thus it is perferable to explicitly
-specify the categorical features in the form below.
+A string or list of strings, e.g.
 
-If the argument to `--categoricals` is a list of strings, e.g.
+    --categoricals sex gender ancestry education
 
-    --categoricals sex gender ancestry education life_satisfaction
+that specifies which features will be treated as categorical regardless of the
+number of levels or format of the data. If during data cleaning categorical
+variables are detected that are NOT specified by the user, a warning will be
+raised.
+"""
 
-then these features will be treated as categorical regardless of the number
-of levels in each. In this case, if during data cleaning categorical variables
-are detected that are NOT specified by the user, a warning will be raised, and
-then those features will be one-hot encoded anyway.
+ORDINAL_HELP_STR = """
+A string or list of strings, e.g.
+
+    --ordinals star_rating number_of_purchases times_signed_in
+
+that specifies which features will be treated as ordinal regardless of the
+number of levels or format of the data. If during data cleaning categorical
+variables are detected that are NOT specified by the user, a warning will be
+raised. If the values of the specified variables cannot be interpreted as
+integers, then df-analyze will exit with an error.
 """
 
 MODE_HELP_STR = """

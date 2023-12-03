@@ -46,6 +46,7 @@ from src.cli.text import (
     MODE_HELP_STR,
     N_FEAT_HELP,
     NAN_HELP,
+    ORDINAL_HELP_STR,
     OUTDIR_HELP,
     REG_HELP_STR,
     SEP_HELP_STR,
@@ -93,7 +94,8 @@ class CleaningOptions(Debug):
 
     datapath: Path
     target: str
-    categoricals: Union[list[str], int]
+    categoricals: list[str]
+    ordinals: list[str]
     feat_clean: Tuple[FeatureCleaning, ...]
     nan_handling: NanHandling
 
@@ -138,7 +140,8 @@ class ProgramOptions(Debug):
         self,
         datapath: Path,
         target: str,
-        categoricals: Union[list[str], int],
+        categoricals: list[str],
+        ordinals: list[str],
         nan_handling: NanHandling,
         feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
@@ -164,7 +167,8 @@ class ProgramOptions(Debug):
         # other
         self.datapath: Path = self.validate_datapath(datapath)
         self.target: str = target
-        self.categoricals: Union[list[str], int] = categoricals
+        self.categoricals: list[str] = categoricals
+        self.ordinals: list[str] = ordinals
         self.nan_handling: NanHandling = nan_handling
         self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
@@ -194,6 +198,7 @@ class ProgramOptions(Debug):
             datapath=self.datapath,
             target=self.target,
             categoricals=self.categoricals,
+            ordinals=self.ordinals,
             feat_clean=self.feat_clean,
             nan_handling=self.nan_handling,
         )
@@ -359,8 +364,16 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         nargs="+",
         action="store",
         type=str,
-        default=5,
+        default=[],
         help=CATEGORICAL_HELP_STR,
+    )
+    parser.add_argument(
+        "--ordinals",
+        nargs="+",
+        action="store",
+        type=str,
+        default=[],
+        help=ORDINAL_HELP_STR,
     )
     parser.add_argument(
         "--mode",
@@ -474,18 +487,12 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
 
     cli_args = parse_and_merge_args(parser, args)
-    cats = cli_args.categoricals
-    if isinstance(cats, list) and len(cats) == 1:
-        try:
-            n_cats = int(cats[0])
-            cli_args.categoricals = n_cats
-        except ValueError:
-            pass
 
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=cli_args.target,
         categoricals=cli_args.categoricals,
+        ordinals=cli_args.ordinals,
         nan_handling=cli_args.nan,
         feat_clean=cli_args.feat_clean,
         feat_select=cli_args.feat_select,
