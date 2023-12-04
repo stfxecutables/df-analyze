@@ -219,6 +219,26 @@ def test_detect_ids() -> None:
             raise ValueError("Identifier 'communityname' was not detected") from e
 
 
+@pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
+def test_detect_floats(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    df = ds.load()
+    cats = ds.categoricals
+    try:
+        results = inspect_data(df, "target", cats)
+        float_cols = [*results.floats.keys()]
+        if len(float_cols) == 0:
+            return
+
+        X = df[float_cols]
+        X.astype(float)
+
+    except Exception as e:
+        raise ValueError(
+            f"Columns detected as float for data {dsname} could not be coerced to float"
+        ) from e
+
+
 if __name__ == "__main__":
     for dsname, ds in TEST_DATASETS.items():
         # if dsname != "forest_fires":

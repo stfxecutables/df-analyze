@@ -41,14 +41,77 @@ def cleaning_inform(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def normalize(df: DataFrame, target: str) -> DataFrame:
+def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
     """
-    MUST be min-max normalization (e.g. for stat tests with no negatives)
-    and on the categorical-encoded df.
+    Clip data to within twice of its "robust range" (range of 90% of the data),
+    and then min-max normalize.
+
+    Notes
+    -----
+    Since df-analyze accepts arbitrary data, it needs to be somewhat robust to
+    extreme values, and so a naive MinMax normalization seems unwise as a
+    default (i.e. a single outlier can essentially "destroy" the information
+    value of a feature for classifiers that are sensitive to scale, or in
+    general). An ideal automated method might use more advanced outlier
+    detection methods for each feature (e.g. sklearn's OneClassSVM or
+    https://scikit-learn.org/stable/modules/outlier_detection.html).
+
+    Robust, percentile-based normalization (as opposed to quantile-based
+    normalization or normalization based on the probability integral transform)
+    is powerful, generally not being obviously harmful to regular data, but
+    being much better on highly skewed data or data with outliers.
+
+    However, the actual impact of outliers (or rather, anchor points) surely in
+    general depends more on the cumulative magnitudes of those outliers. For
+    example, a feature value that is *double* the maximum value of all other
+    values from the same feature is probably a clear outlier, but is not
+    necessarily going to meaningfully affect the fits.
+
+    Likewise, being an "outlier" may be a useful feature for prediction (e.g.
+    by NOT normalizing or clipping, an estimator like a decision tree may learn
+    an outlier threshold internally, and use this threshold effectively in
+    prediction).
+
+    NOTE: Thus, the optimal normalization strategy depends on the classier.
+    Estimators highly sensitive to feature magnitudes, like linear or
+    piecewise-linear classifers including LinearSVM, ElasticNet, or in theory
+    shallow neural networks, and also support vector machines (for a visual
+    proof of the sensitivity to scale see
+    https://scikit-learn.org/stable/auto_examples/svm/plot_rbf_parameters.html)
+    perhaps benefit immensely from robust normalization.
+
+    Estimators involving decision trees could be harmed by any robust
+    normalization that employs clipping. A nearest-neighbors-based estimator
+    will be harmed by robust normalization and/or clipping if "being an
+    outlier" is something that is correlated across features, i.e. if a sample
+    that is an outlier on one feature also tends to be an outlier on most other
+    features. However, if outlier samples are identified as such by just a
+    small number of features relative to the total number of featurs, then
+    normalization will mask their outlier status. (By contrast, for a
+    neighbors-based estimator, if there are non-predictive features that
+    contain outliers, these will skew the computed distances in a way that is
+    not useful for prediction).
+
+
+
     """
     X = df.drop(columns=target)
-    X_norm = DataFrame(data=MinMaxScaler().fit_transform(X), columns=X.columns)
-    X_norm[target] = df[target]
+    cols = X.columns
+
+    if robust:
+        medians = np.median(X, axis=0)
+        X = X - medians  # robust center
+
+        # clip values 2 times more extreme than 95% of the data
+        rmins = np.percentile(X, 5, axis=0)
+        rmaxs = np.percentile(X, 95, axis=0)
+        rranges = rmaxs - rmins
+        rmins -= 2 * rranges
+        rmaxs += 2 * rranges
+        X = np.clip(X, a_min=rmins, a_max=rmaxs)
+
+    X_norm = DataFrame(data=MinMaxScaler().fit_transform(X), columns=cols)
+    X_norm = pd.concat([X, df[target]], axis=1)
     return X_norm
 
 
