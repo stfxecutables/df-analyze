@@ -144,6 +144,9 @@ def save_parquet(dataset: OpenMLDataset, is_cls: bool) -> None:
     df = to_df(X, y, target, cols)
     if df is None:
         return
+    if "target" not in df.columns:
+        raise KeyError(f"Missing target column for {dataset.name}")
+
     out_parent = CLS if is_cls else REG
     outdir = out_parent / str(dataset.name)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -162,7 +165,7 @@ def save_parquet(dataset: OpenMLDataset, is_cls: bool) -> None:
         readable /= 1024
         unit = "MB"
 
-    print(f"[{readable:03.1f}{unit}] saved to {pq.relative_to(DATA)}")
+    print(f"[{readable:>8.1f}{unit}] saved to {pq.relative_to(DATA)}")
 
 
 if __name__ == "__main__":

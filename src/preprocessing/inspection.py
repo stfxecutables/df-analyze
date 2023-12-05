@@ -3,13 +3,28 @@ from dataclasses import dataclass
 from math import ceil
 from shutil import get_terminal_size
 from typing import Optional
+from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import pandas as pd
 from dateutil.parser import parse
+from dateutil.parser._parser import UnknownTimezoneWarning
 from pandas import DataFrame, Series
+from pandas.core.dtypes.dtypes import CategoricalDtype
 from sklearn.experimental import enable_iterative_imputer  # noqa
+from tqdm import tqdm
 
+from src._constants import N_CAT_LEVEL_MIN
+
+
+@dataclass
+class InflationInfo:
+    col: str
+    to_deflate: list[str]
+    to_keep: list[str]
+    n_deflate: int
+    n_keep: int
+    n_total: int
 
 
 @dataclass
@@ -18,10 +33,15 @@ class InspectionResults:
     ords: dict[str, str]
     ids: dict[str, str]
     times: dict[str, str]
+    consts: dict[str, str]  # true constants
     cats: dict[str, str]
     int_ords: dict[str, str]
     int_ids: dict[str, str]
-    big_cats: dict[str, str]
+    big_cats: dict[str, int]
+    nyan_cats: dict[str, str]
+    inflation: list[InflationInfo]
+    bin_cats: list[str]
+    multi_cats: list[str]
 
 
 class MessyDataWarning(UserWarning):
@@ -48,7 +68,7 @@ def messy_inform(message: str) -> None:
 
 def get_str_cols(df: DataFrame, target: str) -> list[str]:
     X = df.drop(columns=target, errors="ignore")
-    return X.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    return X.select_dtypes(include=["object", "string[python]", "category"]).columns.tolist()
 
 
 def get_int_cols(df: DataFrame, target: str) -> list[str]:
@@ -56,15 +76,19 @@ def get_int_cols(df: DataFrame, target: str) -> list[str]:
     return X.select_dtypes(include="int").columns.tolist()
 
 
-def get_unq_counts(df: DataFrame, target: str) -> dict[str, int]:
+def get_unq_counts(df: DataFrame, target: str) -> tuple[dict[str, int], dict[str, int]]:
     X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
     unique_counts = {}
+    nanless_counts = {}
     for colname in X.columns:
+        nans = df[colname].isna().sum() > 0
         try:
-            unique_counts[colname] = len(np.unique(df[colname]))
+            unqs = np.unique(df[colname])
         except TypeError:  # happens when can't sort for unique
-            unique_counts[colname] = len(np.unique(df[colname].astype(str)))
-    return unique_counts
+            unqs = np.unique(df[colname].astype(str))
+        unique_counts[colname] = len(unqs)
+        nanless_counts[colname] = len(unqs) - int(nans)
+    return unique_counts, nanless_counts
 
 
 def is_timelike(s: str) -> bool:
@@ -75,14 +99,16 @@ def is_timelike(s: str) -> bool:
     except Exception:
         ...
     try:
-        parse(s, fuzzy=False)
+        with catch_warnings():
+            filterwarnings("ignore", category=UnknownTimezoneWarning)
+            parse(s, fuzzy=False)
         return True
     except ValueError:
         return False
 
 
 def looks_timelike(series: Series) -> tuple[bool, str]:
-    series = series.apply(str)
+    series = series.astype(str)
     N = len(series)
     n_subsamp = max(ceil(0.5 * N), 500)
     n_subsamp = min(n_subsamp, N)
@@ -110,6 +136,11 @@ def looks_id_like(series: Series) -> tuple[bool, str]:
     """
     if looks_floatlike(series)[0]:
         return False, "Appears float-like"
+
+    if isinstance(series.dtype, CategoricalDtype):
+        if len(series.dtype.categories) > (len(series) / 2):
+            return True, "More unique values than one half of number of non-NaN samples"
+        return False, "Is Pandas categorical type already"
 
     cnts = np.unique(series.apply(str), return_counts=True)[1]
     if np.all(cnts == 1):  # obvious case
@@ -275,7 +306,7 @@ def looks_floatlike(series: Series) -> tuple[bool, str]:
         return False, "No values parse as valid floats"
 
     if np.mean(idx) > 0.2:
-        odd_vals = np.unique(series.apply(str)[idx]).tolist()
+        odd_vals = np.unique(series.astype(str)[idx]).tolist()
         if len(odd_vals) > 5:
             desc = f"{str(odd_vals[:5])[:-1]} ...]"
         else:
@@ -306,10 +337,23 @@ def looks_categorical(series: Series) -> tuple[bool, str]:
     return True, "Either categorical or ordinal"
 
 
+def looks_constant(series: Series) -> tuple[bool, str]:
+    if len(np.unique(series.astype(str))) == 1:
+        return True, "Single value even if including NaNs"
+    return False, "Two or more unique values including NaNs"
+
+
 def detect_big_cats(
-    unique_counts: dict[str, int], str_cols: list[str], _warn: bool = True
-) -> dict[str, str]:
-    big_cats = [col for col in str_cols if (col in unique_counts) and (unique_counts[col] >= 20)]
+    df: DataFrame, unique_counts: dict[str, int], all_cats: list[str], _warn: bool = True
+) -> tuple[dict[str, int], list[InflationInfo]]:
+    """Detect categoricals with more than 20 levels, and "inflating" categoricals
+    (see notes).
+
+    Notes
+    -----
+    Inflated categoricals we deflate by converting all inflated levels to NaN.
+    """
+    big_cats = [col for col in all_cats if (col in unique_counts) and (unique_counts[col] >= 20)]
     if len(big_cats) > 0 and _warn:
         messy_inform(
             "Found string-valued features with more than 50 unique levels. "
@@ -324,7 +368,30 @@ def detect_big_cats(
             "times. However, we do NOT remove these features automatically\n\n"
             f"String-valued features with over 50 levels: {big_cats}"
         )
-    return {col: f"{unique_counts[col]} levels" for col in big_cats}
+
+    # dict is {colname: list[columns to deflate...]}
+    inflation_info: list[InflationInfo] = []
+    for col in all_cats:
+        unqs, cnts = np.unique(df[col].astype(str), return_counts=True)
+        n_total = len(unqs)
+        if n_total <= 2:  # do not mangle boolean indicators
+            continue
+        keep_idx = cnts >= 50
+        if np.all(keep_idx):
+            continue
+        n_keep = keep_idx.sum()
+        n_deflate = len(keep_idx) - n_keep
+        inflation_info.append(
+            InflationInfo(
+                col=col,
+                to_deflate=unqs[~keep_idx].tolist(),
+                to_keep=unqs[keep_idx].tolist(),
+                n_deflate=n_deflate,
+                n_keep=n_keep,
+                n_total=n_total,
+            )
+        )
+    return {col: unique_counts[col] for col in big_cats}, inflation_info
 
 
 def inspect_str_columns(
@@ -333,7 +400,9 @@ def inspect_str_columns(
     categoricals: list[str],
     ordinals: list[str],
     _warn: bool = True,
-) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
+) -> tuple[
+    dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str]
+]:
     """
     Returns
     -------
@@ -347,15 +416,25 @@ def inspect_str_columns(
         Columns that may be timestamps or timedeltas
     cat_cols: dict[str, str]
         Columns that may be categorical and not specified in `--categoricals`
+    const_cols: dict[str, str]
+        Columns with one value (either all NaN or one value with no NaNs).
     """
     float_cols: dict[str, str] = {}
     ord_cols: dict[str, str] = {}
     id_cols: dict[str, str] = {}
     time_cols: dict[str, str] = {}
     cat_cols: dict[str, str] = {}
+    const_cols: dict[str, str] = {}
     cats = set(categoricals)
     ords = set(ordinals)
-    for col in str_cols:
+    for col in tqdm(
+        str_cols, desc="Inspecting features", total=len(str_cols), disable=len(str_cols) < 50
+    ):
+        is_const, desc = looks_constant(df[col])
+        if is_const:
+            const_cols[col] = desc
+            continue
+
         maybe_time, desc = looks_timelike(df[col])
         if maybe_time:
             time_cols[col] = desc
@@ -381,9 +460,9 @@ def inspect_str_columns(
             cat_cols[col] = desc
 
     if not _warn:
-        return float_cols, ord_cols, id_cols, time_cols, cat_cols
+        return float_cols, ord_cols, id_cols, time_cols, cat_cols, const_cols
 
-    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols, **cat_cols}
+    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols, **cat_cols, **const_cols}
     if len(all_cols) > 0:
         w = max(len(col) for col in all_cols) + 2
     else:
@@ -489,7 +568,16 @@ def inspect_str_columns(
             f"Features that look categorical not specified by `--categoricals`:\n{info}"
         )
 
-    return float_cols, ord_cols, id_cols, time_cols, cat_cols
+    if len(const_cols) > 0:
+        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in const_cols.items()])
+        messy_inform(
+            "Found string-valued features that are constant (i.e. all values) "
+            "are NaN or all values are the same non-NaN value). These contain "
+            "no information and will be removed automatically.\n\n"
+            f"Features that are constant:\n{info}"
+        )
+
+    return float_cols, ord_cols, id_cols, time_cols, cat_cols, const_cols
 
 
 def inspect_int_columns(
@@ -498,7 +586,7 @@ def inspect_int_columns(
     categoricals: list[str],
     ordinals: list[str],
     _warn: bool = True,
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     """
     Returns
     -------
@@ -507,14 +595,59 @@ def inspect_int_columns(
     id_cols: dict[str, str]
         Columns that may be identifiers
     """
-    ords, ints = inspect_str_columns(
+    results = inspect_str_columns(
         df,
         str_cols=int_cols,
         categoricals=categoricals,
         ordinals=ordinals,
         _warn=_warn,
-    )[1:3]
-    return ords, ints
+    )
+    return results[1], results[2], results[5]
+
+
+def inspect_other_columns(
+    df: DataFrame,
+    other_cols: list[str],
+    categoricals: list[str],
+    ordinals: list[str],
+    _warn: bool = True,
+) -> dict[str, str]:
+    """
+    Returns
+    -------
+    const_Cols: dict[str, str]
+        Columns that are constant
+    """
+    const_cols: dict[str, str] = {}
+    # TODO
+    cats = set(categoricals)
+    ords = set(ordinals)
+    for col in tqdm(
+        other_cols, desc="Inspecting features", total=len(other_cols), disable=len(other_cols) < 50
+    ):
+        is_const, desc = looks_constant(df[col])
+        if is_const:
+            const_cols[col] = desc
+            continue
+
+    if not _warn:
+        return const_cols
+
+    all_cols = {**const_cols}
+    if len(all_cols) > 0:
+        w = max(len(col) for col in all_cols) + 2
+    else:
+        w = 0
+
+    if len(const_cols) > 0:
+        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in const_cols.items()])
+        messy_inform(
+            "Found features that are constant (i.e. all values) are NaN or "
+            "all values are the same non-NaN value). These contain no "
+            "information and will be removed automatically.\n\n"
+            f"Features that are constant:\n{info}"
+        )
+    return const_cols
 
 
 def inspect_data(
@@ -526,22 +659,41 @@ def inspect_data(
 ) -> InspectionResults:
     categoricals = categoricals or []
     ordinals = ordinals or []
+    # convert screwy categorical columns which can have all sorts of
+    # annoying behaviours when incorrectly labeled as such
+    for col in df.columns:
+        if df[col].dtype == "categorical":
+            df[col] = df[col].astype(str)
 
     str_cols = get_str_cols(df, target)
     int_cols = get_int_cols(df, target)
 
     df = df.drop(columns=target)
+    remain = set(df.columns.to_list()).difference(str_cols).difference(int_cols)
+    remain = list(remain)
 
-    floats, ords, ids, times, cats = inspect_str_columns(
+    floats, ords, ids, times, cats, consts = inspect_str_columns(
         df, str_cols, categoricals, ordinals=ordinals, _warn=_warn
     )
-    int_ords, int_ids = inspect_int_columns(
+    int_ords, int_ids, int_consts = inspect_int_columns(
         df, int_cols, categoricals, ordinals=ordinals, _warn=_warn
     )
+    other_consts = inspect_other_columns(df, remain, categoricals, ordinals=ordinals, _warn=_warn)
 
+    all_consts = {**consts, **int_consts, **other_consts}
     all_cats = [*categoricals, *cats.keys()]
-    unique_counts = get_unq_counts(df=df, target=target)
-    bigs = detect_big_cats(unique_counts, all_cats, _warn=_warn)
+    unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
+    bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)
+
+    bin_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 2}
+    nyan_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 1}
+    multi_cats = {cat for cat, cnt in nanless_cnts.items() if cnt > 2}
+
+    bin_cats = sorted(bin_cats.intersection(all_cats))
+    nyan_cats = sorted(nyan_cats.intersection(all_cats))
+    multi_cats = sorted(multi_cats.intersection(all_cats))
+
+    nyan_cats = {col: "Constant categorical" for col in nyan_cats}
 
     all_ordinals = set(ords.keys()).union(int_ords.keys())
     ambiguous = all_ordinals.intersection(cats)
@@ -553,7 +705,7 @@ def inspect_data(
             "Cannot automatically determine the cardinality of features: "
             f"{ambiguous}. Specify each of these as either ordinal or "
             "categorical using the `--ordinals` and `--categoricals` options "
-            "to df-analyze."
+            "to df-analyze, or eliminate them using the `--drops` option."
         )
 
     return InspectionResults(
@@ -561,8 +713,13 @@ def inspect_data(
         ords=ords,
         ids=ids,
         times=times,
+        consts=all_consts,
         cats=cats,
         int_ords=int_ords,
         int_ids=int_ids,
         big_cats=bigs,
+        inflation=inflation,
+        bin_cats=bin_cats,
+        nyan_cats=nyan_cats,
+        multi_cats=multi_cats,
     )

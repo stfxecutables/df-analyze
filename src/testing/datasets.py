@@ -45,10 +45,12 @@ class TestDataset:
         df = df.loc[df["feature_name"] != "target"]
         self.categoricals = df["feature_name"].to_list()
         self.is_multiclass = False
+
+        df = self.load()
         if self.is_classification:
-            df = pd.read_parquet(self.datapath)
-            num_classes = len(np.unique(df["target"]))
+            num_classes = len(np.unique(df["target"].astype(str)))
             self.is_multiclass = num_classes > 2
+        self.shape = df.shape
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)
@@ -60,9 +62,10 @@ class TestDataset:
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
-            df, cats, ords = drop_unusable(df, results, self.categoricals, [])
+            cats = [*self.categoricals, *results.cats.keys()]
+            df, cats, ords = drop_unusable(df, results, cats, [])
 
-            df = handle_continuous_nans(
+            df, nan_ind = handle_continuous_nans(
                 df, target="target", categoricals=cats, nans=NanHandling.Median
             )
             df = encode_categoricals(

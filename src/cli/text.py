@@ -77,6 +77,16 @@ raised. If the values of the specified variables cannot be interpreted as
 integers, then df-analyze will exit with an error.
 """
 
+DROP_HELP_STR = """
+A string or list of strings, e.g.
+
+    --drops subject_id location_id useless_feature1 useless_feat2
+
+that specifies which features will be removed from the data and not considered
+for any inspection, description or univariate analysis, and which will not be
+included in any feature selection, model tuning, or final predictive models.
+"""
+
 MODE_HELP_STR = """
 If "classify", do classification. If "regress", do regression.
 
@@ -295,6 +305,11 @@ Controls amount of output to stdout and stderr. Options:
   1:         INFO: Logging for each Optuna trial and various interim results.
   2:         DEBUG: Currently unimplemented.
 
+"""
+
+EXPLODE_HELP = """
+If this flag is present, silence the warnings about large increases in the
+number of features due to one-hot encoding of categoricals.
 """
 
 DESC = f"""

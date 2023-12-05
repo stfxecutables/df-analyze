@@ -1,4 +1,5 @@
 import sys
+from math import ceil
 from pathlib import Path
 from shutil import get_terminal_size
 from warnings import warn
@@ -11,11 +12,14 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 
+from src._constants import MAX_PERF_N_FEATURES, MAX_STEPWISE_SELECTION_N_FEATURES
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
 from src.preprocessing.inspection import (
+    InflationInfo,
     InspectionResults,
     inspect_data,
+    messy_inform,
 )
 
 
@@ -98,6 +102,8 @@ def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
     X = df.drop(columns=target)
     cols = X.columns
 
+    # need to not normalize one-hot columns...
+
     if robust:
         medians = np.median(X, axis=0)
         X = X - medians  # robust center
@@ -121,7 +127,7 @@ def handle_continuous_nans(
     categoricals: list[str],
     nans: NanHandling,
     add_indicators: bool = True,
-) -> DataFrame:
+) -> tuple[DataFrame, int]:
     """Impute or drop nans based on values not in `cat_cols`"""
     # drop rows where target is NaN: meaningless
     idx = ~df[target].isna()
@@ -129,6 +135,7 @@ def handle_continuous_nans(
     # NaNs in categoricals are handled as another dummy indicator
     drops = list(set(categoricals).union([target]))
     X = df.drop(columns=drops, errors="ignore")
+
     X_cat = df[categoricals]
     y = df[target]
 
@@ -136,8 +143,12 @@ def handle_continuous_nans(
     if add_indicators:
         X_nan = X.isna().astype(float)
         X_nan.rename(columns=lambda s: f"{s}_NAN", inplace=True)
+        # remove constant indicators
+        X_nan = X_nan.loc[:, X_nan.sum(axis=0) != 0]
 
-    if nans is NanHandling.Drop:
+    if X.empty:
+        X_clean = X
+    elif nans is NanHandling.Drop:
         X_clean = X.dropna(axis="columns").dropna(axis="index")
         if 0 in X_clean.shape:
             others = [na.value for na in NanHandling if na is not NanHandling.Drop]
@@ -163,9 +174,10 @@ def handle_continuous_nans(
 
     if add_indicators:
         X = pd.concat([X_nan, X_clean, X_cat, y], axis=1)  # type: ignore
-    else:
-        X = pd.concat([X_clean, X_cat, y], axis=1)
-    return X
+        return X, int(X_nan.shape[1])  # type: ignore
+
+    X = pd.concat([X_clean, X_cat, y], axis=1)
+    return X, 0
 
 
 def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
@@ -266,11 +278,62 @@ def drop_unusable(
     categoricals: list[str],
     ordinals: list[str],
 ) -> tuple[DataFrame, list[str], list[str]]:
+    """Drops identifiers, datetime, constants"""
     cats = categoricals
     ords = ordinals
     ids, int_ids, times = results.ids, results.int_ids, results.times
+    consts = results.consts
     df, cats, ords = drop_cols(df, "identifiers", cats, ords, ids, int_ids)
     df, cats, ords = drop_cols(df, "datetime data", cats, ords, times)
+    df, cats, ords = drop_cols(df, "constant", cats, ords, consts)
+    return df, cats, ords
+
+
+def deflate_categoricals(
+    df: DataFrame,
+    results: InspectionResults,
+    categoricals: list[str],
+    ordinals: list[str],
+    _warn: bool = True,
+) -> tuple[DataFrame, list[str], list[str]]:
+    df = df.copy()
+    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+
+    infos = sorted(results.inflation, key=lambda info: info.to_deflate, reverse=True)
+
+    for info in infos:
+        col = info.col
+        nan = df[col].isna()
+        df[col] = df[col].astype(str)
+        for level in info.to_deflate:
+            idx = df[col] == level
+            df.loc[idx, col] = np.nan
+        df.loc[nan, col] = np.nan
+
+    if len(infos) > 0:
+        w = max(len(info.col) for info in infos) + 2
+    else:
+        w = 0
+    if _warn and len(infos) > 0:
+        message = "\n".join([f"{info.col:<{w}} {info.n_total} --> {info.n_keep}" for info in infos])
+        messy_inform(
+            "Found and 'deflated' a number of categorical variables with "
+            "levels that are unlikely to be reliable or useful in prediction. "
+            "For each level of categorical variable to be predictively useful, "
+            "there must be enough samples to be statistically meaningful (or to "
+            "allow some reasonable generalization) in each fold used for fitting "
+            "or analyses. Roughly, this means each fold needs to see at least "
+            "10-20 samples of each level (depending on how strongly / cleanly "
+            "the level relates to other features - ultimately this is just a "
+            "heuristic). Assuming k-fold is used for validation, then this means "
+            "about k*10 samples per categorical level would a reasonable default "
+            "minimum requirement one might use for culling categorical levels. "
+            "Under the typical assumption of k=5, this means we require useful / "
+            "reliable categorical levels to have 50 samples each.\n\n"
+            "Deflated categorical variables (before --> after):\n"
+            f"{message}"
+        )
+
     return df, cats, ords
 
 
@@ -280,8 +343,9 @@ def encode_categoricals(
     results: InspectionResults,
     categoricals: list[str],
     ordinals: list[str],
+    warn_explosion: bool = True,
 ) -> tuple[DataFrame, DataFrame]:
-    """Treat all features with <= options.cat_threshold as categorical
+    """
 
     Returns
     -------
@@ -295,11 +359,19 @@ def encode_categoricals(
     y = df[target]
     df = df.drop(columns=target)
     df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+    df, cats, ords = deflate_categoricals(df, results, cats, ords, _warn=warn_explosion)
     to_convert = [*cats, *results.cats.keys()]
 
     # below will FAIL if we didn't remove timestamps or etc.
     try:
-        new = pd.get_dummies(df, columns=to_convert, dummy_na=True, dtype=float)
+        bins = sorted(set(results.bin_cats).intersection(cats))
+        multis = sorted(set(results.multi_cats).intersection(cats))
+        nyans = sorted(set(results.nyan_cats).intersection(cats))
+
+        new = df
+        new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
+        new = pd.get_dummies(new, columns=nyans, dummy_na=True, drop_first=True)
+        new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)
         new = new.astype(float)
     except TypeError:
         inspect_data(df, target, categoricals, ordinals, _warn=True)
@@ -308,6 +380,73 @@ def encode_categoricals(
             "messy data must be removed or cleaned before `df-analyze` can "
             "continue. See information above."
         )
+
+    # warn about large number of features
+    old_feats = df.shape[1]
+    enc_feats = new.shape[1]
+    big_cats = results.big_cats
+    n_orig = len(to_convert)
+    n_cont = old_feats - n_orig
+    n_enc_total = enc_feats - n_cont
+    n_big_orig = len(big_cats)
+    n_small_orig = n_orig - n_big_orig
+    n_big_enc = sum(big_cats.values(), start=0)
+    n_small_enc = n_enc_total - n_big_enc
+    n_small_added = n_small_enc - n_small_orig
+    n_big_added = n_big_enc - n_big_orig
+
+    if enc_feats < MAX_PERF_N_FEATURES:
+        new = pd.concat([new, y], axis=1)
+        return new, df.loc[:, to_convert]
+
+    names = reversed(sorted(big_cats.keys(), key=lambda col: big_cats[col]))
+    if n_big_enc > 0:
+        info = "\n".join([f"{cat}: {big_cats[cat]} levels" for cat in names])
+        big_message = (
+            "\n\n"
+            "Some of the increase in data size was due to encoding categorical "
+            "features with a large (20+) number of levels / categories. These "
+            f"features in total added {n_big_added} additional features to "
+            "the data. Often, a categorical variable with a large number of "
+            "levels will not contain much predictive information in most of "
+            "the levels (i.e. only a few classes will be useful). Inspect "
+            "df-analyze's univariate association and prediction reports and "
+            "consider whether either manually removing some of these features "
+            "using the `--drops` option is warranted, or otherwise specify "
+            "a filter-based automatic selection method.\n\n"
+            f"Large categoricals:\n{info}"
+        )
+    else:
+        big_message = ""
+
+    small_names = sorted(set(to_convert).difference(names))
+    if len(small_names) > 0:
+        small_message = (
+            "\n\n"
+            "Some of the increase in data size was due to encoding categorical "
+            f"features. These were the features: {small_names}, which in "
+            f"total added {n_small_added} additional features to the data. "
+            "Inspect df-analyze's univariate association and prediction "
+            "reports and consider whether either manually removing some of "
+            "these features using the `--drops` option is warranted, or "
+            "otherwise specify a filter-based automatic selection method. "
+        )
+    else:
+        small_message = ""
+
+    # handle data explosion due to one-hot encoding
+    if (n_enc_total / n_orig) > 10 and warn_explosion:
+        messy_inform(
+            "Encoding the categoricals of your data has increased the number "
+            "of effective features in your data by an order of magnitude, and "
+            f"your data also has now over {MAX_PERF_N_FEATURES} effective "
+            "features. This will cause performance issues if using stepwise "
+            "feature selection methods, or if you do not use any filter-based "
+            "selection methods."
+            f"{big_message}"
+            f"{small_message}"
+        )
+
     new = pd.concat([new, y], axis=1)
     return new, df.loc[:, to_convert]
 
