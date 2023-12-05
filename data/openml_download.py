@@ -148,14 +148,20 @@ def save_parquet(dataset: OpenMLDataset, is_cls: bool) -> None:
         raise KeyError(f"Missing target column for {dataset.name}")
 
     out_parent = CLS if is_cls else REG
-    outdir = out_parent / str(dataset.name)
+    dsname = str(dataset.name)
+    if dsname == "Midwest_survey":
+        dsname = "Midwest_survey2"
+    outdir = out_parent / dsname
     outdir.mkdir(parents=True, exist_ok=True)
-    pq = outdir / f"{dataset.name}.parquet"
+    pq = outdir / f"{dsname}.parquet"
     typs = outdir / "types.csv"
 
     cats, cols = np.asarray(cats), np.asarray(cols)
     df_types = DataFrame({"feature_name": cols, "type": cats})
+    if "midwest_survey" in dsname.lower():
+        df_types.loc[:, "type"] = True  # are in fact all categorical
     df_types["type"] = df_types["type"].apply(lambda x: "categorical" if x else "continuous")
+
     df_types.to_csv(typs, index=False)
     df.to_parquet(pq)
     size = pq.stat().st_size
@@ -191,6 +197,8 @@ if __name__ == "__main__":
             download_qualities=True,
             download_features_meta_data=True,
         )
+        if dataset.name == "Midwest_Survey":
+            continue
         save_parquet(dataset=dataset, is_cls=False)
 
     print(reg)
