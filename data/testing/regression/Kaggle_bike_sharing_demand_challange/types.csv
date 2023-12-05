@@ -1,0 +1,11 @@
+feature_name,type
+time,categorical
+season,categorical
+holiday,categorical
+workingday,categorical
+weather,categorical
+temp,continuous
+atemp,continuous
+humidity,continuous
+windspeed,continuous
+dayOfWeek,categorical

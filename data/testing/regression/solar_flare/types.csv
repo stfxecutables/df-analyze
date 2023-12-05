@@ -1,0 +1,11 @@
+feature_name,type
+class,categorical
+largest_spot_size,categorical
+spot_distribution,categorical
+activity,categorical
+evolution,continuous
+previous_activity,categorical
+complex,categorical
+complex_path,categorical
+area,categorical
+area_largest,continuous
