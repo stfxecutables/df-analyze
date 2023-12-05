@@ -5,6 +5,7 @@ data/*.csv
 data/*.rar
 data/testing/**/*.csv
 data/testing/**/*.txt
+data/testing/**/*.parquet
 
 test_results
 
