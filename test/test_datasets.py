@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import time
+import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from typing import Optional
@@ -143,9 +144,10 @@ if __name__ == "__main__":
         if dsname in ["KDD98"]:
             continue
 
-        # if dsname != "KDDCup09_appetency":
-        #     continue
+        if dsname != "KDDCup09_appetency":
+            continue
         print(dsname)
+        warnings.simplefilter("error")
         ds.train_test_split()
 
     """

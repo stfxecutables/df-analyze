@@ -6,11 +6,13 @@ from warnings import warn
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
+from tqdm import tqdm
 
 from src._constants import MAX_PERF_N_FEATURES, MAX_STEPWISE_SELECTION_N_FEATURES
 from src.enumerables import NanHandling
@@ -239,8 +241,9 @@ def drop_cols(
     cols_descs = []
     for d in col_dicts:
         for col, desc in d.items():
-            cols.add(col)
-            cols_descs.append((col, desc))
+            if col in df:
+                cols.add(col)
+                cols_descs.append((col, desc))
     cols_descs = sorted(cols_descs, key=lambda pair: pair[0])
 
     if len(cols) <= 0:  # nothing to drop
@@ -298,17 +301,20 @@ def deflate_categoricals(
 ) -> tuple[DataFrame, list[str], list[str]]:
     df = df.copy()
     df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+    _cats = set(cats)
 
-    infos = sorted(results.inflation, key=lambda info: info.to_deflate, reverse=True)
+    infos = results.inflation
+    infos = [info for info in infos if info.col in _cats]
+    infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
 
-    for info in infos:
+    for info in tqdm(
+        infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 20
+    ):
         col = info.col
         nan = df[col].isna()
         df[col] = df[col].astype(str)
-        for level in info.to_deflate:
-            idx = df[col] == level
-            df.loc[idx, col] = np.nan
-        df.loc[nan, col] = np.nan
+        idx = df[col].isin(info.to_deflate) | nan
+        df.loc[idx, col] = np.nan
 
     if len(infos) > 0:
         w = max(len(info.col) for info in infos) + 2
@@ -369,6 +375,7 @@ def encode_categoricals(
         nyans = sorted(set(results.nyan_cats).intersection(cats))
 
         new = df
+        print("One-hot encoding categorical variables")
         new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=nyans, dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)

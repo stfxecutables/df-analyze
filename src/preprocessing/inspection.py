@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from dateutil.parser import parse
 from dateutil.parser._parser import UnknownTimezoneWarning
+from joblib import Parallel, delayed
 from pandas import DataFrame, Series
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -182,6 +183,11 @@ def maybe_large_ordinal(series: Series) -> bool:
 
 
 def converts_to_int(series: Series) -> bool:
+    try:
+        series.astype(int)
+        return True
+    except Exception:
+        ...
     converted = series.convert_dtypes(
         infer_objects=True,
         convert_string=True,
