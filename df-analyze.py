@@ -181,7 +181,7 @@ def log_options(options: ProgramOptions) -> None:
     pprint(opts, indent=2, depth=2, compact=False)
 
 
-if __name__ == "__main__":
+def main() -> None:
     # TODO:
     # get arguments
     # run analyses based on args
@@ -201,3 +201,7 @@ if __name__ == "__main__":
     )
     loop_args = [LoopArgs(**params) for params in ParameterGrid(arg_options)]
     run_analysis(loop_args, estimators, is_stepup)
+
+
+if __name__ == "__main__":
+    main()
