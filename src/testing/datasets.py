@@ -41,9 +41,12 @@ class TestDataset:
         self.datapath = root / f"{root.name}.parquet"
         self.types = root / "types.csv"
         df = pd.read_csv(self.types)
+        dfc = df.loc[df["type"] != "categorical"]
+        dfc = dfc.loc[dfc["feature_name"] != "target"]
         df = df.loc[df["type"] == "categorical"]
         df = df.loc[df["feature_name"] != "target"]
         self.categoricals = df["feature_name"].to_list()
+        self.continuous = dfc["feature_name"].to_list()
         self.is_multiclass = False
 
         df = self.load()

@@ -1,8 +1,9 @@
 import sys
+import traceback
 from dataclasses import dataclass
 from math import ceil
 from shutil import get_terminal_size
-from typing import Optional
+from typing import Optional, Union
 from warnings import catch_warnings, filterwarnings
 
 import numpy as np
@@ -29,6 +30,17 @@ class InflationInfo:
 
 
 @dataclass
+class ColumnDescriptions:
+    col: str
+    const: Optional[str] = None
+    time: Optional[str] = None
+    ord: Optional[str] = None
+    id: Optional[str] = None
+    float: Optional[str] = None
+    cat: Optional[str] = None
+
+
+@dataclass
 class InspectionResults:
     floats: dict[str, str]
     ords: dict[str, str]
@@ -43,6 +55,10 @@ class InspectionResults:
     inflation: list[InflationInfo]
     bin_cats: list[str]
     multi_cats: list[str]
+
+
+class InspectionError(Exception):
+    pass
 
 
 class MessyDataWarning(UserWarning):
@@ -100,6 +116,11 @@ def is_timelike(s: str) -> bool:
     except Exception:
         ...
     try:
+        float(s)
+        return False
+    except Exception:
+        ...
+    try:
         with catch_warnings():
             filterwarnings("ignore", category=UnknownTimezoneWarning)
             parse(s, fuzzy=False)
@@ -109,7 +130,25 @@ def is_timelike(s: str) -> bool:
 
 
 def looks_timelike(series: Series) -> tuple[bool, str]:
+    # we don't want to interpret integer-like data as times, even though
+    # they could be e.g. Unix timestamps or something like that
+    if converts_to_int(series):
+        return False, "Converts to int"
+
+    # This seems to be another false positive from dateutil.parse
+    if converts_to_float(series):
+        return False, "Converts to float"
+
     series = series.astype(str)
+
+    # We are mostly worried about timestamps we do NOT want to convert to
+    # categoricals. Thus before checking that most data parses as datetime,
+    # we check that we are below out inflation threshold and do not flag
+    # these, even if they are timelike.
+    level_counts = np.unique(series, return_counts=True)[1]
+    if np.all(level_counts > N_CAT_LEVEL_MIN):
+        return False, "Looks like well-sampled categorical"
+
     N = len(series)
     n_subsamp = max(ceil(0.5 * N), 500)
     n_subsamp = min(n_subsamp, N)
@@ -121,7 +160,7 @@ def looks_timelike(series: Series) -> tuple[bool, str]:
     if percent > (1.0 / 3.0):
         p = series.loc[idx].apply(is_timelike).mean()
         if p > 0.5:
-            return True, f"{p*100:02f}% of data appears parseable as datetime data"
+            return True, f"{p*100:< 2.2f}% of data appears parseable as datetime data"
     return False, ""
 
 
@@ -188,17 +227,30 @@ def converts_to_int(series: Series) -> bool:
         return True
     except Exception:
         ...
-    converted = series.convert_dtypes(
-        infer_objects=True,
-        convert_string=True,
-        convert_integer=True,
-        convert_boolean=True,
-        convert_floating=False,  # type: ignore
-    )
+    with catch_warnings():
+        filterwarnings(
+            "ignore",
+            message=".*invalid value encountered in cast.*",
+            category=RuntimeWarning,
+        )
+        converted = series.convert_dtypes(
+            infer_objects=True,
+            convert_string=True,
+            convert_integer=True,
+            convert_boolean=True,
+            convert_floating=False,  # type: ignore
+        )
     return converted.dtype.kind in ["i", "b"]
 
 
 def converts_to_float(series: Series) -> bool:
+    try:
+        converted = series.astype(float).astype(str)
+        if np.all(converted == series.to_numpy()):
+            return True
+
+    except Exception:
+        ...
     converted = series.convert_dtypes(
         infer_objects=True,
         convert_string=True,
@@ -382,7 +434,7 @@ def detect_big_cats(
         n_total = len(unqs)
         if n_total <= 2:  # do not mangle boolean indicators
             continue
-        keep_idx = cnts >= 50
+        keep_idx = cnts >= N_CAT_LEVEL_MIN
         if np.all(keep_idx):
             continue
         n_keep = keep_idx.sum()
@@ -398,6 +450,50 @@ def detect_big_cats(
             )
         )
     return {col: unique_counts[col] for col in big_cats}, inflation_info
+
+
+def inspect_str_column(
+    series: Series,
+    cats: list[str],
+    ords: list[str],
+) -> Union[ColumnDescriptions, tuple[str, Exception]]:
+    col = str(series.name)
+    try:
+        result = ColumnDescriptions(col)
+
+        is_const, desc = looks_constant(series)
+        if is_const:
+            result.const = desc
+            return result
+
+        maybe_time, desc = looks_timelike(series)
+        if maybe_time:
+            result.time = desc
+            return result  # time is bad enough we don't need other checks
+
+        maybe_ord, desc = looks_ordinal(series)
+        if maybe_ord and (col not in ords) and (col not in cats):
+            result.ord = desc
+
+        maybe_id, desc = looks_id_like(series)
+        if maybe_id:
+            result.id = desc
+
+        maybe_float, desc = looks_floatlike(series)
+        if maybe_float:
+            result.float = desc
+
+        if maybe_float or maybe_id or maybe_time:
+            return result
+
+        maybe_cat, desc = looks_categorical(series)
+        if maybe_cat and (col not in ords) and (col not in cats):
+            result.cat = desc
+
+        return result
+    except Exception as e:
+        traceback.print_exc()
+        return col, e
 
 
 def inspect_str_columns(
@@ -433,37 +529,68 @@ def inspect_str_columns(
     const_cols: dict[str, str] = {}
     cats = set(categoricals)
     ords = set(ordinals)
-    for col in tqdm(
-        str_cols, desc="Inspecting features", total=len(str_cols), disable=len(str_cols) < 50
-    ):
-        is_const, desc = looks_constant(df[col])
-        if is_const:
-            const_cols[col] = desc
-            continue
 
-        maybe_time, desc = looks_timelike(df[col])
-        if maybe_time:
-            time_cols[col] = desc
-            continue  # time is bad enough we don't need other checks
+    # args = tqdm()
+    descs: list[Union[ColumnDescriptions, tuple[str, Exception]]] = Parallel(n_jobs=-1)(
+        delayed(inspect_str_column)(df[col], cats, ords)
+        for col in tqdm(
+            str_cols,
+            desc="Inspecting features",
+            total=len(str_cols),
+            disable=len(str_cols) < 50,
+        )
+    )  # type: ignore
+    for desc in descs:
+        if isinstance(desc, tuple):
+            col, error = desc
+            raise InspectionError(
+                f"Could not interpret data in feature {col}. Additional information "
+                "should be above."
+            ) from error
+        if desc.float is not None:
+            float_cols[desc.col] = desc.float
+        if desc.ord is not None:
+            ord_cols[desc.col] = desc.ord
+        if desc.id is not None:
+            id_cols[desc.col] = desc.id
+        if desc.time is not None:
+            time_cols[desc.col] = desc.time
+        if desc.cat is not None:
+            cat_cols[desc.col] = desc.cat
+        if desc.const is not None:
+            const_cols[desc.col] = desc.const
 
-        maybe_ord, desc = looks_ordinal(df[col])
-        if maybe_ord and (col not in ords) and (col not in cats):
-            ord_cols[col] = desc
+    # for col in tqdm(
+    #     str_cols, desc="Inspecting features", total=len(str_cols), disable=len(str_cols) < 50
+    # ):
+    #     is_const, desc = looks_constant(df[col])
+    #     if is_const:
+    #         const_cols[col] = desc
+    #         continue
 
-        maybe_id, desc = looks_id_like(df[col])
-        if maybe_id:
-            id_cols[col] = desc
+    #     maybe_time, desc = looks_timelike(df[col])
+    #     if maybe_time:
+    #         time_cols[col] = desc
+    #         continue  # time is bad enough we don't need other checks
 
-        maybe_float, desc = looks_floatlike(df[col])
-        if maybe_float:
-            float_cols[col] = desc
+    #     maybe_ord, desc = looks_ordinal(df[col])
+    #     if maybe_ord and (col not in ords) and (col not in cats):
+    #         ord_cols[col] = desc
 
-        if maybe_float or maybe_id or maybe_time:
-            continue
+    #     maybe_id, desc = looks_id_like(df[col])
+    #     if maybe_id:
+    #         id_cols[col] = desc
 
-        maybe_cat, desc = looks_categorical(df[col])
-        if maybe_cat and (col not in ords) and (col not in cats):
-            cat_cols[col] = desc
+    #     maybe_float, desc = looks_floatlike(df[col])
+    #     if maybe_float:
+    #         float_cols[col] = desc
+
+    #     if maybe_float or maybe_id or maybe_time:
+    #         continue
+
+    #     maybe_cat, desc = looks_categorical(df[col])
+    #     if maybe_cat and (col not in ords) and (col not in cats):
+    #         cat_cols[col] = desc
 
     if not _warn:
         return float_cols, ord_cols, id_cols, time_cols, cat_cols, const_cols
@@ -668,8 +795,15 @@ def inspect_data(
     # convert screwy categorical columns which can have all sorts of
     # annoying behaviours when incorrectly labeled as such
     for col in df.columns:
-        if df[col].dtype == "categorical":
-            df[col] = df[col].astype(str)
+        if df[col].dtype == "category":
+            # https://stackoverflow.com/a/70442594
+            # Pandas so dumb, why it would silently ignore casting to string
+            # and retain the categorical dtype makes no sense, e.g.
+            #
+            #       df[col] = df[col].astype("string")
+            #
+            # fails to do anything but silently passes without warning or error
+            df[col] = df[col].astype(df[col].cat.categories.to_numpy().dtype)
 
     str_cols = get_str_cols(df, target)
     int_cols = get_int_cols(df, target)

@@ -151,7 +151,7 @@ def handle_continuous_nans(
     if X.empty:
         X_clean = X
     elif nans is NanHandling.Drop:
-        X_clean = X.dropna(axis="columns").dropna(axis="index")
+        X_clean = X.dropna(axis="columns", how="any").dropna(axis="index", how="any")
         if 0 in X_clean.shape:
             others = [na.value for na in NanHandling if na is not NanHandling.Drop]
             raise RuntimeError(
@@ -161,15 +161,15 @@ def handle_continuous_nans(
             )
     elif nans in [NanHandling.Mean, NanHandling.Median]:
         strategy = "mean" if nans is NanHandling.Mean else "median"
-        X_clean = DataFrame(
-            data=SimpleImputer(strategy=strategy).fit_transform(X), columns=X.columns
-        )
+        imputer = SimpleImputer(strategy=strategy, keep_empty_features=True)
+        X_fitted = imputer.fit_transform(X)
+        X_clean = DataFrame(data=X_fitted, columns=X.columns)
     elif nans is NanHandling.Impute:
         warn(
             "Using experimental multivariate imputation. This could take a very "
-            "long time for even tiny (<500 samples, <50 features) datasets."
+            "long time for even tiny (<500 samples, <30 features) datasets."
         )
-        imputer = IterativeImputer(verbose=2)
+        imputer = IterativeImputer(verbose=2, keep_empty_features=True)
         X_clean = DataFrame(data=imputer.fit_transform(X), columns=X.columns)
     else:
         raise NotImplementedError(f"Unhandled enum case: {nans}")

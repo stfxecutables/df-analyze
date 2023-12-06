@@ -10,7 +10,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import time
 import warnings
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import nullcontext, redirect_stderr, redirect_stdout
 from io import StringIO
 from typing import Optional
 
@@ -39,11 +39,18 @@ def test_categoricals(dataset: tuple[str, TestDataset]) -> None:
 @pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
 def test_splitting(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
-    X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
-    if ds.is_classification:
-        assert num_classes == len(np.unique(np.concatenate([y_tr, y_test])))
-    assert np.isnan(np.ravel(X_tr)).sum() == 0
-    assert np.isnan(np.ravel(X_test)).sum() == 0
+    ctx = (
+        pytest.raises(TypeError, match="Cannot automatically determine the cardinality of features")
+        if dsname == "community_crime"
+        else nullcontext()
+    )
+    with ctx:
+        X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+
+        if ds.is_classification:
+            assert num_classes == len(np.unique(np.concatenate([y_tr, y_test])))
+        assert np.isnan(np.ravel(X_tr)).sum() == 0
+        assert np.isnan(np.ravel(X_test)).sum() == 0
 
 
 def split(dataset: tuple[str, TestDataset]) -> dict[str, Optional[float]]:
