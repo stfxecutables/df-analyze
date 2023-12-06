@@ -53,6 +53,7 @@ torchvision = [
 ]
 skorch = "^0.15.0"
 openml = "^0.14.1"
+jsonpickle = "^3.0.2"
 
 
 [[tool.poetry.source]]
