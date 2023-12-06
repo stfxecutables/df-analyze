@@ -18,6 +18,67 @@ from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN
 
+TIME_WORDS = [
+    r".*time.*",
+    r".*duration.*",
+    r".*interval.*",
+    r".*lag.*",
+    r".*date.*",
+    r".*elapse.*",
+    r".*day[ _\.\-]?",
+    r".*month[ _\.\-]?",
+    r".*year[ _\.\-]?",
+    r".*yr[ _\.\-]?",
+    r".*hour[ _\.\-]?",
+]
+ORD_WORDS = [
+    r".*[_ \-]n[_ \-].*",
+    r".*[_ \-]num[_ \-]?.*",
+    r".*age.*",
+    r".*days.*",
+    r".*grade.*",
+    r".*hours.*",
+    r".*hrs.*",
+    r".*months.*",
+    r".*rank.*",
+    r".*seconds.*",
+    r".*secs.*",
+    r".*size.*",
+    r".*years.*",
+    r".*yrs.*",
+]
+ID_WORDS = [r".id$"]
+CAT_WORDS = [
+    r".*type.*",
+    r".*kind.*",
+    r".*is[_ \-\.].*",
+    r".*has[_ \-\.].*",
+    r".*not[_ \-\.].*",
+    "city",
+    "race",
+    "ancestry",
+    "town",
+    "country",
+    "occupation",
+    r".*relig.*",
+    "state",
+    "zip",
+    "code",
+    "name",
+    "gender",
+    "sex",
+    "status",
+]
+CONT_WORDS = [
+    r".*average.*",
+    r".*avg.*",
+    r".*pct.*",
+    r".*percent.*",
+    r".*rate.*",
+    r".*ratio.*",
+    r".*total.*",
+]
+
 
 @dataclass
 class InflationInfo:
