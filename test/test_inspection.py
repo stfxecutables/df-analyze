@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import re
 from contextlib import nullcontext
 from pprint import pprint
 from shutil import get_terminal_size
@@ -24,6 +25,7 @@ from src.preprocessing.cleaning import (
     handle_continuous_nans,
 )
 from src.preprocessing.inspection import (
+    TIME_WORDS,
     get_str_cols,
     get_unq_counts,
     inspect_data,
@@ -72,11 +74,11 @@ def test_timestamp_detection(dataset: tuple[str, TestDataset]) -> None:
       Insurance: 'Holding_Policy_Duration'
       fps_benchmark: 'GpuOpenCL'
       bank-marketing: 'V11'
+      forest_fires: 'day' (is mon, tue, wed, ...)
 
     True Positives:
 
       elder: 'timestamp'
-      forest_fires: 'day'
       soybean: 'date'
       dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc: 'date_diagnostic'
 
@@ -84,6 +86,30 @@ def test_timestamp_detection(dataset: tuple[str, TestDataset]) -> None:
 
     ozone_level: {many}
     kick: {'WheelTypeID': '100% of data parses as datetime'}
+
+    colic: capillary_refill_time
+    arrhythmia: QRSduration
+    elder: timestamp
+    student_performance_por: traveltime
+    student_performance_por: studytime
+    student_performance_por: freetime
+    soybean: date
+    dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc: date_plantation
+    dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc: date_diagnostic
+    pbcseq: prothrombin_time
+    student_dropout: daytime/evening attendance
+    student_dropout: tuition fees up to date
+    colleges: percent_part_time
+    colleges: percent_part_time_faculty
+    kdd_internet_usage: actual_time
+    Kaggle_bike_sharing_demand_challange: time
+    OnlineNewsPopularity: timedelta
+    OnlineNewsPopularity: global_sentiment_polarity
+    OnlineNewsPopularity: title_sentiment_polarity
+    OnlineNewsPopularity: abs_title_sentiment_polarity
+    news_popularity: global_sentiment_polarity
+    news_popularity: title_sentiment_polarity
+    news_popularity: abs_title_sentiment_polarity
 
     """
     df = ds.load()
@@ -227,27 +253,43 @@ if __name__ == "__main__":
 
     """
     times = {}
+    names = set()
     # for dsname, ds in TIME_DATASETS.items():
     for dsname, ds in TEST_DATASETS.items():
         # TODO: for ozone_level handle funky NaNs as float
-        if dsname != "ozone_level":
-            continue
+        # if dsname != "ozone_level":
+        #     continue
         df = ds.load()
+        for col in df.columns:
+            clean = str(col).lower().strip()
+            clean = re.sub(r"\d", "", clean)
+            for regex in TIME_WORDS:
+                if re.search(regex, clean) is not None:
+                    desc = df[col].describe()
+                    if desc["count"] != len(df[col].dropna()):
+                        print(desc)
+        continue
+    lines = []
+    for name in sorted(names):
+        print(name)
+        lines.append(f'"{name}",')
+    (ROOT / "colnames.txt").write_text("\n".join(lines))
+    sys.exit()
 
-        w = get_terminal_size((81, 24))[0]
-        print("#" * w, file=stderr)
-        print(f"Checking {dsname}", file=stderr)
-        try:
-            results = inspect_data(df, "target", ds.categoricals)
-        except TypeError as e:
-            if "cardinality" in str(e) and dsname == "community_crime":
-                continue
-            else:
-                raise e
-        print("#" * w, file=stderr)
+    #     w = get_terminal_size((81, 24))[0]
+    #     print("#" * w, file=stderr)
+    #     print(f"Checking {dsname}", file=stderr)
+    #     try:
+    #         results = inspect_data(df, "target", ds.categoricals)
+    #     except TypeError as e:
+    #         if "cardinality" in str(e) and dsname == "community_crime":
+    #             continue
+    #         else:
+    #             raise e
+    #     print("#" * w, file=stderr)
 
-        if len(results.times) > 0:
-            times[dsname] = results.times
-        # input("Continue?")
-    for dsname, ts in times.items():
-        pprint(f"{dsname}: {ts}", indent=2, width=w)
+    #     if len(results.times) > 0:
+    #         times[dsname] = results.times
+    #     # input("Continue?")
+    # for dsname, ts in times.items():
+    #     pprint(f"{dsname}: {ts}", indent=2, width=w)
