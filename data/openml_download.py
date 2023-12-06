@@ -1,35 +1,16 @@
-import os
-import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
     Optional,
-    Sequence,
-    Tuple,
     Union,
-    cast,
-    no_type_check,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import openml
 import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy import ndarray
-from numpy.typing import ArrayLike
-from openml.datasets import OpenMLDataFeature, OpenMLDataset
+from openml.datasets import OpenMLDataset
 from pandas import DataFrame, Series
 from scipy.sparse import csr_matrix
-from tqdm import tqdm
-from typing_extensions import Literal
 
 DATA = Path(__file__).resolve().parent
 CLS = DATA / "testing/classification"

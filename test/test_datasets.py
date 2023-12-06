@@ -16,7 +16,6 @@ from typing import Optional
 
 import numpy as np
 import pytest
-from tqdm.contrib.concurrent import process_map
 
 from src.testing.datasets import TEST_DATASETS, TestDataset
 

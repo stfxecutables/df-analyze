@@ -1,12 +1,10 @@
 import sys
-from math import ceil
 from pathlib import Path
 from shutil import get_terminal_size
 from warnings import warn
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -14,11 +12,10 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
-from src._constants import MAX_PERF_N_FEATURES, MAX_STEPWISE_SELECTION_N_FEATURES
+from src._constants import MAX_PERF_N_FEATURES
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
 from src.preprocessing.inspection import (
-    InflationInfo,
     InspectionResults,
     inspect_data,
     messy_inform,

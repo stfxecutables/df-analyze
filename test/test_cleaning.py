@@ -8,7 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-from contextlib import nullcontext
 from shutil import get_terminal_size
 from sys import stderr
 
@@ -23,10 +22,8 @@ from src.preprocessing.cleaning import (
     handle_continuous_nans,
 )
 from src.preprocessing.inspection import (
-    get_str_cols,
     get_unq_counts,
     inspect_data,
-    inspect_str_columns,
 )
 from src.testing.datasets import TEST_DATASETS, TestDataset
 

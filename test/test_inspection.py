@@ -9,25 +9,14 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import re
-from contextlib import nullcontext
-from pprint import pprint
-from shutil import get_terminal_size
-from sys import stderr
 
 import numpy as np
 import pytest
-from _pytest.capture import CaptureFixture
 from pandas import DataFrame
 
-from src.enumerables import NanHandling
-from src.preprocessing.cleaning import (
-    encode_categoricals,
-    handle_continuous_nans,
-)
 from src.preprocessing.inspection import (
     TIME_WORDS,
     get_str_cols,
-    get_unq_counts,
     inspect_data,
     inspect_str_columns,
 )
