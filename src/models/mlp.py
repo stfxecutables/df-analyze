@@ -29,6 +29,7 @@ from warnings import catch_warnings, simplefilter
 
 import matplotlib.pyplot as plt
 import numpy as np
+import optuna
 import torch
 from numpy import ndarray
 from pandas import DataFrame, Series
@@ -276,17 +277,19 @@ class MLPEstimator(DfAnalyzeModel):
         X, y = self._to_torch(X_train, y_train)
         self.model.fit(X, y)
 
-    def refit_tuned(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
-        overrides = overrides or {}
+    def refit_tuned(
+        self, X: DataFrame, y: Series, tuned_args: Optional[dict[str, Any]] = None
+    ) -> None:
+        tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
             **self.default_args,
             **self.model_args,
-            **overrides,
+            **self._to_model_args(tuned_args, X),
         }
-        self.model = self.model_cls(**kwargs)
+        self.tuned_model = self.model_cls(**kwargs)
         Xt, yt = self._to_torch(X, y)
-        self.model.fit(Xt, yt)
+        self.tuned_model.fit(Xt, yt)
 
     def predict(self, X: DataFrame) -> ndarray:
         Xt = self._to_torch(X)
@@ -301,6 +304,12 @@ class MLPEstimator(DfAnalyzeModel):
         if self.model is None:
             raise RuntimeError("Need to call `model.fit()` before calling `.score()`")
         return float(self.model.score(Xt, yt))
+
+    def tuned_score(self, X: DataFrame, y: Series) -> float:
+        Xt, yt = self._to_torch(X, y)
+        if self.tuned_model is None:
+            raise RuntimeError("Need to tune model before calling `.tuned_score()`")
+        return self.tuned_model.score(Xt, yt)
 
     def _to_model_args(self, optuna_args: dict[str, Any], X_train: DataFrame) -> dict[str, Any]:
         final_args: dict[str, Any] = deepcopy(optuna_args)
@@ -320,24 +329,38 @@ class MLPEstimator(DfAnalyzeModel):
         X, y = self._to_torch(X_train, y_train)
 
         def objective(trial: Trial) -> float:
-            raw_args = self.optuna_args(trial)
-
-            final_args = self._to_model_args(raw_args, X_train)
-            args = {**self.fixed_args, **self.default_args, **final_args}
-            estimator = self.model_cls(**args)
-
-            scoring = "accuracy" if self.is_classifier else NEG_MAE
             kf = StratifiedKFold if self.is_classifier else KFold
-            # _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
             _cv = kf(n_splits=5, shuffle=True, random_state=SEED)
-            # TODO: maybe use NeuralNet class cv option?
-            # TODO: maybe not use k-fold here due to costs, or e.g. 2-fold
-            idx_tr, idx_test = next(_cv.split(y, y))
-            X_tr, X_test = X[idx_tr], X[idx_test]
-            y_tr, y_test = y[idx_tr], y[idx_test]
-            estimator.fit(X_tr, y_tr)
-            score = estimator.score(X_test, y_test)
-            return -float(score)
+            opt_args = self.optuna_args(trial)
+            model_args = self._to_model_args(opt_args, X_train)
+            full_args = {**self.fixed_args, **self.default_args, **model_args}
+            scores = []
+            for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
+                X_tr, y_tr = X[idx_train], y[idx_train]
+                X_test, y_test = X[idx_test], y[idx_test]
+                estimator = self.model_cls(**full_args)
+                estimator.fit(X_tr, y_tr)
+                score = estimator.score(X_test, y_test)
+                score = score if self.is_classifier else -score
+                scores.append(score)
+                # allows pruning
+                trial.report(float(np.mean(scores)), step=step)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+            return float(np.mean(scores))
+
+            # estimator = self.model_cls(**full_args)
+
+            # scoring = "accuracy" if self.is_classifier else NEG_MAE
+            # # _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
+            # # TODO: maybe use NeuralNet class cv option?
+            # # TODO: maybe not use k-fold here due to costs, or e.g. 2-fold
+            # idx_tr, idx_test = next(_cv.split(y, y))
+            # X_tr, X_test = X[idx_tr], X[idx_test]
+            # y_tr, y_test = y[idx_tr], y[idx_test]
+            # estimator.fit(X_tr, y_tr)
+            # score = estimator.score(X_test, y_test)
+            # return -float(score)
             # scores = cv(
             #     estimator,  # type: ignore
             #     X=X,
@@ -347,7 +370,7 @@ class MLPEstimator(DfAnalyzeModel):
             #     n_jobs=1,
             #     verbose=1,
             # )
-            return float(np.mean(scores["test_score"]))
+            # return float(np.mean(scores["test_score"]))
 
         return objective
 
@@ -364,7 +387,7 @@ class MLPEstimator(DfAnalyzeModel):
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
 
         args = self._to_model_args(self.tuned_args, X_train)
-        self.refit_tuned(X_train, y_train, overrides=args)
+        self.refit_tuned(X_train, y_train, tuned_args=args)
         # TODO: return Platt-scaling or probability estimates
         return self.score(X_test, y_test)
 

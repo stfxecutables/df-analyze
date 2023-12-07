@@ -96,7 +96,7 @@ def check_optuna_tune(
     study = model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
 
     overrides = study.best_params
-    model.refit_tuned(X_tr, y_tr, overrides=overrides)
+    model.refit_tuned(X_tr, y_tr, tuned_args=overrides)
     score = model.tuned_score(X_test, y_test)
     if model.is_classifier:
         probs = model.predict_proba(X_test)

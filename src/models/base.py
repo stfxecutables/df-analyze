@@ -159,7 +159,7 @@ class DfAnalyzeModel(ABC):
         )
         print("Optuna tuning completed")
         self.tuned_args = study.best_params
-        self.refit_tuned(X=X_train, y=y_train, overrides=self.tuned_args)
+        self.refit_tuned(X=X_train, y=y_train, tuned_args=self.tuned_args)
 
         return study
 
@@ -169,13 +169,13 @@ class DfAnalyzeModel(ABC):
             self.model = self.model_cls_args(kwargs)[0](**kwargs)
         self.model.fit(X_train, y_train)
 
-    def refit_tuned(self, X: DataFrame, y: Series, overrides: Optional[Mapping] = None) -> None:
-        overrides = overrides or {}
+    def refit_tuned(self, X: DataFrame, y: Series, tuned_args: Optional[Mapping] = None) -> None:
+        tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
             **self.default_args,
             **self.model_args,
-            **overrides,
+            **tuned_args,
         }
         self.tuned_model = self.model_cls_args(kwargs)[0](**kwargs)
 

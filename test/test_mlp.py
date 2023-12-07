@@ -135,7 +135,7 @@ def do_mlp_classifier_tune(dataset: tuple[str, TestDataset]) -> None:
             num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
         )
         model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=1, verbosity=1)
-        score = model.htune_eval(X_train=X_tr, y_train=y_tr, X_test=X_test, y_test=y_test)
+        score = model.tuned_score(X_test, y_test)
         print(f"Tuned score: {score}")
     except Exception as e:
         raise RuntimeError(f"Got error tuning model on {dsname}") from e
@@ -169,7 +169,7 @@ def do_mlp_regressor_tune(dataset: tuple[str, TestDataset]) -> None:
             num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
         )
         model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=1, verbosity=1)
-        score = model.htune_eval(X_train=X_tr, y_train=y_tr, X_test=X_test, y_test=y_test)
+        score = model.tuned_score(X_test, y_test)
         print(f"Tuned score: {score}")
     except Exception as e:
         raise RuntimeError(f"Got error tuning model on {dsname}") from e
