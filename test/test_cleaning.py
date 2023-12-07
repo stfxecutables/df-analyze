@@ -21,7 +21,7 @@ from src.preprocessing.cleaning import (
     encode_categoricals,
     handle_continuous_nans,
 )
-from src.preprocessing.inspection import (
+from src.preprocessing.inspection.inspection import (
     get_unq_counts,
     inspect_data,
 )

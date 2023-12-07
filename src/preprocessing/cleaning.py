@@ -15,7 +15,8 @@ from tqdm import tqdm
 from src._constants import MAX_PERF_N_FEATURES
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
-from src.preprocessing.inspection import (
+from src.preprocessing.inspection.inspection import (
+    InspectionInfo,
     InspectionResults,
     inspect_data,
     messy_inform,
@@ -232,12 +233,12 @@ def drop_cols(
     kind: str,
     categoricals: list[str],
     ordinals: list[str],
-    *col_dicts: dict[str, str],
+    *col_dicts: InspectionInfo,
 ) -> tuple[DataFrame, list[str], list[str]]:
     cols = set()
     cols_descs = []
     for d in col_dicts:
-        for col, desc in d.items():
+        for col, desc in d.descs.items():
             if col in df:
                 cols.add(col)
                 cols_descs.append((col, desc))
@@ -363,13 +364,13 @@ def encode_categoricals(
     df = df.drop(columns=target)
     df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
     df, cats, ords = deflate_categoricals(df, results, cats, ords, _warn=warn_explosion)
-    to_convert = [*cats, *results.cats.keys()]
+    to_convert = [*cats, *results.cats.descs.keys()]
 
     # below will FAIL if we didn't remove timestamps or etc.
     try:
         bins = sorted(set(results.bin_cats).intersection(cats))
         multis = sorted(set(results.multi_cats).intersection(cats))
-        nyans = sorted(set(results.nyan_cats).intersection(cats))
+        nyans = sorted(set(results.nyan_cats.descs.keys()).intersection(cats))
 
         new = df
         print("One-hot encoding categorical variables")
@@ -468,7 +469,6 @@ def prepare_data(
     df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
     raise NotImplementedError()
 
-    cats = []
     df = handle_continuous_nans(
         df=df, target=target, categoricals=categoricals, nans=NanHandling.Mean
     )

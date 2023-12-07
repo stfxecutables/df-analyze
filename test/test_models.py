@@ -8,7 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Literal, Optional

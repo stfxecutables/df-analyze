@@ -28,7 +28,7 @@ from src.preprocessing.cleaning import (
     handle_continuous_nans,
     normalize,
 )
-from src.preprocessing.inspection import inspect_data
+from src.preprocessing.inspection.inspection import inspect_data
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
@@ -66,7 +66,7 @@ class TestDataset:
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
-            cats = [*self.categoricals, *results.cats.keys()]
+            cats = [*self.categoricals, *results.cats.descs.keys()]
             df, cats, ords = drop_unusable(df, results, cats, [])
 
             df, nan_ind = handle_continuous_nans(

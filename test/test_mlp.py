@@ -8,12 +8,11 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import numpy as np
-import pytest
 from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
 from src.models.mlp import MLPEstimator
-from src.testing.datasets import TEST_DATASETS, TestDataset, fast_ds, med_ds, slow_ds
+from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
 MAX_N = 1000
 MAX_EPOCHS = 10
@@ -33,7 +32,7 @@ def do_mlp_classifier(dataset: tuple[str, TestDataset]) -> None:
         )
         model.fit(X_train=X_tr, y_train=y_tr)
         train_loss = model.model.history[:, "train_loss"]
-        if np.any(np.isnan(train_loss)):
+        if np.any(np.isnan(train_loss)):  # type: ignore
             raise ValueError("NaNs in loss")
 
         preds = model.predict(X_test)
@@ -95,7 +94,7 @@ def do_mlp_regressor(dataset: tuple[str, TestDataset]) -> None:
         )
         model.fit(X_train=X_tr, y_train=y_tr)
         train_loss = model.model.history[:, "train_loss"]
-        if np.any(np.isnan(train_loss)):
+        if np.any(np.isnan(train_loss)):  # type: ignore
             raise ValueError("NaNs in loss")
 
         preds = model.predict(X_test)
