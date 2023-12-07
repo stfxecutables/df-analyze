@@ -17,6 +17,7 @@ import matplotlib as mpl
 mpl.rcParams["axes.formatter.useoffset"] = False
 
 import sys
+import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import (
@@ -25,7 +26,6 @@ from typing import (
     Optional,
     Union,
 )
-from warnings import catch_warnings, simplefilter
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -57,6 +57,7 @@ from tqdm import tqdm
 
 from src._constants import SEED
 from src.models.base import NEG_MAE, DfAnalyzeModel
+from src.nonsense import silence_spam
 
 """
 See:
@@ -130,6 +131,9 @@ BATCH_SIZE = 128
 
 torch.set_num_threads(1)
 torch.set_num_interop_threads(1)
+
+# silence_spam()
+warnings.filterwarnings("ignore", category=UserWarning, message="Lazy modules")
 
 
 class SkorchMLP(Module):
@@ -435,42 +439,37 @@ if __name__ == "__main__":
         # plt.close()
         # sys.exit()
 
-        with catch_warnings():
-            simplefilter("ignore", UserWarning)
-            net = NeuralNetClassifier(
-                module=SkorchMLP,
-                module__width=128,
-                module__use_bn=True,
-                module__use_drop=True,
-                module__lr=lr,
-                module__wd=wd,
-                module__dropout=0.4,
-                module__num_classes=2,
-                criterion=CrossEntropyLoss,  # type: ignore
-                criterion__weight=None,
-                optimizer=AdamW,
-                optimizer__weight_decay=wd,
-                optimizer__lr=lr,
-                callbacks=[
-                    sched,
-                    # Effectively min_epochs=20
-                    EarlyStopping(patience=20, load_best=False),
-                ],
-                max_epochs=50,
-                batch_size=BATCH_SIZE,
-                # train_split=None,  # we do all tuning with 5-fold anyway...
-                device="cpu",
-                verbose=0,
-            )
-            net.fit(X_train, y_train)
-            # probs = net.predict_proba(X_test)
-            # print(probs[:10])
-            # preds = net.predict(X_test)
-            # print(preds[:10])
-            print("Acc:", net.score(X_test, y_test))
-            fig, ax = plt.subplots()
-            ax.plot(net.history[:, "train_loss"], color="black", label="train")
-            ax.plot(net.history[:, "valid_loss"], color="orange", label="val")
-            ax.set_title(f"LR={lr}")
-            plt.show(block=False)
+        net = NeuralNetClassifier(
+            module=SkorchMLP,
+            module__width=128,
+            module__use_bn=True,
+            module__dropout=0.4,
+            module__num_classes=2,
+            criterion=CrossEntropyLoss,  # type: ignore
+            criterion__weight=None,
+            optimizer=AdamW,
+            optimizer__weight_decay=wd,
+            optimizer__lr=lr,
+            callbacks=[
+                sched,
+                # Effectively min_epochs=20
+                EarlyStopping(patience=20, load_best=False),
+            ],
+            max_epochs=50,
+            batch_size=BATCH_SIZE,
+            # train_split=None,  # we do all tuning with 5-fold anyway...
+            device="cpu",
+            verbose=0,
+        )
+        net.fit(X_train, y_train)
+        # probs = net.predict_proba(X_test)
+        # print(probs[:10])
+        # preds = net.predict(X_test)
+        # print(preds[:10])
+        print("Acc:", net.score(X_test, y_test))
+        fig, ax = plt.subplots()
+        ax.plot(net.history[:, "train_loss"], color="black", label="train")
+        ax.plot(net.history[:, "valid_loss"], color="orange", label="val")
+        ax.set_title(f"LR={lr}")
+        plt.show(block=False)
     plt.show()
