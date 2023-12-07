@@ -7,10 +7,13 @@ ROOT = Path(__file__).resolve().parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+import pytest
+
 from src._constants import COMPLEX_XLSX, COMPLEX_XLSX2, SIMPLE_CSV, SIMPLE_CSV2, SIMPLE_XLSX
 from src.loading import load_csv, load_excel
 
 
+@pytest.mark.fast
 def test_xlsx_loading() -> None:
     df, meta = load_excel(SIMPLE_XLSX)
     assert meta == "--target y --"
@@ -19,6 +22,7 @@ def test_xlsx_loading() -> None:
     assert dtypes == ["float64", "float64", "float64", "int64"]
 
 
+@pytest.mark.fast
 def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX)
     assert (
@@ -39,6 +43,7 @@ def test_complex_xlsx_loading() -> None:
     assert dtypes == ["object", "float64", "float64", "float64", "float64", "int64"]
 
 
+@pytest.mark.fast
 def test_csv_loading() -> None:
     df, meta = load_csv(SIMPLE_CSV)
     assert meta == "--target y --"
@@ -47,6 +52,7 @@ def test_csv_loading() -> None:
     assert dtypes == ["float64", "float64", "float64", "int64"]
 
 
+@pytest.mark.fast
 def test_csv_loading2() -> None:
     df, meta = load_csv(SIMPLE_CSV2)
     assert meta == "--target y"

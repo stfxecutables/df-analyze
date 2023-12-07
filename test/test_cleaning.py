@@ -25,14 +25,21 @@ from src.preprocessing.inspection import (
     get_unq_counts,
     inspect_data,
 )
-from src.testing.datasets import TEST_DATASETS, TestDataset
+from src.testing.datasets import (
+    TEST_DATASETS,
+    TestDataset,
+    all_ds,
+    fast_ds,
+    med_ds,
+    slow_ds,
+)
 
 
 def no_cats(df: DataFrame, target: str) -> bool:
     return df.drop(columns=target).select_dtypes(include=["object", "string[python]"]).shape[1] == 0
 
 
-@pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
+@fast_ds
 def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
@@ -68,7 +75,8 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
                 raise e
 
 
-@pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
+@all_ds
+@pytest.mark.fast
 def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
     dsname, ds = dataset
     if dsname in ["community_crime", "news_popularity"]:
@@ -120,8 +128,7 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
     np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
 
 
-@pytest.mark.parametrize("dataset", [*TEST_DATASETS.items()], ids=lambda pair: str(pair[0]))
-def test_encode(dataset: tuple[str, TestDataset]) -> None:
+def do_encode(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
     cats = ds.categoricals
@@ -140,6 +147,21 @@ def test_encode(dataset: tuple[str, TestDataset]) -> None:
     except Exception as e:
         raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
     assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
+
+
+@fast_ds
+def test_encoding_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_encode(dataset)
+
+
+@med_ds
+def test_encoding_med(dataset: tuple[str, TestDataset]) -> None:
+    do_encode(dataset)
+
+
+@slow_ds
+def test_encoding_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_encode(dataset)
 
 
 if __name__ == "__main__":

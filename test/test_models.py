@@ -7,13 +7,15 @@ ROOT = Path(__file__).resolve().parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-
+import logging
+import os
 import sys
 from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
+import pytest
 from numpy import ndarray
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
@@ -103,6 +105,7 @@ def check_optuna_tune(
     return score, None
 
 
+@pytest.mark.fast
 class TestLinear:
     def test_lin_cls(self) -> None:
         model = LRClassifier()
@@ -113,16 +116,26 @@ class TestLinear:
         check_basics(model, "regress")
 
     def test_lin_cls_tune(self, capsys: CaptureFixture) -> None:
-        model = LRClassifier()
-        with capsys.disabled():
+        logging.captureWarnings(capture=True)
+        logger = logging.getLogger("py.warnings")
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
+        logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
+        try:
+            model = LRClassifier()
             check_optuna_tune(model, "classify")
+        except Exception as e:
+            raise e
+        finally:
+            logging.captureWarnings(capture=False)
 
     def test_lin_reg_tune(self, capsys: CaptureFixture) -> None:
         model = ElasticNetRegressor()
-        with capsys.disabled():
-            check_optuna_tune(model, "regress")
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
 
 
+@pytest.mark.fast
 class TestKNN:
     def test_knn_cls(self) -> None:
         model = KNNClassifier()
@@ -134,15 +147,16 @@ class TestKNN:
 
     def test_knn_cls_tune(self, capsys: CaptureFixture) -> None:
         model = KNNClassifier()
-        with capsys.disabled():
-            check_optuna_tune(model, "classify")
+        # with capsys.disabled():
+        check_optuna_tune(model, "classify")
 
     def test_knn_reg_tune(self, capsys: CaptureFixture) -> None:
         model = KNNRegressor()
-        with capsys.disabled():
-            check_optuna_tune(model, "regress")
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
 
 
+@pytest.mark.fast
 class TestSVM:
     def test_svm_cls(self) -> None:
         model = SVMClassifier()
@@ -154,15 +168,16 @@ class TestSVM:
 
     def test_svm_cls_tune(self, capsys: CaptureFixture) -> None:
         model = SVMClassifier()
-        with capsys.disabled():
-            check_optuna_tune(model, "classify")
+        # with capsys.disabled():
+        check_optuna_tune(model, "classify")
 
     def test_svm_reg_tune(self, capsys: CaptureFixture) -> None:
         model = SVMRegressor()
-        with capsys.disabled():
-            check_optuna_tune(model, "regress")
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
 
 
+@pytest.mark.fast
 class TestLightGBM:
     def test_lgbm_cls(self) -> None:
         model = LightGBMClassifier()
@@ -182,20 +197,20 @@ class TestLightGBM:
 
     def test_lgbm_cls_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMClassifier()
-        with capsys.disabled():
-            check_optuna_tune(model, "classify")
+        # with capsys.disabled():
+        check_optuna_tune(model, "classify")
 
     def test_lgbm_reg_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRegressor()
-        with capsys.disabled():
-            check_optuna_tune(model, "regress")
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
 
     def test_lgbm_rf_cls_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRFClassifier()
-        with capsys.disabled():
-            check_optuna_tune(model, "classify")
+        # with capsys.disabled():
+        check_optuna_tune(model, "classify")
 
     def test_lgbm_rf_reg_tune(self, capsys: CaptureFixture) -> None:
         model = LightGBMRFRegressor()
-        with capsys.disabled():
-            check_optuna_tune(model, "regress")
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")

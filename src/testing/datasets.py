@@ -13,6 +13,7 @@ from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import pandas as pd
+import pytest
 from pandas import DataFrame, Series
 from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
@@ -97,11 +98,6 @@ class TestDataset:
     __test__ = False  # https://stackoverflow.com/a/59888230
 
 
-__UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
-
-TEST_DATASETS: dict[str, TestDataset] = dict(sorted(__UNSORTED, key=lambda p: p[1].load().shape[0]))
-
-
 def fake_data(
     mode: Literal["classify", "regress"], noise: float = 1.0
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
@@ -150,3 +146,135 @@ def fake_data(
     target_test = Series(np.asarray(y_test).ravel(), name="target")
 
     return df_tr, df_test, target_tr, target_test
+
+
+__UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
+
+TEST_DATASETS: dict[str, TestDataset] = dict(sorted(__UNSORTED, key=lambda p: p[1].load().shape[0]))
+
+INSPECTION_TIMES = {
+    "KDD98": 68.49440933300002,
+    "KDDCup09_appetency": 29.841349791,
+    "KDDCup09_churn": 24.500925083,
+    "Traffic_violations": 7.761734875000002,
+    "okcupid-stem": 7.070780333000002,
+    "kick": 5.860810333000003,
+    "nomao": 5.264413917000006,
+    "adult": 4.739781624999999,
+    "news_popularity": 3.348081999999998,
+    "jungle_chess_2pcs_endgame_complete": 3.2254894579999984,
+    "OnlineNewsPopularity": 3.165630499999999,
+    "mushrooms": 3.1523351669999897,
+    "Mercedes_Benz_Greener_Manufacturing": 2.320836,
+    "adult-census": 2.0808727919999974,
+    "kdd_internet_usage": 1.856913500000001,
+    "SpeedDating": 1.7916436250000025,
+    "internet_usage": 1.7481538749999999,
+    "fps_benchmark": 1.5828882909999997,
+    "bank-marketing": 1.5273100420000034,
+    "cholesterol": 1.4553109579999997,
+    "ames_housing": 1.2510204170000012,
+    "ipums_la_97-small": 1.0387160410000007,
+    "ipums_la_99-small": 0.9914642499999999,
+    "ipums_la_98-small": 0.9687000410000017,
+    "Insurance": 0.9027092499999974,
+    "colleges": 0.8229736249999995,
+    "cleveland": 0.7004754589999997,
+    "jasmine": 0.6840260829999991,
+    "ozone_level": 0.6536169579999989,
+    "house_prices_nominal": 0.6510138750000003,
+    "BNG(lowbwt)": 0.46148729200000105,
+    "health_insurance": 0.4552565830000006,
+    "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc": 0.3985209169999999,
+    "jungle_chess_2pcs_endgame_rat_elephant": 0.35591020899999926,
+    "jungle_chess_2pcs_endgame_rat_lion": 0.35248429099999967,
+    "jungle_chess_2pcs_endgame_rat_panther": 0.3501694999999998,
+    "hypothyroid": 0.3442913749999992,
+    "Midwest_Survey_nominal": 0.2911310829999998,
+    "KDD": 0.28601433400000076,
+    "telco-customer-churn": 0.28339487499999905,
+    "Midwest_Survey": 0.27862320800000084,
+    "ada_prior": 0.2538542500000016,
+    "Midwest_survey2": 0.24950150000000093,
+    "shrutime": 0.22340208299999986,
+    "arrhythmia": 0.22146737500000047,
+    "Kaggle_bike_sharing_demand_challange": 0.21438554099999863,
+    "soybean": 0.16840979200000028,
+    "student_dropout": 0.15945937499999907,
+    "cylinder-bands": 0.11440770899999997,
+    "credit_approval": 0.09032287500000002,
+    "vote": 0.09019129200000009,
+    "dresses-sales": 0.08566837500000002,
+    "credit-approval_reproduced": 0.07974441699999968,
+    "colic": 0.07908112500000009,
+    "primary-tumor": 0.07623075000000057,
+    "analcatdata_marketing": 0.07507525000000026,
+    "abalone": 0.07501758300000105,
+    "wine_quality": 0.07421587500000015,
+    "student_performance_por": 0.07353629099999992,
+    "pbcseq": 0.06485062500000005,
+    "water-treatment": 0.059749041999999974,
+    "heart-c": 0.058186541000000425,
+    "solar_flare": 0.05271508300000072,
+    "dermatology": 0.0504779580000001,
+    "cps_85_wages": 0.04649529100000027,
+    "analcatdata_reviewer": 0.045098624999999615,
+    "elder": 0.0446324580000006,
+    "cmc": 0.041142250000000935,
+    "pbc": 0.04081912499999962,
+    "forest_fires": 0.03245541599999946,
+}
+
+FAST_INSPECTION = {}
+MEDIUM_INSPECTION = {}
+SLOW_INSPECTION = {}
+for dsname, ds in TEST_DATASETS.items():
+    if dsname in INSPECTION_TIMES:
+        runtime = INSPECTION_TIMES[dsname]
+        if runtime < 1.0:
+            FAST_INSPECTION[dsname] = ds
+        elif runtime < 5.0:
+            MEDIUM_INSPECTION[dsname] = ds
+        else:
+            SLOW_INSPECTION[dsname] = ds
+
+
+# https://stackoverflow.com/a/5409569
+def composed(*decs):
+    def deco(f):
+        for dec in reversed(decs):
+            f = dec(f)
+        return f
+
+    return deco
+
+
+all_ds = pytest.mark.parametrize(
+    "dataset",
+    [*TEST_DATASETS.items()],
+    ids=lambda pair: str(pair[0]),
+)
+fast_ds = composed(
+    pytest.mark.parametrize(
+        "dataset",
+        [*FAST_INSPECTION.items()],
+        ids=lambda pair: str(pair[0]),
+    ),
+    pytest.mark.fast,
+)
+med_ds = composed(
+    pytest.mark.parametrize(
+        "dataset",
+        [*MEDIUM_INSPECTION.items()],
+        ids=lambda pair: str(pair[0]),
+    ),
+    pytest.mark.med,
+)
+slow_ds = composed(
+    pytest.mark.parametrize(
+        "dataset",
+        [*SLOW_INSPECTION.items()],
+        ids=lambda pair: str(pair[0]),
+    ),
+    pytest.mark.slow,
+)

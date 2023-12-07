@@ -80,7 +80,15 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = ["test"]
 filterwarnings = [
-  'ignore:PytestCollectionWarning',
+  "ignore:PytestCollectionWarning",
+  'ignore:ConvergenceWarning',
   # note the use of single quote below to denote "raw" strings in TOML
   # 'ignore:function ham\(\) is deprecated:DeprecationWarning',
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "med: marks tests as medium (deselect with '-m \"not med\"')",
+  "medium: marks tests as medium (deselect with '-m \"not medium\"')",
+  "fast: marks tests as fast (deselect with '-m \"not fast\"')",
+  "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
 ]

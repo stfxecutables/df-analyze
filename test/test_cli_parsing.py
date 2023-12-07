@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import pytest
 from cli_test_helpers import ArgvContext
 
 from src.cli.cli import get_options
@@ -16,11 +17,13 @@ from src.testing.datasets import TEST_DATASETS
 PATH = list(TEST_DATASETS.values())[0].datapath
 
 
+@pytest.mark.fast
 def test_classifiers() -> None:
     opts = get_options(f"--df {PATH} --categoricals one two three")
     assert opts.categoricals == ["one", "two", "three"]
 
 
+@pytest.mark.fast
 def test_quoted_classifiers() -> None:
     # NOTE: can also just confirm manually that this does work to allow
     # column names with spaces in them.

@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Mapping, Optional, overload
+from typing import Mapping, Optional, Type, overload
 
 from optuna import Trial
 
@@ -212,6 +212,9 @@ class MLPEstimator(DfAnalyzeModel):
             device="cpu",
             verbose=0,
         )
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         widths = (16, 32, 64, 128, 256, 512)
