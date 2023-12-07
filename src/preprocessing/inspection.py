@@ -1,6 +1,7 @@
 import sys
 import traceback
 from dataclasses import dataclass
+from enum import Enum
 from math import ceil
 from shutil import get_terminal_size
 from typing import Optional, Union
@@ -17,6 +18,15 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN
+from src.preprocessing.text import (
+    BIG_INFO,
+    CAT_INFO,
+    CONST_INFO,
+    FLOAT_INFO,
+    ID_INFO,
+    ORD_INFO,
+    TIME_INFO,
+)
 
 TIME_WORDS = [
     r".*time.*",
@@ -80,6 +90,30 @@ CONT_WORDS = [
 ]
 
 
+class ColumnType(Enum):
+    Id = "id"
+    Time = "time"
+    Const = "const"
+    Float = "float"
+    Ordinal = "ord"
+    Categorical = "cat"
+    BigCat = "big_cat"
+    Other = "other"
+
+    def fmt(self, info: str) -> str:
+        fmt = {
+            ColumnType.Id: ID_INFO,
+            ColumnType.Time: TIME_INFO,
+            ColumnType.Const: CONST_INFO,
+            ColumnType.Float: FLOAT_INFO,
+            ColumnType.Ordinal: ORD_INFO,
+            ColumnType.Categorical: CAT_INFO,
+            ColumnType.BigCat: BIG_INFO,
+            ColumnType.Other: "{info}",
+        }[self]
+        return fmt.format(info=info)
+
+
 @dataclass
 class InflationInfo:
     col: str
@@ -101,18 +135,45 @@ class ColumnDescriptions:
     cat: Optional[str] = None
 
 
+class InspectionInfo:
+    """For when df-analyze detects (but does not resolve) data problems"""
+
+    def __init__(
+        self,
+        kind: ColumnType,
+        descs: dict[str, str],
+    ) -> None:
+        self.kind = kind
+        self.descs = descs
+        self.pad = get_width(self.descs)
+        self.lines = [f"{col:<{self.pad}} {desc}" for col, desc in self.descs.items()]
+        self.is_empty = len(self.descs) == 0
+
+    def print_message(self) -> None:
+        if self.is_empty:
+            return
+
+        cols = get_terminal_size((81, 24))[0]
+        sep = "=" * cols
+        underline = "." * (len(self.__class__.__name__) + 1)
+        info = "\n".join(self.lines)
+        message = self.kind.fmt(info)
+        formatted = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
+        print(formatted, file=sys.stderr)
+
+
 @dataclass
 class InspectionResults:
-    floats: dict[str, str]
-    ords: dict[str, str]
-    ids: dict[str, str]
-    times: dict[str, str]
-    consts: dict[str, str]  # true constants
-    cats: dict[str, str]
-    int_ords: dict[str, str]
-    int_ids: dict[str, str]
+    floats: InspectionInfo
+    ords: InspectionInfo
+    ids: InspectionInfo
+    times: InspectionInfo
+    consts: InspectionInfo
+    cats: InspectionInfo
+    int_ords: InspectionInfo
+    int_ids: InspectionInfo
     big_cats: dict[str, int]
-    nyan_cats: dict[str, str]
+    nyan_cats: InspectionInfo
     inflation: list[InflationInfo]
     bin_cats: list[str]
     multi_cats: list[str]
@@ -122,26 +183,14 @@ class InspectionError(Exception):
     pass
 
 
-class MessyDataWarning(UserWarning):
-    """For when df-analyze detects (but does not resolve) data problems"""
-
-    def __init__(self, message: str) -> None:
-        cols = get_terminal_size((81, 24))[0]
-        sep = "=" * cols
-        underline = "." * (len(self.__class__.__name__) + 1)
-        self.message = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
-
-    def __str__(self) -> str:
-        return str(self.message)
-
-
-def messy_inform(message: str) -> None:
+def messy_inform(message: str) -> str:
     cols = get_terminal_size((81, 24))[0]
     sep = "=" * cols
     title = "Found Messy Data"
     underline = "." * (len(title) + 1)
     message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
     print(message, file=sys.stderr)
+    return message
 
 
 def get_str_cols(df: DataFrame, target: str) -> list[str]:
@@ -464,7 +513,7 @@ def looks_constant(series: Series) -> tuple[bool, str]:
 
 def detect_big_cats(
     df: DataFrame, unique_counts: dict[str, int], all_cats: list[str], _warn: bool = True
-) -> tuple[dict[str, int], list[InflationInfo]]:
+) -> tuple[dict[str, int], list[InflationInfo], Optional[InspectionInfo]]:
     """Detect categoricals with more than 20 levels, and "inflating" categoricals
     (see notes).
 
@@ -473,23 +522,13 @@ def detect_big_cats(
     Inflated categoricals we deflate by converting all inflated levels to NaN.
     """
     big_cats = [col for col in all_cats if (col in unique_counts) and (unique_counts[col] >= 20)]
-    if len(big_cats) > 0 and _warn:
-        messy_inform(
-            "Found string-valued features with more than 50 unique levels. "
-            "Unless you have a large number of samples, or if these features "
-            "have a highly imbalanced / skewed distribution, then they will "
-            "cause sparseness after one-hot encoding. This is generally not "
-            "beneficial to most algorithms. You should inspect these features "
-            "and think if it makes sense if they would be predictively useful "
-            "for the given target. If they are unlikely to be useful, consider "
-            "removing them from the data. This will also likely considerably "
-            "improve `df-analyze` predictive performance and reduce compute "
-            "times. However, we do NOT remove these features automatically\n\n"
-            f"String-valued features with over 50 levels: {big_cats}"
-        )
+    big_cols = {col: f"{unique_counts[col]} levels" for col in big_cats}
+    inspect_info = InspectionInfo(ColumnType.BigCat, big_cols)
+    if _warn:
+        inspect_info.print_message()
 
     # dict is {colname: list[columns to deflate...]}
-    inflation_info: list[InflationInfo] = []
+    inflation_infos: list[InflationInfo] = []
     for col in all_cats:
         unqs, cnts = np.unique(df[col].astype(str), return_counts=True)
         n_total = len(unqs)
@@ -500,7 +539,7 @@ def detect_big_cats(
             continue
         n_keep = keep_idx.sum()
         n_deflate = len(keep_idx) - n_keep
-        inflation_info.append(
+        inflation_infos.append(
             InflationInfo(
                 col=col,
                 to_deflate=unqs[~keep_idx].tolist(),
@@ -510,7 +549,7 @@ def detect_big_cats(
                 n_total=n_total,
             )
         )
-    return {col: unique_counts[col] for col in big_cats}, inflation_info
+    return {col: unique_counts[col] for col in big_cats}, inflation_infos, inspect_info
 
 
 def inspect_str_column(
@@ -557,6 +596,15 @@ def inspect_str_column(
         return col, e
 
 
+def get_width(*cols: dict[str, str]) -> int:
+    all_cols = {}
+    for d in cols:
+        all_cols.update(d)
+    if len(all_cols) > 0:
+        return max(len(col) for col in all_cols) + 2
+    return 0
+
+
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
@@ -564,7 +612,7 @@ def inspect_str_columns(
     ordinals: list[str],
     _warn: bool = True,
 ) -> tuple[
-    dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str], dict[str, str]
+    InspectionInfo, InspectionInfo, InspectionInfo, InspectionInfo, InspectionInfo, InspectionInfo
 ]:
     """
     Returns
@@ -653,125 +701,22 @@ def inspect_str_columns(
     #     if maybe_cat and (col not in ords) and (col not in cats):
     #         cat_cols[col] = desc
 
-    if not _warn:
-        return float_cols, ord_cols, id_cols, time_cols, cat_cols, const_cols
+    float_info = InspectionInfo(ColumnType.Float, float_cols)
+    ord_info = InspectionInfo(ColumnType.Ordinal, ord_cols)
+    id_info = InspectionInfo(ColumnType.Id, id_cols)
+    time_info = InspectionInfo(ColumnType.Time, time_cols)
+    cat_info = InspectionInfo(ColumnType.Categorical, cat_cols)
+    const_info = InspectionInfo(ColumnType.Const, const_cols)
 
-    all_cols = {**float_cols, **ord_cols, **id_cols, **time_cols, **cat_cols, **const_cols}
-    if len(all_cols) > 0:
-        w = max(len(col) for col in all_cols) + 2
-    else:
-        w = 0
-    if len(float_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in float_cols.items()])
-        messy_inform(
-            "Found string-valued features that seem to mostly contain "
-            "continuous values. This likely means these columns are formatted "
-            "oddly (e.g. all values might be quoted) or that there is a typo "
-            "or strange value in the column. df-analyze will automatically "
-            "treat these columns as continuous to prevent wasted compute "
-            "resources that would be incurred with encoding them as "
-            "categorical, however, this might be an error.\n\n"
-            f"Columns that may be continuous:\n{info}"
-        )
+    if _warn:
+        id_info.print_message()
+        time_info.print_message()
+        const_info.print_message()
+        float_info.print_message()
+        ord_info.print_message()
+        cat_info.print_message()
 
-    if len(ord_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in ord_cols.items()])
-        messy_inform(
-            "Found string-valued features that could contain ordinal values "
-            "(i.e. non-categorical integer values) NOT specified with the "
-            "`--ordinals` option. Check if these features are ordinal or "
-            "categorical, and then explicitly pass them to either the "
-            "`--categoricals` or `--ordinals` options when configuring "
-            "df-analyze.\n\n"
-            f"Columns that may be ordinal:\n{info}"
-        )
-
-    if len(id_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in id_cols.items()])
-        messy_inform(
-            "Found string-valued features likely containing identifiers (i.e. "
-            "unique string or integer values that are assigned arbitrarily), "
-            "or which have more levels (unique values) than one half of the "
-            "number of (non-NaN) samples in the data. This is most likely an "
-            "identifier or junk feature which has no predictive value, and thus "
-            "should be removed from the data. Even if the feature is not an "
-            "identifer, with such a large number of levels, then a test set "
-            "(either in k-fold, or holdout) will, on average, mostly contain "
-            "values that were never seen during training. Thus, these features "
-            "are essentially undersampled, and too sparse to be useful given "
-            "the amount of data. Encoding this many values also massively "
-            "increases compute costs for little gain. We thus REMOVE these "
-            "features. However, but you should inspect these features "
-            "yourself and ensure these features are not better described as "
-            "either ordinal or continuous. If so, specify them using the  "
-            "`--ordinals` or `--continous` options to df-analyze.\n\n"
-            f"Columns that likely are identifiers:\n{info} "
-        )
-
-    if len(time_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in time_cols.items()])
-        messy_inform(
-            "Found string-valued features that appear to be datetime data or "
-            "time differences. Datetime data cannot currently be handled by "
-            "`df-analyze` (or most AutoML or or most automated predictive "
-            "approaches) due to special data preprocessing needs (e.g. "
-            "Fourier features), splitting (e.g. time-based cross-validation, "
-            "forecasting, hindcasting) and in the models used (ARIMA, VAR, "
-            "etc.).\n\n"
-            f"Columns that are likely timestamps:\n{info}\n\n"
-            ""
-            "To remove this warning, DELETE these columns from your data, "
-            "or manually edit or convert the column values so they are "
-            "interpretable as a categorical or continuous variable reflecting "
-            "some kind of cyclicality that may be relevant to the predictive "
-            "task. E.g. a variable that stores the time a sample was recorded "
-            "might be converted to categorical variable like:\n\n"
-            ""
-            "  - morning, afternoon, evening, night (for daily data)\n"
-            "  - day of the week (for monthly data)\n"
-            "  - month (for yearly data)\n"
-            "  - season (for multi-year data)\n\n"
-            ""
-            "Or to continuous / ordinal cyclical versions of these, like:\n\n"
-            ""
-            "  - values from 0 to 23 for ordinal representation of day hour\n"
-            "  - values from 0.0 to 23.99 for continuous version of above\n"
-            "  - values from 0 to 7 for day of the week, 0 to 365 for year\n\n"
-            ""
-            "It is possible to convert a single time feature into all of the "
-            "above, i.e. to expand the feature into multiple cyclical features. "
-            "This would be a variant of Fourier features (see e.g.\n\n"
-            ""
-            "\tTian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong "
-            'Jin:\n\t"FEDformer: Frequency Enhanced Decomposed Transformer\n\tfor '
-            'Long-term Series Forecasting", 2022;\n\t'
-            "[http://arxiv.org/abs/2201.12740].\n\n"
-            ""
-            "`df-analyze` may in the future attempt to automate this via "
-            "`sktime` (https://www.sktime.net). "
-        )
-    if len(cat_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in cat_cols.items()])
-        messy_inform(
-            "Found string-valued features not specified with `--categoricals` "
-            "argument, and that look categorical. These will be one-hot "
-            "encoded to allow use in subsequent analyses. To silence this "
-            "warning, specify them as categoricals or ordinals manually "
-            "either via the CLI or in the spreadsheet file header, "
-            "using the `--categoricals` and/or `--ordinals` option.\n\n"
-            f"Features that look categorical not specified by `--categoricals`:\n{info}"
-        )
-
-    if len(const_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in const_cols.items()])
-        messy_inform(
-            "Found string-valued features that are constant (i.e. all values) "
-            "are NaN or all values are the same non-NaN value). These contain "
-            "no information and will be removed automatically.\n\n"
-            f"Features that are constant:\n{info}"
-        )
-
-    return float_cols, ord_cols, id_cols, time_cols, cat_cols, const_cols
+    return float_info, ord_info, id_info, time_info, cat_info, const_info
 
 
 def inspect_int_columns(
@@ -780,7 +725,7 @@ def inspect_int_columns(
     categoricals: list[str],
     ordinals: list[str],
     _warn: bool = True,
-) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+) -> tuple[InspectionInfo, InspectionInfo, InspectionInfo]:
     """
     Returns
     -------
@@ -805,7 +750,7 @@ def inspect_other_columns(
     categoricals: list[str],
     ordinals: list[str],
     _warn: bool = True,
-) -> dict[str, str]:
+) -> InspectionInfo:
     """
     Returns
     -------
@@ -824,24 +769,10 @@ def inspect_other_columns(
             const_cols[col] = desc
             continue
 
-    if not _warn:
-        return const_cols
-
-    all_cols = {**const_cols}
-    if len(all_cols) > 0:
-        w = max(len(col) for col in all_cols) + 2
-    else:
-        w = 0
-
-    if len(const_cols) > 0:
-        info = "\n".join([f"{col:<{w}} {desc}" for col, desc in const_cols.items()])
-        messy_inform(
-            "Found features that are constant (i.e. all values) are NaN or "
-            "all values are the same non-NaN value). These contain no "
-            "information and will be removed automatically.\n\n"
-            f"Features that are constant:\n{info}"
-        )
-    return const_cols
+    info = InspectionInfo(ColumnType.Const, const_cols)
+    if _warn:
+        info.print_message()
+    return info
 
 
 def inspect_data(
@@ -881,10 +812,10 @@ def inspect_data(
     )
     other_consts = inspect_other_columns(df, remain, categoricals, ordinals=ordinals, _warn=_warn)
 
-    all_consts = {**consts, **int_consts, **other_consts}
-    all_cats = [*categoricals, *cats.keys()]
+    all_consts = {**consts.descs, **int_consts.descs, **other_consts.descs}
+    all_cats = [*categoricals, *cats.descs.keys()]
     unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
-    bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)
+    bigs, inflation, big_info = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)
 
     bin_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 2}
     nyan_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 1}
@@ -896,8 +827,8 @@ def inspect_data(
 
     nyan_cats = {col: "Constant categorical" for col in nyan_cats}
 
-    all_ordinals = set(ords.keys()).union(int_ords.keys())
-    ambiguous = all_ordinals.intersection(cats)
+    all_ordinals = set(ords.descs.keys()).union(int_ords.descs.keys())
+    ambiguous = all_ordinals.intersection(cats.descs.keys())
     ambiguous.difference_update(categoricals)
     ambiguous.difference_update(ordinals)
     ambiguous = sorted(ambiguous)
