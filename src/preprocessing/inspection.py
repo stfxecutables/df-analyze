@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import traceback
 from dataclasses import dataclass
@@ -24,6 +26,7 @@ from src.preprocessing.text import (
     CONST_INFO,
     FLOAT_INFO,
     ID_INFO,
+    NYAN_INFO,
     ORD_INFO,
     TIME_INFO,
 )
@@ -98,6 +101,7 @@ class ColumnType(Enum):
     Ordinal = "ord"
     Categorical = "cat"
     BigCat = "big_cat"
+    Nyan = "const_nan"
     Other = "other"
 
     def fmt(self, info: str) -> str:
@@ -109,7 +113,7 @@ class ColumnType(Enum):
             ColumnType.Ordinal: ORD_INFO,
             ColumnType.Categorical: CAT_INFO,
             ColumnType.BigCat: BIG_INFO,
-            ColumnType.Other: "{info}",
+            ColumnType.Other: NYAN_INFO,
         }[self]
         return fmt.format(info=info)
 
@@ -145,7 +149,7 @@ class InspectionInfo:
     ) -> None:
         self.kind = kind
         self.descs = descs
-        self.pad = get_width(self.descs)
+        self.pad = self.get_width(self.descs)
         self.lines = [f"{col:<{self.pad}} {desc}" for col, desc in self.descs.items()]
         self.is_empty = len(self.descs) == 0
 
@@ -160,6 +164,26 @@ class InspectionInfo:
         message = self.kind.fmt(info)
         formatted = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
         print(formatted, file=sys.stderr)
+
+    @staticmethod
+    def merge(*infos: InspectionInfo) -> InspectionInfo:
+        if len(infos) == 0:
+            raise ValueError("Nothing to merge")
+        kind = infos[0].kind
+        if not all(info.kind == kind for info in infos):
+            raise ValueError("Cannot merge when kinds differ.")
+        descs = {}
+        for info in infos:
+            descs.update(info.descs)
+        return InspectionInfo(kind=kind, descs=descs)
+
+    def get_width(self, *cols: dict[str, str]) -> int:
+        all_cols = {}
+        for d in cols:
+            all_cols.update(d)
+        if len(all_cols) > 0:
+            return max(len(col) for col in all_cols) + 2
+        return 0
 
 
 @dataclass
@@ -596,15 +620,6 @@ def inspect_str_column(
         return col, e
 
 
-def get_width(*cols: dict[str, str]) -> int:
-    all_cols = {}
-    for d in cols:
-        all_cols.update(d)
-    if len(all_cols) > 0:
-        return max(len(col) for col in all_cols) + 2
-    return 0
-
-
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
@@ -668,38 +683,6 @@ def inspect_str_columns(
             cat_cols[desc.col] = desc.cat
         if desc.const is not None:
             const_cols[desc.col] = desc.const
-
-    # for col in tqdm(
-    #     str_cols, desc="Inspecting features", total=len(str_cols), disable=len(str_cols) < 50
-    # ):
-    #     is_const, desc = looks_constant(df[col])
-    #     if is_const:
-    #         const_cols[col] = desc
-    #         continue
-
-    #     maybe_time, desc = looks_timelike(df[col])
-    #     if maybe_time:
-    #         time_cols[col] = desc
-    #         continue  # time is bad enough we don't need other checks
-
-    #     maybe_ord, desc = looks_ordinal(df[col])
-    #     if maybe_ord and (col not in ords) and (col not in cats):
-    #         ord_cols[col] = desc
-
-    #     maybe_id, desc = looks_id_like(df[col])
-    #     if maybe_id:
-    #         id_cols[col] = desc
-
-    #     maybe_float, desc = looks_floatlike(df[col])
-    #     if maybe_float:
-    #         float_cols[col] = desc
-
-    #     if maybe_float or maybe_id or maybe_time:
-    #         continue
-
-    #     maybe_cat, desc = looks_categorical(df[col])
-    #     if maybe_cat and (col not in ords) and (col not in cats):
-    #         cat_cols[col] = desc
 
     float_info = InspectionInfo(ColumnType.Float, float_cols)
     ord_info = InspectionInfo(ColumnType.Ordinal, ord_cols)
@@ -812,7 +795,8 @@ def inspect_data(
     )
     other_consts = inspect_other_columns(df, remain, categoricals, ordinals=ordinals, _warn=_warn)
 
-    all_consts = {**consts.descs, **int_consts.descs, **other_consts.descs}
+    # all_consts = {**consts.descs, **int_consts.descs, **other_consts.descs}
+    all_consts = InspectionInfo.merge(consts, int_consts, other_consts)
     all_cats = [*categoricals, *cats.descs.keys()]
     unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
     bigs, inflation, big_info = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)
@@ -825,7 +809,8 @@ def inspect_data(
     nyan_cats = sorted(nyan_cats.intersection(all_cats))
     multi_cats = sorted(multi_cats.intersection(all_cats))
 
-    nyan_cats = {col: "Constant categorical" for col in nyan_cats}
+    nyan_cols = {col: "Constant when dropping NaNs" for col in nyan_cats}
+    nyan_info = InspectionInfo(ColumnType.Nyan, nyan_cols)
 
     all_ordinals = set(ords.descs.keys()).union(int_ords.descs.keys())
     ambiguous = all_ordinals.intersection(cats.descs.keys())
@@ -852,6 +837,6 @@ def inspect_data(
         big_cats=bigs,
         inflation=inflation,
         bin_cats=bin_cats,
-        nyan_cats=nyan_cats,
+        nyan_cats=nyan_info,
         multi_cats=multi_cats,
     )

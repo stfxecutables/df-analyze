@@ -101,6 +101,16 @@ BIG_INFO = (
     "predictively useful for the given target. If they are unlikely to be "
     "useful, consider removing them from the data. This will also likely "
     "considerably improve `df-analyze` predictive performance and reduce compute "
-    "times. However, we do NOT remove these features automatically\n\n"
-    "String-valued features with over 50 levels: {big_cats}"
+    "times. However, we do NOT remove these features automatically.\n\n"
+    "String-valued features with over 50 levels: {info}"
+)
+NYAN_INFO = (
+    "Found features that are constant if dropping NaN values. Whether or not "
+    "these features have predictive value will depend on if data is missing "
+    "completely at random (MCAR - no information), are correlated with other "
+    "data features that have predictive value, or if missingness is related to "
+    "the prediction target. If you have a lot of features, these would be good "
+    "candidates to consider for removal."
+    "\n\n"
+    "Features that are constant when dropping NaNs: {info}"
 )
