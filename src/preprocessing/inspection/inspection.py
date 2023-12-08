@@ -425,7 +425,7 @@ def inspect_data(
     ordinals: Optional[list[str]] = None,
     _warn: bool = True,
 ) -> tuple[InspectionResults, InspectionResults]:
-    """
+    r"""
     Attempt to infer column types
 
     Notes
@@ -462,18 +462,24 @@ def inspect_data(
     .     |___________        _______|____________________________
     .     |          |        |              |                   |
     .  certain   uncertain    |              |                   |
-    .     |         cat       |              |                   |
-    .     |         or     certain       uncertain             ambig
-    .     |        ambig      |             ord               cat/ord
-    .     |          |        |         _____|___         _______|________
-    .     v          v        v         |       |         |
-    .  remove      trust    remove     big     ???       big
-    .    or        user       or       cat               cat
-    .  coerce        |      coerce      |
-    .                v                  |
-    .           final ordinal        deflate
-    .
-
+    .     |         cat       |          uncertain           uncertain
+    .     |         or     certain          ord              ord & cat
+    .     |        ambig      |           NOT cat                |
+    .     |          |        |              |                   |
+    .     v          v        v              |                   |
+    .  remove      trust    remove        distrust             trust
+    .    or        user       or          ___|___             ___|___
+    .  coerce        |      coerce       |       |           |       |
+    .                v                   |       |           |       |
+    .           final ordinal         big cat   cat       big cat   cat
+    .                                    |       |           |       |
+    .                                  reject  agree      deflate    |
+    .                                    |       |           |       |
+    .                                    |       |           |_______|
+    .                                    |       |                |
+    .                                    v       v                v
+    .                                  final   final          final cat
+    .                                   ord     cat
 
     """
     categoricals = categoricals or []
