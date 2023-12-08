@@ -9,7 +9,10 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
+from sklearn.linear_model import LinearRegression, LogisticRegression, SGDClassifier, SGDRegressor
+from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
+from sklearn.svm import SVC, SVR
 from tqdm import tqdm
 
 from src._constants import MAX_PERF_N_FEATURES
@@ -18,6 +21,9 @@ from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import (
     InspectionInfo,
     InspectionResults,
+    convert_categorical,
+    convert_categoricals,
+    inflation,
     inspect_data,
     messy_inform,
 )
@@ -99,25 +105,30 @@ def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
 
 
     """
-    X = df.drop(columns=target)
+    if target in df.columns:
+        X = df.drop(columns=target)
+    else:
+        X = df
+
     cols = X.columns
 
     # need to not normalize one-hot columns...
 
     if robust:
-        medians = np.median(X, axis=0)
+        medians = np.nanmedian(X, axis=0)
         X = X - medians  # robust center
 
         # clip values 2 times more extreme than 95% of the data
-        rmins = np.percentile(X, 5, axis=0)
-        rmaxs = np.percentile(X, 95, axis=0)
+        rmins = np.nanpercentile(X, 5, axis=0)
+        rmaxs = np.nanpercentile(X, 95, axis=0)
         rranges = rmaxs - rmins
         rmins -= 2 * rranges
         rmaxs += 2 * rranges
         X = np.clip(X, a_min=rmins, a_max=rmaxs)
 
     X_norm = DataFrame(data=MinMaxScaler().fit_transform(X), columns=cols)
-    X_norm = pd.concat([X, df[target]], axis=1)
+    if target in df:
+        X_norm = pd.concat([X, df[target]], axis=1)
     return X_norm
 
 
@@ -510,3 +521,90 @@ def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
     else:
         raise RuntimeError("Unreachable!")
     return df
+
+
+def reconcile_inspections(
+    df: DataFrame,
+    target: str,
+    main_results: InspectionResults,
+    check_results: InspectionResults,
+    is_classification: bool,
+) -> InspectionResults:
+    """
+    Notes
+    -----
+    It would be an interesting idea to try to decide between categorical vs
+    continuous (or ordinal) representations via a predictive test. It seems
+    though since in practice most ambiguous variables just don't have much
+    information anyway, and most will not predict the target at all, this will
+    not really work (and also be extremely expensive).
+
+    """
+    df = convert_categoricals(df, target)
+    infers = check_results.basic_df()
+    sus_infers = infers[~infers["reason"].str.contains("String|Binary|numeric|(?:Single value)")]
+    df_sus = df[sus_infers["feature_name"].to_list()]
+    df_sus = df_sus.loc[:, ~df_sus.columns.duplicated()].copy()
+
+    for col in df_sus:
+        if (
+            (col in check_results.times.descs)
+            or (col in check_results.consts.descs)
+            or (col in check_results.ids.descs)
+            or (col in check_results.big_cats)
+        ):
+            df_sus = df_sus.drop(columns=col)
+    if df_sus.empty:
+        return
+
+    y = df[target]
+    if is_classification:
+        df_sus, y = encode_target(df_sus, convert_categorical(y).astype(str))
+    else:
+        df_sus, y = clean_regression_target(df, y)
+
+    print(df_sus)
+    desc = df_sus.describe().T
+    desc["perc_inflated"] = df_sus.apply(inflation)
+    desc["cat_score"] = np.nan
+    desc["ord_score"] = np.nan
+    desc["best_score"] = ""
+    for col in tqdm(df_sus, total=df_sus.shape[1]):
+        try:
+            x = df_sus[col].astype(float).to_frame()
+            target = str(y.name)
+            imputer = SimpleImputer(strategy="median")
+            xn = normalize(x, target).to_numpy()
+            x_ord = imputer.fit_transform(xn).reshape(-1, 1)
+            x_cat = pd.get_dummies(x.astype(str), dummy_na=True, drop_first=True).to_numpy()
+            if is_classification:
+                lin_ords = cross_val_score(
+                    SGDClassifier(loss="log_loss", max_iter=100), x_ord, y, n_jobs=-1
+                )
+                lin_cats = cross_val_score(
+                    SGDClassifier(loss="log_loss", max_iter=100), x_cat, y, n_jobs=-1
+                )
+                # lin_ords = cross_val_score(SVC(max_iter=2000), x_ord, y, n_jobs=-1)
+                # lin_cats = cross_val_score(SVC(max_iter=2000), x_cat, y, n_jobs=-1)
+                lin_ord, lin_cat = np.mean(lin_ords), np.mean(lin_cats)
+                if np.abs(lin_ord - lin_cat) < 0.0001:
+                    best = "none"
+                else:
+                    best = "ord" if lin_ord > lin_cat else "cat"
+            else:
+                lin_ords = cross_val_score(SGDRegressor(max_iter=100), x_ord, y)
+                lin_cats = cross_val_score(SGDRegressor(max_iter=100), x_cat, y)
+                # lin_ords = cross_val_score(SVR(max_iter=2000), x_ord, y)
+                # lin_cats = cross_val_score(SVR(max_iter=2000), x_cat, y)
+                lin_ord, lin_cat = np.mean(lin_ords), np.mean(lin_cats)
+                if np.abs(lin_ord - lin_cat) < 0.01:
+                    best = "none"
+                else:
+                    best = "ord" if lin_ord > lin_cat else "cat"
+            desc.loc[str(col), "cat_score"] = lin_cat
+            desc.loc[str(col), "ord_score"] = lin_ord
+            desc.loc[str(col), "best_score"] = best
+        except ValueError:
+            ...
+            desc.loc[str(col), "best_score"] = "err"
+    print(desc)

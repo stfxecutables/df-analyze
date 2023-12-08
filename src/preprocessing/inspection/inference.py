@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import traceback
 from dataclasses import dataclass
@@ -81,6 +82,37 @@ CONT_WORDS = [
     r".*ratio.*",
     r".*total.*",
 ]
+
+
+class Inference(Enum):
+    MaybeOrd = "ord?"
+    MaybeCat = "cat?"
+    MaybeCont = "cont?"
+    MaybeId = "id?"
+    MaybeTime = "time?"
+    CertainOrd = "ord"
+    CertainCat = "cat"
+    CertainCont = "cont"
+    CertainId = "id"
+    CertainTime = "time"
+    Const = "const"
+
+    def is_certain(self) -> bool:
+        return self in [
+            Inference.CertainCat,
+            Inference.CertainCont,
+            Inference.CertainOrd,
+            Inference.CertainId,
+            Inference.CertainTime,
+            Inference.Const,
+        ]
+
+
+def has_cat_name(series: Series) -> tuple[bool, str]:
+    for pattern in CAT_WORDS:
+        if re.search(pattern, str(series.name).lower()) is not None:
+            return True, str(pattern)
+    return False, ""
 
 
 def is_timelike(s: str) -> bool:
@@ -198,8 +230,9 @@ def maybe_large_ordinal(series: Series) -> bool:
 
 def converts_to_int(series: Series) -> bool:
     try:
-        series.astype(int)
-        return True
+        x = series.astype(int)
+        if np.all(x == series):
+            return True
     except Exception:
         ...
     with catch_warnings():
@@ -263,6 +296,9 @@ def looks_ordinal(series: Series) -> tuple[bool, str]:
         return False, ""
 
     unq_ints, cnts = np.unique(ints, return_counts=True)
+    vmin, vmax = ints.min(), ints.max()
+    if len(unq_ints) == 1:
+        return True, "Constant integer after dropping NaNs"
 
     # typical case might be ordinal or ids with some NaNs
     # Two obvious cases here:
@@ -271,7 +307,6 @@ def looks_ordinal(series: Series) -> tuple[bool, str]:
     # (2) we have a very large ordinal relative to the number of samples
     if np.all(cnts == 1):
         if maybe_large_ordinal(dropped):
-            vmin, vmax = ints.min(), ints.max()
             return (
                 True,
                 f"All unique values in large range [{vmin}, {vmax}] relative to number of samples",
@@ -284,16 +319,24 @@ def looks_ordinal(series: Series) -> tuple[bool, str]:
     diffs = np.diff(np.sort(unq_ints))
     unq_diffs = np.unique(diffs)
     if len(unq_diffs) == 1:
-        vmin, vmax = ints.min(), ints.max()
         if vmin == 0 and vmax == 1:
             return True, f"Binary {{{vmin}, {vmax}}} indicator"
         return True, f"Increasing integers in [{vmin}, {vmax}]"
 
     # Small chance remains that we are missing some level(s) of an ordinal, so
     # that we have all values in [0, ..., N] except for a couple, making some
-    # diffs on the sorted unique values greater than 1. Here, we just
-    # heuristically probably want to warn the user for some likely common cases
-    # In most cases, this would be some rating
+    # diffs on the sorted unique values greater than 1.
+    if np.mean(diffs == 1) >= 0.8:
+        return True, r"80% or more of unique integer values differ only by 1"
+    if len(unq_ints) / (vmax - vmin) >= 0.8:
+        return True, f"80% or more of values in [{vmin}, {vmax}] are sampled"
+
+    # Here, we just heuristically probably want to warn the user for some
+    # likely common cases In most cases, this would be some rating
+
+    if int(vmin) not in [0, 1]:
+        return True, "Integers not starting at 0 or 1"
+
     imax = np.max(unq_ints)
     if imax in [4, 6]:
         return True, f"Largest int is a common 0-indexed Likert-type scale value: {imax}"
@@ -357,7 +400,7 @@ def looks_categorical(series: Series) -> tuple[bool, str]:
         return False, "Looks identifier-like"
 
     if not converts_to_int(series):  # already checked not float
-        return True, "String data"
+        return True, "Data not interpretable as numeric"
 
     # Now we have something that converts to int, and doesn't look like an
     # identifier. It could be a small ordinal or a categorical, but generally

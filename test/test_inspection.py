@@ -136,7 +136,7 @@ def do_detect_floats(dataset: tuple[str, TestDataset]) -> None:
     cats = ds.categoricals
     conts = ds.continuous
     results = inspect_data(df, "target", cats)
-    float_cols = [*results.floats.descs.keys()]
+    float_cols = [*results.conts.descs.keys()]
     if sorted(float_cols) != sorted(conts):
         raise ValueError(f"Columns detected as continuous not as expected for {dsname}")
 
