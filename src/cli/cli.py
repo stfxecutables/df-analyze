@@ -508,12 +508,22 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
 
     cli_args = parse_and_merge_args(parser, args)
+    cats = set(cli_args.classifiers)
+    ords = set(cli_args.ordinals)
+    for cat in cats:
+        if cat in ords:
+            warn(
+                f"Feature '{cat}' is present in both `--categoricals` and "
+                f"`--ordinals` options. Feature '{cat}' will be treated as "
+                "ordinal to reduce compute times"
+            )
+            ords.remove(cat)
 
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=cli_args.target,
-        categoricals=cli_args.categoricals,
-        ordinals=cli_args.ordinals,
+        categoricals=sorted(cats),
+        ordinals=sorted(ords),
         drops=cli_args.drops,
         nan_handling=cli_args.nan,
         feat_clean=cli_args.feat_clean,
