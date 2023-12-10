@@ -249,7 +249,7 @@ def drop_cols(
     cols = set()
     cols_descs = []
     for d in col_dicts:
-        for col, desc in d.descs.items():
+        for col, desc in d.infos.items():
             if col in df:
                 cols.add(col)
                 cols_descs.append((col, desc))
@@ -375,13 +375,13 @@ def encode_categoricals(
     df = df.drop(columns=target)
     df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
     df, cats, ords = deflate_categoricals(df, results, cats, ords, _warn=warn_explosion)
-    to_convert = [*cats, *results.cats.descs.keys()]
+    to_convert = [*cats, *results.cats.infos.keys()]
 
     # below will FAIL if we didn't remove timestamps or etc.
     try:
         bins = sorted(set(results.bin_cats).intersection(cats))
         multis = sorted(set(results.multi_cats).intersection(cats))
-        nyans = sorted(set(results.nyan_cats.descs.keys()).intersection(cats))
+        nyans = sorted(set(results.nyan_cats.infos.keys()).intersection(cats))
 
         new = df
         print("One-hot encoding categorical variables")
@@ -542,15 +542,14 @@ def reconcile_inspections(
     """
     df = convert_categoricals(df, target)
     infers = check_results.basic_df()
-    sus_infers = infers[~infers["reason"].str.contains("String|Binary|numeric|(?:Single value)")]
-    df_sus = df[sus_infers["feature_name"].to_list()]
-    df_sus = df_sus.loc[:, ~df_sus.columns.duplicated()].copy()
+    sus_infers = infers[infers["inferred"].str.contains("?", regex=False)]
+    df_sus = df[sus_infers["feature_name"].unique()]
 
     for col in df_sus:
         if (
-            (col in check_results.times.descs)
-            or (col in check_results.consts.descs)
-            or (col in check_results.ids.descs)
+            (col in check_results.times.infos)
+            or (col in check_results.consts.infos)
+            or (col in check_results.ids.infos)
             or (col in check_results.big_cats)
         ):
             df_sus = df_sus.drop(columns=col)

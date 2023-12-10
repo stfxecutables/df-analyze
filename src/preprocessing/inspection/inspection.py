@@ -30,12 +30,14 @@ from src.preprocessing.inspection.containers import (
 )
 from src.preprocessing.inspection.inference import (
     CAT_WORDS,
+    Inference,
+    InferredKind,
     has_cat_name,
-    looks_categorical,
-    looks_constant,
-    looks_floatlike,
+    infer_categorical,
+    infer_constant,
+    infer_floatlike,
+    infer_ordinal,
     looks_id_like,
-    looks_ordinal,
     looks_timelike,
 )
 
@@ -128,8 +130,6 @@ def detect_big_cats(
 
 def inspect_str_column(
     series: Series,
-    cats: list[str],
-    ords: list[str],
 ) -> Union[ColumnDescriptions, tuple[str, Exception]]:
     col = str(series.name)
     try:
@@ -137,45 +137,44 @@ def inspect_str_column(
 
         # this sould override even user-specified cardinality, as a constant
         # column as we define it here is useless no matter what
-        is_const, desc = looks_constant(series)
+        is_const = infer_constant(series)
         if is_const:
-            result.const = desc
-            return result
+            result.const = is_const
+            if is_const.is_certain():
+                return result
 
         # Likewise, we are not equipped to handle timeseries features, so this
         # too must override use-specified cardinality
-        maybe_time, desc = looks_timelike(series)
+        maybe_time = looks_timelike(series)
         if maybe_time:
-            result.time = desc
-            return result  # time is bad enough we don't need other checks
+            result.time = maybe_time
+            if maybe_time.is_certain():
+                return result  # time is bad enough we don't need other checks
 
-        # Trust the user and return early for use-specified features
-        if col in cats:
-            result.cat = "User-specified categorical"
-            return result
-
-        if col in ords:
-            result.ord = "User-specified ordinal"
-            return result
-
-        maybe_ord, desc = looks_ordinal(series)
-        if maybe_ord and (col not in ords) and (col not in cats):
-            result.ord = desc
-
-        maybe_id, desc = looks_id_like(series)
+        maybe_id = looks_id_like(series)
         if maybe_id:
-            result.id = desc
+            result.id = maybe_id
+            if maybe_id.is_certain():
+                return result
 
-        maybe_float, desc = looks_floatlike(series)
+        maybe_ord = infer_ordinal(series)
+        if maybe_ord:
+            result.ord = maybe_ord
+            if maybe_ord.is_certain():
+                return result
+
+        maybe_float = infer_floatlike(series)
         if maybe_float:
-            result.cont = desc
+            result.cont = maybe_float
+            if maybe_float.is_certain():
+                return result
 
         if maybe_float or maybe_id or maybe_time:
             return result
 
-        maybe_cat, desc = looks_categorical(series)
-        if maybe_cat and (col not in ords) and (col not in cats):
-            result.cat = desc
+        maybe_cat = infer_categorical(series)
+        if maybe_cat:
+            result.cat = maybe_cat
 
         return result
     except Exception as e:
@@ -186,8 +185,6 @@ def inspect_str_column(
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
-    categoricals: list[str],
-    ordinals: list[str],
     _warn: bool = True,
 ) -> tuple[
     InspectionInfo,
@@ -213,18 +210,16 @@ def inspect_str_columns(
     const_cols: dict[str, str]
         Columns with one value (either all NaN or one value with no NaNs).
     """
-    float_cols: dict[str, str] = {}
-    ord_cols: dict[str, str] = {}
-    id_cols: dict[str, str] = {}
-    time_cols: dict[str, str] = {}
-    cat_cols: dict[str, str] = {}
-    const_cols: dict[str, str] = {}
-    cats = set(categoricals)
-    ords = set(ordinals)
+    float_cols: dict[str, Inference] = {}
+    ord_cols: dict[str, Inference] = {}
+    id_cols: dict[str, Inference] = {}
+    time_cols: dict[str, Inference] = {}
+    cat_cols: dict[str, Inference] = {}
+    const_cols: dict[str, Inference] = {}
 
     # args = tqdm()
     descs: list[Union[ColumnDescriptions, tuple[str, Exception]]] = Parallel(n_jobs=-1)(
-        delayed(inspect_str_column)(df[col], cats, ords)
+        delayed(inspect_str_column)(df[col])
         for col in tqdm(
             str_cols,
             desc="Inspecting features",
@@ -233,7 +228,7 @@ def inspect_str_columns(
         )
     )  # type: ignore
     for desc in descs:
-        if isinstance(desc, tuple):
+        if isinstance(desc, tuple):  # i.e. an error
             col, error = desc
             raise InspectionError(
                 f"Could not interpret data in feature {col}. Additional information "
@@ -268,62 +263,6 @@ def inspect_str_columns(
         cat_info.print_message()
 
     return float_info, ord_info, id_info, time_info, cat_info, const_info
-
-
-def inspect_int_columns(
-    df: DataFrame,
-    int_cols: list[str],
-    categoricals: list[str],
-    ordinals: list[str],
-    _warn: bool = True,
-) -> tuple[InspectionInfo, InspectionInfo, InspectionInfo]:
-    """
-    Returns
-    -------
-    ord_cols: dict[str, str]
-        Columns that may be ordinal
-    id_cols: dict[str, str]
-        Columns that may be identifiers
-    """
-    results = inspect_str_columns(
-        df,
-        str_cols=int_cols,
-        categoricals=categoricals,
-        ordinals=ordinals,
-        _warn=_warn,
-    )
-    return results[1], results[2], results[5]
-
-
-def inspect_other_columns(
-    df: DataFrame,
-    other_cols: list[str],
-    categoricals: list[str],
-    ordinals: list[str],
-    _warn: bool = True,
-) -> InspectionInfo:
-    """
-    Returns
-    -------
-    const_Cols: dict[str, str]
-        Columns that are constant
-    """
-    const_cols: dict[str, str] = {}
-    # TODO
-    # cats = set(categoricals)
-    # ords = set(ordinals)
-    for col in tqdm(
-        other_cols, desc="Inspecting features", total=len(other_cols), disable=len(other_cols) < 50
-    ):
-        is_const, desc = looks_constant(df[col])
-        if is_const:
-            const_cols[col] = desc
-            continue
-
-    info = InspectionInfo(ColumnType.Const, const_cols)
-    if _warn:
-        info.print_message()
-    return info
 
 
 def coerce_ambiguous_cols(
@@ -371,22 +310,29 @@ def coerce_ambiguous_cols(
     """
 
     ...
-    float_cols: dict[str, str] = {}
-    ord_cols: dict[str, str] = {}
-    cat_cols: dict[str, str] = {}
+    float_cols: dict[str, Inference] = {}
+    ord_cols: dict[str, Inference] = {}
+    cat_cols: dict[str, Inference] = {}
 
     for col in ambigs:
         series = df[col]
         cat_named, match = has_cat_name(series)
         if cat_named and (inflation(series) <= 0.0):
-            cat_cols[col] = f"Coerced to categorical since well-sampled and matches pattern {match}"
+            cat_cols[col] = Inference(
+                InferredKind.CoercedCat,
+                f"Coerced to categorical since well-sampled and matches pattern {match}",
+            )
             continue
         if series.astype(str).str.contains(".", regex=False).any():
-            float_cols[col] = "Coerced to float due to presence of decimal"
+            float_cols[col] = Inference(
+                InferredKind.CoercedCont,
+                "Coerced to float due to presence of decimal",
+            )
         else:
-            ord_cols[
-                col
-            ] = "Coerced to ordinal due to no decimal, feature name or undersampled levels"
+            ord_cols[col] = Inference(
+                InferredKind.CoercedOrd,
+                "Coerced to ordinal due to no decimal, feature name or undersampled levels",
+            )
 
     float_info = InspectionInfo(ColumnType.Continuous, float_cols)
     ord_info = InspectionInfo(ColumnType.Ordinal, ord_cols)
@@ -425,7 +371,7 @@ def inspect_data(
     ordinals: Optional[list[str]] = None,
     _warn: bool = True,
 ) -> tuple[InspectionResults, InspectionResults]:
-    r"""
+    """
     Attempt to infer column types
 
     Notes
@@ -494,19 +440,20 @@ def inspect_data(
     user_cols = [col for col in all_cols if ((col in cats) or (col in ords))]
     unk_cols = list(all_cols.difference(user_cols))
 
-    floats, ords, ids, times, cats, consts = inspect_str_columns(
-        df, unk_cols, categoricals=categoricals, ordinals=ordinals, _warn=_warn
-    )
+    floats, ords, ids, times, cats, consts = inspect_str_columns(df, unk_cols, _warn=_warn)
     user_floats, user_ords, user_ids, user_times, user_cats, user_consts = inspect_str_columns(
-        df, user_cols, categoricals=[], ordinals=[], _warn=_warn
+        df, user_cols, _warn=_warn
     )
 
     # all_consts = InspectionInfo.merge(consts, int_consts, other_consts)
+    # Can only merge consts because they are always certain
     all_consts = InspectionInfo.merge(consts, user_consts)
-    all_cats = [*categoricals, *cats.descs.keys()]
+
+    all_cats = [*cats.infos.keys()]
+    all_user_cats = [*categoricals, *user_cats.infos.keys()]
     unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
     bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)[:-1]
-    user_bigs, user_inflation = detect_big_cats(df, unique_counts, categoricals, _warn=_warn)[:-1]
+    user_bigs, user_inflation = detect_big_cats(df, unique_counts, all_user_cats, _warn=_warn)[:-1]
 
     bin_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 2}
     nyan_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 1}
@@ -520,18 +467,25 @@ def inspect_data(
     nyan_cats = sorted(nyan_cats.intersection(all_cats))
     multi_cats = sorted(multi_cats.intersection(all_cats))
 
-    user_bin_cats = sorted(user_bin_cats.intersection(categoricals))
-    user_nyan_cats = sorted(user_nyan_cats.intersection(categoricals))
-    user_multi_cats = sorted(user_multi_cats.intersection(categoricals))
+    user_bin_cats = sorted(user_bin_cats.intersection(all_user_cats))
+    user_nyan_cats = sorted(user_nyan_cats.intersection(all_user_cats))
+    user_multi_cats = sorted(user_multi_cats.intersection(all_user_cats))
 
-    nyan_cols = {col: "Constant when dropping NaNs" for col in nyan_cats}
+    nyan_cols: dict[str, Inference]
+    nyan_cols = {
+        col: Inference(InferredKind.CertainNyan, "Constant when dropping NaNs") for col in nyan_cats
+    }
     nyan_info = InspectionInfo(ColumnType.Nyan, nyan_cols)
 
-    user_nyan_cols = {col: "Constant when dropping NaNs" for col in user_nyan_cats}
+    user_nyan_cols: dict[str, Inference]
+    user_nyan_cols = {
+        col: Inference(InferredKind.CertainNyan, "Constant when dropping NaNs")
+        for col in user_nyan_cats
+    }
     user_nyan_info = InspectionInfo(ColumnType.Nyan, user_nyan_cols)
 
-    all_ordinals = set(ords.descs.keys()).union(int_ords.descs.keys())
-    ambiguous = all_ordinals.intersection(cats.descs.keys())
+    all_ordinals = set(ords.infos.keys())
+    ambiguous = all_ordinals.intersection(cats.infos.keys())
     ambiguous.difference_update(categoricals)
     ambiguous.difference_update(ordinals)
     ambiguous = sorted(ambiguous)
@@ -558,8 +512,6 @@ def inspect_data(
         times=times,
         consts=all_consts,
         cats=cats,
-        int_ords=int_ords,
-        int_ids=int_ids,
         big_cats=bigs,
         inflation=inflation,
         bin_cats=bin_cats,
@@ -573,8 +525,6 @@ def inspect_data(
         times=user_times,
         consts=user_consts,
         cats=user_cats,
-        int_ords={},  # type: ignore
-        int_ids={},  # type: ignore
         big_cats=user_bigs,
         inflation=user_inflation,
         bin_cats=user_bin_cats,

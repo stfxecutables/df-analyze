@@ -20,6 +20,7 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN
+from src.preprocessing.inspection.inference import Inference, InferredKind
 from src.preprocessing.inspection.text import (
     BIG_INFO,
     CAT_INFO,
@@ -80,12 +81,12 @@ class InflationInfo:
 @dataclass
 class ColumnDescriptions:
     col: str
-    const: Optional[str] = None
-    time: Optional[str] = None
-    ord: Optional[str] = None
-    id: Optional[str] = None
-    cont: Optional[str] = None
-    cat: Optional[str] = None
+    const: Optional[Inference] = None
+    time: Optional[Inference] = None
+    ord: Optional[Inference] = None
+    id: Optional[Inference] = None
+    cont: Optional[Inference] = None
+    cat: Optional[Inference] = None
 
 
 def get_width(*cols: dict[str, str]) -> int:
@@ -98,21 +99,22 @@ def get_width(*cols: dict[str, str]) -> int:
 
 
 class InspectionInfo:
-    """For when df-analyze detects (but does not resolve) data problems"""
+    """Container holding ColumnType and Inferences for that column"""
 
     def __init__(
         self,
         kind: ColumnType,
-        descs: dict[str, str],
+        infos: dict[str, Inference],
     ) -> None:
         self.kind = kind
-        self.descs = descs
-        self.pad = get_width(self.descs)
-        self.is_empty = len(self.descs) == 0
+        self.infos = infos
+        self.cols = set([self.infos.keys()])
+        self.pad = get_width({col: info.reason for col, info in self.infos.items()})
+        self.is_empty = len(self.infos) == 0
 
     def lines(self, pad: Optional[int] = None) -> list[str]:
         pad = pad or self.pad
-        return [f"{col:<{pad}} {desc}" for col, desc in self.descs.items()]
+        return [f"{col:<{pad}} {info.reason}" for col, info in self.infos.items()]
 
     def print_message(self, pad: Optional[int] = None) -> None:
         if self.is_empty:
@@ -128,13 +130,16 @@ class InspectionInfo:
 
     def to_df(self) -> DataFrame:
         kind = self.kind.value
-        df = DataFrame(self.descs.items(), columns=["feature_name", "reason"])
-        df.insert(1, "inferred", kind)
+        df = DataFrame(
+            [[col, infer.kind.value, infer.reason] for col, infer in self.infos.items()],
+            columns=["feature_name", "inferred", "reason"],
+        )
+        df.insert(1, "initial", kind)
         return df
 
     def __str__(self) -> str:
         cname = f"{self.kind.name}{self.__class__.__name__}"
-        cols = [*self.descs.keys()]
+        cols = [*self.infos.keys()]
         if len(cols) > 3:
             fmt = str(cols[:3]).replace("]", ", ... ")
         else:
@@ -152,10 +157,31 @@ class InspectionInfo:
         kind = infos[0].kind
         if not all(info.kind == kind for info in infos):
             raise ValueError("Cannot merge when kinds differ.")
-        descs = {}
+        new_infos = {}
         for info in infos:
-            descs.update(info.descs)
-        return InspectionInfo(kind=kind, descs=descs)
+            new_infos.update(info.infos)
+        return InspectionInfo(kind=kind, infos=new_infos)
+
+    @staticmethod
+    def conflicts(
+        *infos: InspectionInfo
+    ) -> tuple[dict[str, list[Inference]], dict[str, list[Inference]]]:
+        cols = set()
+        for info in infos:
+            cols.update(info.cols)
+
+        certains: dict[str, list[Inference]] = {col: [] for col in cols}
+        maybes: dict[str, list[Inference]] = {col: [] for col in cols}
+        for col in cols:
+            for info in infos:
+                if col not in info.cols:
+                    continue
+                infer = info.infos[col]
+                if infer.is_certain():
+                    certains[col].append(infer)
+                else:
+                    maybes[col].append(infer)
+        return certains, maybes
 
 
 @dataclass
@@ -193,7 +219,7 @@ class InspectionResults:
 
     def print_basic_infos(self, pad: Optional[int] = None) -> None:
         basics = self.ordered_basic_infos()
-        pad = pad or get_width(*[basic.descs for basic in basics])
+        pad = pad or max(info.pad for info in basics)
         for info in basics:
             info.print_message(pad)
 

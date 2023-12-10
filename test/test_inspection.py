@@ -242,7 +242,7 @@ def test_detect_ordinal() -> None:
     str_cols = ["ints"]
     other: dict = dict(categoricals=[], ordinals=[])
     ords = inspect_str_columns(df, str_cols=str_cols, **other)[1]
-    assert "ints" in ords.descs
+    assert "ints" in ords.infos
 
 
 @pytest.mark.fast
@@ -254,10 +254,10 @@ def test_detect_probably_ordinal() -> None:
     ).astype(int)
     other: dict = dict(categoricals=[], ordinals=[])
     ords, ids = inspect_str_columns(df, str_cols=["ints"], **other)[1:3]
-    assert "ints" in ords.descs
-    assert "ints" in ids.descs
-    assert "All unique values in large range" in ords.descs["ints"]
-    assert "All values including possible NaNs" in ids.descs["ints"]
+    assert "ints" in ords.infos
+    assert "ints" in ids.infos
+    assert "All unique values in large range" in ords.infos["ints"]
+    assert "All values including possible NaNs" in ids.infos["ints"]
 
 
 @pytest.mark.fast
@@ -269,8 +269,8 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     other: dict = dict(categoricals=[], ordinals=[])
     ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
-    assert "ints" in ords.descs
-    assert "common 0-indexed Likert" in ords.descs["ints"], ords.descs["ints"]
+    assert "ints" in ords.infos
+    assert "common 0-indexed Likert" in ords.infos["ints"], ords.infos["ints"]
 
     rng = np.random.default_rng(69)
     df = DataFrame(
@@ -279,8 +279,8 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     other: dict = dict(categoricals=[], ordinals=[])
     ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
-    assert "ints" in ords.descs
-    assert "common Likert" in ords.descs["ints"], ords.descs["ints"]
+    assert "ints" in ords.infos
+    assert "common Likert" in ords.infos["ints"], ords.infos["ints"]
 
     rng = np.random.default_rng(68)
     df = DataFrame(
@@ -289,8 +289,8 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     other: dict = dict(categoricals=[], ordinals=[])
     ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
-    assert "ints" in ords.descs
-    assert "common scale max" in ords.descs["ints"], ords.descs["ints"]
+    assert "ints" in ords.infos
+    assert "common scale max" in ords.infos["ints"], ords.infos["ints"]
 
     rng = np.random.default_rng(69)
     df = DataFrame(
@@ -299,8 +299,8 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     other: dict = dict(categoricals=[], ordinals=[])
     ords = inspect_str_columns(df, str_cols=["ints"], **other)[1]
-    assert "ints" in ords.descs
-    assert "common 0-indexed scale max" in ords.descs["ints"], ords.descs["ints"]
+    assert "ints" in ords.infos
+    assert "common 0-indexed scale max" in ords.infos["ints"], ords.infos["ints"]
 
 
 @pytest.mark.fast
@@ -312,7 +312,7 @@ def test_detect_simle_ids() -> None:
     str_cols = ["ints"]
     other: dict = dict(categoricals=[], ordinals=[])
     ids = inspect_str_columns(df, str_cols=str_cols, **other)[2]
-    assert "ints" in ids.descs
+    assert "ints" in ids.infos
 
 
 if __name__ == "__main__":
