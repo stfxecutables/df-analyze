@@ -14,7 +14,7 @@ import pandas as pd
 from dateutil.parser import parse
 from dateutil.parser._parser import UnknownTimezoneWarning
 from joblib import Parallel, delayed
-from pandas import DataFrame, Series
+from pandas import DataFrame, Index, Series
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
@@ -23,6 +23,7 @@ from src._constants import N_CAT_LEVEL_MIN
 from src.preprocessing.inspection.inference import Inference, InferredKind
 from src.preprocessing.inspection.text import (
     BIG_INFO,
+    BINARY_INFO,
     CAT_INFO,
     CONST_INFO,
     FLOAT_INFO,
@@ -41,6 +42,7 @@ class ColumnType(Enum):
     Ordinal = "ord"
     Categorical = "cat"
     BigCat = "big_cat"
+    Binary = "bin"
     Nyan = "const_nan"
     UserCategorical = "user_cat"
     UserOrdinal = "user_ord"
@@ -55,6 +57,7 @@ class ColumnType(Enum):
             ColumnType.Ordinal: ORD_INFO,
             ColumnType.Categorical: CAT_INFO,
             ColumnType.BigCat: BIG_INFO,
+            ColumnType.Binary: BINARY_INFO,
             ColumnType.UserCategorical: "User-specified categorical",
             ColumnType.UserOrdinal: "User-specified ordinal",
             ColumnType.Nyan: NYAN_INFO,
@@ -83,6 +86,7 @@ class ColumnDescriptions:
     col: str
     const: Optional[Inference] = None
     time: Optional[Inference] = None
+    bin: Optional[Inference] = None
     ord: Optional[Inference] = None
     id: Optional[Inference] = None
     cont: Optional[Inference] = None
@@ -108,7 +112,7 @@ class InspectionInfo:
     ) -> None:
         self.kind = kind
         self.infos = infos
-        self.cols = set([self.infos.keys()])
+        self.cols = set([*self.infos.keys()])
         self.pad = get_width({col: info.reason for col, info in self.infos.items()})
         self.is_empty = len(self.infos) == 0
 
@@ -129,12 +133,10 @@ class InspectionInfo:
         print(formatted, file=sys.stderr)
 
     def to_df(self) -> DataFrame:
-        kind = self.kind.value
         df = DataFrame(
             [[col, infer.kind.value, infer.reason] for col, infer in self.infos.items()],
             columns=["feature_name", "inferred", "reason"],
         )
-        df.insert(1, "initial", kind)
         return df
 
     def __str__(self) -> str:
@@ -181,6 +183,10 @@ class InspectionInfo:
                     certains[col].append(infer)
                 else:
                     maybes[col].append(infer)
+        for col in certains:
+            if len(certains[col]) > 1:
+                raise RuntimeError(f"Conflicting certainties for column {col}: {certains[col]}")
+
         return certains, maybes
 
 
@@ -192,15 +198,17 @@ class InspectionResults:
     times: InspectionInfo
     consts: InspectionInfo
     cats: InspectionInfo
-    nyan_cats: InspectionInfo
-    inflation: list[InflationInfo]
+    binaries: InspectionInfo
     big_cats: dict[str, int]
-    bin_cats: list[str]
     multi_cats: list[str]
+    inflation: list[InflationInfo]
+    user_cats: set[str]
+    user_ords: set[str]
 
     def ordered_basic_infos(
         self
     ) -> tuple[
+        InspectionInfo,
         InspectionInfo,
         InspectionInfo,
         InspectionInfo,
@@ -212,6 +220,7 @@ class InspectionResults:
             self.ids,
             self.times,
             self.consts,
+            self.binaries,
             self.conts,
             self.ords,
             self.cats,
@@ -228,7 +237,17 @@ class InspectionResults:
         for info in self.ordered_basic_infos():
             dfs.append(info.to_df())
         df = pd.concat(dfs, axis=0, ignore_index=True)
+        df.index = Index(df["feature_name"].copy())
+        df.drop(columns=["feature_name"], inplace=True)
+
+        df.insert(0, "user", "")
+        for col in self.user_cats:
+            df.loc[col, "user"] = "cat"
+        for col in self.user_ords:
+            df.loc[col, "user"] = "ord"
+
         idx = df["reason"].str.contains("Coerced")
-        coerced = df[idx].sort_values(by="feature_name")
-        df = df[~idx].sort_values(by="feature_name")
-        return pd.concat([df, coerced], axis=0, ignore_index=True)
+        coerced = df[idx].sort_index()
+        df = df[~idx].sort_index().sort_values(by=["user", "inferred"])
+
+        return pd.concat([df, coerced], axis=0, ignore_index=False)

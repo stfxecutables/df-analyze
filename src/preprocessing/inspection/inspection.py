@@ -33,6 +33,7 @@ from src.preprocessing.inspection.inference import (
     Inference,
     InferredKind,
     has_cat_name,
+    infer_binary,
     infer_categorical,
     infer_constant,
     infer_floatlike,
@@ -98,7 +99,9 @@ def detect_big_cats(
     Inflated categoricals we deflate by converting all inflated levels to NaN.
     """
     big_cats = [col for col in all_cats if (col in unique_counts) and (unique_counts[col] >= 20)]
-    big_cols = {col: f"{unique_counts[col]} levels" for col in big_cats}
+    big_cols = {
+        col: Inference(InferredKind.BigCat, f"{unique_counts[col]} levels") for col in big_cats
+    }
     inspect_info = InspectionInfo(ColumnType.BigCat, big_cols)
     if _warn:
         inspect_info.print_message()
@@ -157,6 +160,12 @@ def inspect_str_column(
             if maybe_id.is_certain():
                 return result
 
+        is_bin = infer_binary(series)
+        if is_bin:
+            result.bin = is_bin
+            # binary inference is always certain
+            return result
+
         maybe_ord = infer_ordinal(series)
         if maybe_ord:
             result.ord = maybe_ord
@@ -193,6 +202,7 @@ def inspect_str_columns(
     InspectionInfo,
     InspectionInfo,
     InspectionInfo,
+    InspectionInfo,
 ]:
     """
     Returns
@@ -205,6 +215,8 @@ def inspect_str_columns(
         Columns that may be identifiers
     time_cols: dict[str, str]
         Columns that may be timestamps or timedeltas
+    bin_cols: dict[str, str]
+        Columns that are binary
     cat_cols: dict[str, str]
         Columns that may be categorical and not specified in `--categoricals`
     const_cols: dict[str, str]
@@ -214,6 +226,7 @@ def inspect_str_columns(
     ord_cols: dict[str, Inference] = {}
     id_cols: dict[str, Inference] = {}
     time_cols: dict[str, Inference] = {}
+    bin_cols: dict[str, Inference] = {}
     cat_cols: dict[str, Inference] = {}
     const_cols: dict[str, Inference] = {}
 
@@ -238,6 +251,8 @@ def inspect_str_columns(
             float_cols[desc.col] = desc.cont
         if desc.ord is not None:
             ord_cols[desc.col] = desc.ord
+        if desc.bin is not None:
+            bin_cols[desc.col] = desc.bin
         if desc.id is not None:
             id_cols[desc.col] = desc.id
         if desc.time is not None:
@@ -251,6 +266,7 @@ def inspect_str_columns(
     ord_info = InspectionInfo(ColumnType.Ordinal, ord_cols)
     id_info = InspectionInfo(ColumnType.Id, id_cols)
     time_info = InspectionInfo(ColumnType.Time, time_cols)
+    bin_info = InspectionInfo(ColumnType.Binary, bin_cols)
     cat_info = InspectionInfo(ColumnType.Categorical, cat_cols)
     const_info = InspectionInfo(ColumnType.Const, const_cols)
 
@@ -258,22 +274,144 @@ def inspect_str_columns(
         id_info.print_message()
         time_info.print_message()
         const_info.print_message()
+        bin_info.print_message()
         float_info.print_message()
         ord_info.print_message()
         cat_info.print_message()
 
-    return float_info, ord_info, id_info, time_info, cat_info, const_info
+    return float_info, ord_info, id_info, time_info, bin_info, cat_info, const_info
+
+
+def coerce_inferred_ambig(
+    df: DataFrame,
+    ambigs: dict[str, list[Inference]],
+    infer_cols: set[str],
+) -> dict[str, Inference]:
+    final_inferences = {}
+    for col in infer_cols:
+        infers = ambigs[col]
+        if len(infers) == 1:
+            final_inferences[col] = infers[0]
+            continue
+
+        series = df[col]
+        kinds = [infer.kind for infer in infers]
+        if InferredKind.MaybeCont in kinds:
+            if series.astype(str).str.contains(".", regex=False).any():
+                final_inferences[col] = Inference(
+                    InferredKind.CoercedCont,
+                    "Coerced to float due to presence of decimal",
+                )
+                continue
+            else:
+                kinds.remove(InferredKind.MaybeCont)
+        # now len(kinds) == 2 and we decide between cat and ord
+
+        cat_named, match = has_cat_name(series)
+        if cat_named and (inflation(series) <= 0.0):
+            final_inferences[col] = Inference(
+                InferredKind.CoercedCat,
+                f"Coerced to categorical since well-sampled and matches pattern {match}",
+            )
+            continue
+        else:
+            final_inferences[col] = Inference(
+                InferredKind.CoercedOrd,
+                "Coerced to ordinal due to no decimal, feature name or undersampled levels",
+            )
+    return final_inferences
+
+
+def coerce_user_ambig(
+    df: DataFrame,
+    ambigs: dict[str, list[Inference]],
+    user_cols: set[str],
+    arg_cats: set[str],
+    arg_ords: set[str],
+) -> dict[str, Inference]:
+    """
+    Case 1) if we are certain:                                    distrust user
+    Case 2) if the feature is even MAYBE time or identifier:      distrust user
+    Case 3) if the user specifies ordinal:                           trust user
+    Case 4) if the user specifies categorical, then if we think:
+            a) maybe categorical only:                               trust user
+            b) maybe float only:
+               i) if big / inflated categorical:                  distrust user
+               ii) if not inflated:                                  trust user
+            c) maybe ordinal and maybe categorical:
+               i) if big / inflated categorical:                  distrust user
+               ii) if not inflated:                                  trust user
+            d) maybe float and maybe ordinal and maybe categorical:
+    """
+    coercions = {}
+    for col in user_cols:
+        ### Case (3) ###
+        if col in arg_ords:  # always trust user ordinals
+            coercions[col] = Inference(InferredKind.UserOrdinal, "User-specified ordinal")
+            continue
+        # now we know user specified categorical
+        assert col in arg_cats, f"Logic error: {col} missing from user-specified categoricals"
+
+        ### Case (4) ###
+
+        infers = ambigs[col]
+        if len(infers) == 1:
+            infer = infers[0]
+            ### Case (4a) ###
+            if infer.kind is InferredKind.MaybeCat:
+                coercions[col] = Inference(
+                    InferredKind.UserCategorical, "User-specified and inferred categorical"
+                )
+                continue
+            ### Case (4b) ###
+            elif infer.kind is InferredKind.MaybeCont:
+                ### Case (4b.ii) ###
+                if inflation(df[col]) <= 0.0:
+                    coercions[col] = Inference(
+                        InferredKind.UserCategorical, "User-specified and non-inflated categorical"
+                    )
+                ### Case (4b.i) ###
+                else:
+                    coercions[col] = Inference(
+                        InferredKind.CoercedCont, "Looks continuous and is inflated as categorical"
+                    )
+            else:
+                raise ValueError(f"Unaccounted for case: {infers}")
+
+        series = df[col]
+        kinds = [infer.kind for infer in infers]
+        if InferredKind.MaybeCont in kinds:
+            if series.astype(str).str.contains(".", regex=False).any():
+                coercions[col] = Inference(
+                    InferredKind.CoercedCont,
+                    "Coerced to float due to presence of decimal",
+                )
+                continue
+            else:
+                kinds.remove(InferredKind.MaybeCont)
+        # now len(kinds) == 2 and we decide between cat and ord
+
+        cat_named, match = has_cat_name(series)
+        if cat_named and (inflation(series) <= 0.0):
+            coercions[col] = Inference(
+                InferredKind.CoercedCat,
+                f"Coerced to categorical since well-sampled and matches pattern {match}",
+            )
+            continue
+        coercions[col] = Inference(
+            InferredKind.CoercedOrd,
+            "Coerced to ordinal due to no decimal, feature name or undersampled levels",
+        )
+    return coercions
 
 
 def coerce_ambiguous_cols(
     df: DataFrame,
-    ambigs: list[str],
+    ambigs: dict[str, list[Inference]],
+    arg_cats: set[str],
+    arg_ords: set[str],
     _warn: bool = True,
-) -> tuple[
-    InspectionInfo,
-    InspectionInfo,
-    InspectionInfo,
-]:
+) -> dict[str, Inference]:
     """
     Coerce columns that cannot be clearly determined to be categorical,
     orfinal, or float to either float or categorical.
@@ -307,37 +445,83 @@ def coerce_ambiguous_cols(
 
     Also, ordinals are ultimately treated no differently than continuous
     currently.
+
+    We must infer types of columns not specified as ordinal or categorical by
+    the user in order to determine one-hot encoding vs. normalization. However,
+    we must also check that user-specified categoricals and ordinals can in
+    fact be treated as such.
+
+    There are thus two classes of features: user-specified and unspecified.
+    For unspecified features, we need only resolve *ambiguous* types. However,
+    for specified features, we must make a choice between *trusting* and
+    *distrusting* the user. There should be very good reason to distrust the
+    user, so we limit distrust to certain cases of user-specified categoricals,
+    or when we are 100% certain of the type.
+
+    .
+    . or for each column:
+    .
+    .    remove  <-- certain <---- column  ----> maybe time --> distrust --> remove
+    .      or          or             |             or
+    .    coerce       const       ambiguous      maybe id
+    .                                 |
+    .                                 |
+    . unspecified ____________________|_______ user-specified
+    .      |                                        |
+    .      |              __________________________|______________
+    .      v             |                                         |
+    .    remove      one maybe                            maybe cat and maybe ord
+    .      or            |                   ______________________|_____
+    .    coerce          |                   |                           |
+    .       _____________|                   |                           |
+    .      |             |                   |                           |
+    .      |             |                 user                        user
+    .    infer         infer                cat                         ord
+    .    agree        disagree               |                           |
+    .      |        _____|_____              |                           |
+    .    trust     |           |             |                           |
+    .    user    user        user            |                         trust
+    .      |      ord         cat            |                          user
+    .      |       |       ____|___       ___|_____                      |
+    .    final   trust    |        |     |         |                     |
+    .    type     user   big            big       cat                    |
+    .              |     cat            cat        |                     |
+    .              |      |              |         |                     |
+    .            final  deflate        reject    trust                 final
+    .             ord     |              |         |                    cat
+    .                  ___|__          final     final
+    .                 |      |          ord       cat
+    .                >10    <=10
+    .               levels  levels
+    .                 |     |
+    .               final  final
+    .                ord    cat
     """
 
     ...
-    float_cols: dict[str, Inference] = {}
-    ord_cols: dict[str, Inference] = {}
-    cat_cols: dict[str, Inference] = {}
 
-    for col in ambigs:
-        series = df[col]
-        cat_named, match = has_cat_name(series)
-        if cat_named and (inflation(series) <= 0.0):
-            cat_cols[col] = Inference(
-                InferredKind.CoercedCat,
-                f"Coerced to categorical since well-sampled and matches pattern {match}",
-            )
-            continue
-        if series.astype(str).str.contains(".", regex=False).any():
-            float_cols[col] = Inference(
-                InferredKind.CoercedCont,
-                "Coerced to float due to presence of decimal",
-            )
-        else:
-            ord_cols[col] = Inference(
-                InferredKind.CoercedOrd,
-                "Coerced to ordinal due to no decimal, feature name or undersampled levels",
-            )
+    final_inferences = {}
+    for col, infers in ambigs.items():
+        for infer in infers:
+            if infer.overrides_user():
+                final_inferences[col] = infer
+                break
+    for col in final_inferences:
+        ambigs.pop(col)
 
-    float_info = InspectionInfo(ColumnType.Continuous, float_cols)
-    ord_info = InspectionInfo(ColumnType.Ordinal, ord_cols)
-    cat_info = InspectionInfo(ColumnType.Categorical, cat_cols)
-    return float_info, ord_info, cat_info
+    # now all that remains are maybe floats/cats/ords
+    all_user_cols = arg_cats.union(arg_ords)
+    infer_cols = set([*ambigs.keys()]).difference(all_user_cols)
+    user_cols = set([*ambigs.keys()]).difference(infer_cols)
+
+    coercions = coerce_inferred_ambig(df, ambigs=ambigs, infer_cols=infer_cols)
+    final_inferences.update(coercions)
+    coercions = coerce_user_ambig(
+        df, ambigs=ambigs, user_cols=user_cols, arg_cats=arg_cats, arg_ords=arg_ords
+    )
+    final_inferences.update(coercions)
+
+    return final_inferences
 
 
 def convert_categorical(series: Series) -> Series:
@@ -370,165 +554,112 @@ def inspect_data(
     categoricals: Optional[list[str]] = None,
     ordinals: Optional[list[str]] = None,
     _warn: bool = True,
-) -> tuple[InspectionResults, InspectionResults]:
-    """
-    Attempt to infer column types
-
-    Notes
-    -----
-    We must infer types of columns not specified as ordinal or categorical by
-    the user in order to determine one-hot encoding vs. normalization. However,
-    we must also check that user-specified categoricals and ordinals can in
-    fact be treated as such.
-
-    There are thus two classes of features: user-specified and unspecified.
-    For unspecified features, we need only resolve *ambiguous* types. However,
-    for specified features
-
-    .                             all columns
-    .                                 |
-    .                                 v
-    .            user-specified ------------- unspecified
-    .     _____________|______                _____|________
-    .     |                  |                |            |
-    .     v                  v                v            v
-    . infer-agree     infer-disagree       ambiguous   unambiguous
-    .     |                  |                |            |
-    .     v                  |                v            v
-    . final type             |             coercion    final type
-    .                        |                |
-    .     ___________________|________        v
-    .     |                          |    final type
-    .     v                          v
-    .    user                      user
-    .   ordinal                 categorical
-    .     |                          |
-    .     v                          v
-    .   infer                      infer
-    .     |___________        _______|____________________________
-    .     |          |        |              |                   |
-    .  certain   uncertain    |              |                   |
-    .     |         cat       |          uncertain           uncertain
-    .     |         or     certain          ord              ord & cat
-    .     |        ambig      |           NOT cat                |
-    .     |          |        |              |                   |
-    .     v          v        v              |                   |
-    .  remove      trust    remove        distrust             trust
-    .    or        user       or          ___|___             ___|___
-    .  coerce        |      coerce       |       |           |       |
-    .                v                   |       |           |       |
-    .           final ordinal         big cat   cat       big cat   cat
-    .                                    |       |           |       |
-    .                                  reject  agree      deflate    |
-    .                                    |       |           |       |
-    .                                    |       |           |_______|
-    .                                    |       |                |
-    .                                    v       v                v
-    .                                  final   final          final cat
-    .                                   ord     cat
-
-    """
+) -> InspectionResults:
+    """Attempt to infer column types"""
     categoricals = categoricals or []
     ordinals = ordinals or []
 
     df = convert_categoricals(df, target)
-    df = df.drop(columns=target)
+    df = df.drop(columns=target, errors="ignore")
 
-    cats, ords = set(categoricals), set(ordinals)
+    arg_cats, arg_ords = set(categoricals), set(ordinals)
 
     all_cols = set(df.columns.to_list())
-    user_cols = [col for col in all_cols if ((col in cats) or (col in ords))]
+    user_cols = arg_cats.union(arg_ords)
     unk_cols = list(all_cols.difference(user_cols))
 
-    floats, ords, ids, times, cats, consts = inspect_str_columns(df, unk_cols, _warn=_warn)
-    user_floats, user_ords, user_ids, user_times, user_cats, user_consts = inspect_str_columns(
-        df, user_cols, _warn=_warn
+    (
+        floats,
+        ords,
+        ids,
+        times,
+        bins,
+        cats,
+        consts,
+    ) = inspect_str_columns(df, unk_cols, _warn=_warn)
+    (
+        user_floats,
+        user_ords,
+        user_ids,
+        user_times,
+        user_bins,
+        user_cats,
+        user_consts,
+    ) = inspect_str_columns(df, list(user_cols), _warn=_warn)
+
+    certains, ambigs = InspectionInfo.conflicts(
+        floats,
+        ords,
+        ids,
+        times,
+        bins,
+        cats,
+        consts,
+        user_floats,
+        user_ords,
+        user_ids,
+        user_times,
+        user_bins,
+        user_cats,
+        user_consts,
     )
+    if sorted(all_cols) != sorted([*certains.keys()]):
+        diffs = all_cols.symmetric_difference([*certains.keys()])
+        raise ValueError(f"Missing inference for columns: {diffs}")
 
-    # all_consts = InspectionInfo.merge(consts, int_consts, other_consts)
-    # Can only merge consts because they are always certain
-    all_consts = InspectionInfo.merge(consts, user_consts)
-
-    all_cats = [*cats.infos.keys()]
-    all_user_cats = [*categoricals, *user_cats.infos.keys()]
-    unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
-    bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)[:-1]
-    user_bigs, user_inflation = detect_big_cats(df, unique_counts, all_user_cats, _warn=_warn)[:-1]
-
-    bin_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 2}
-    nyan_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 1}
-    multi_cats = {cat for cat, cnt in nanless_cnts.items() if cnt > 2}
-
-    user_bin_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 2}
-    user_nyan_cats = {cat for cat, cnt in nanless_cnts.items() if cnt == 1}
-    user_multi_cats = {cat for cat, cnt in nanless_cnts.items() if cnt > 2}
-
-    bin_cats = sorted(bin_cats.intersection(all_cats))
-    nyan_cats = sorted(nyan_cats.intersection(all_cats))
-    multi_cats = sorted(multi_cats.intersection(all_cats))
-
-    user_bin_cats = sorted(user_bin_cats.intersection(all_user_cats))
-    user_nyan_cats = sorted(user_nyan_cats.intersection(all_user_cats))
-    user_multi_cats = sorted(user_multi_cats.intersection(all_user_cats))
-
-    nyan_cols: dict[str, Inference]
-    nyan_cols = {
-        col: Inference(InferredKind.CertainNyan, "Constant when dropping NaNs") for col in nyan_cats
+    # if we are certain, that is the type, regardles of user specification
+    certain_types = {
+        col: infer[0]
+        for col, infer in certains.items()
+        if (len(infer) == 1) and infer[0].is_certain()
     }
-    nyan_info = InspectionInfo(ColumnType.Nyan, nyan_cols)
+    for col in certain_types:
+        ambigs.pop(col)
 
-    user_nyan_cols: dict[str, Inference]
-    user_nyan_cols = {
-        col: Inference(InferredKind.CertainNyan, "Constant when dropping NaNs")
-        for col in user_nyan_cats
-    }
-    user_nyan_info = InspectionInfo(ColumnType.Nyan, user_nyan_cols)
-
-    all_ordinals = set(ords.infos.keys())
-    ambiguous = all_ordinals.intersection(cats.infos.keys())
-    ambiguous.difference_update(categoricals)
-    ambiguous.difference_update(ordinals)
-    ambiguous = sorted(ambiguous)
-    if len(ambiguous) > 0:
-        float_coerced, ord_coerced, cat_coerced = coerce_ambiguous_cols(
-            df, ambigs=ambiguous, _warn=_warn
-        )
+    final_coercions = coerce_ambiguous_cols(
+        df, ambigs, arg_cats=arg_cats, arg_ords=arg_ords, _warn=_warn
+    )
+    if len(ambigs) > 0:
         messy_inform(
             "df-analyze could not determine the types of some features. These "
             "have been coerced to our best guess for the appropriate type. See "
             "reports for details. This warning cannot be silenced unless you "
             "properly identify these features with the `--categoricals` and "
             "`--ordinals` options to df-analyze.\n\n"
-            f"Ambiguous columns: {ambiguous}."
+            f"Ambiguous columns: {ambigs}."
         )
-        floats = InspectionInfo.merge(floats, float_coerced)
-        ords = InspectionInfo.merge(ords, ord_coerced)
-        cats = InspectionInfo.merge(cats, cat_coerced)
 
-    main_results = InspectionResults(
-        conts=floats,
-        ords=ords,
-        ids=ids,
-        times=times,
-        consts=all_consts,
-        cats=cats,
+    final_types = {**certain_types, **final_coercions}
+
+    all_cats = [col for col, info in final_types.items() if info.is_cat()]
+
+    unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
+    bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)[:-1]
+
+    multi_cats = {col for col, cnt in nanless_cnts.items() if cnt > 2}
+    multi_cats = sorted(multi_cats.intersection(all_cats))
+
+    # fmt: off
+    final_cats   = {col: info for col, info in final_types.items() if info.is_cat()}
+    final_conts  = {col: info for col, info in final_types.items() if info.is_cont()}
+    final_ords   = {col: info for col, info in final_types.items() if info.is_ord()}
+    final_ids    = {col: info for col, info in final_types.items() if info.is_id()}
+    final_times  = {col: info for col, info in final_types.items() if info.is_time()}
+    final_consts = {col: info for col, info in final_types.items() if info.is_const()}
+    final_bins   = {col: info for col, info in final_types.items() if info.is_bin()}
+    # fmt: on
+
+    return InspectionResults(
+        conts=InspectionInfo(ColumnType.Continuous, final_conts),
+        ords=InspectionInfo(ColumnType.Ordinal, final_ords),
+        ids=InspectionInfo(ColumnType.Id, final_ids),
+        times=InspectionInfo(ColumnType.Time, final_times),
+        consts=InspectionInfo(ColumnType.Const, final_consts),
+        cats=InspectionInfo(ColumnType.Categorical, final_cats),
+        binaries=InspectionInfo(ColumnType.Binary, final_bins),
         big_cats=bigs,
         inflation=inflation,
-        bin_cats=bin_cats,
-        nyan_cats=nyan_info,
         multi_cats=multi_cats,
+        user_cats=arg_cats,
+        user_ords=arg_ords,
     )
-    check_results = InspectionResults(
-        conts=user_floats,
-        ords=user_ords,
-        ids=user_ids,
-        times=user_times,
-        consts=user_consts,
-        cats=user_cats,
-        big_cats=user_bigs,
-        inflation=user_inflation,
-        bin_cats=user_bin_cats,
-        nyan_cats=user_nyan_info,
-        multi_cats=user_multi_cats,
-    )
-    return main_results, check_results

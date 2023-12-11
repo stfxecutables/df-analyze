@@ -242,10 +242,8 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
 def drop_cols(
     df: DataFrame,
     kind: str,
-    categoricals: list[str],
-    ordinals: list[str],
     *col_dicts: InspectionInfo,
-) -> tuple[DataFrame, list[str], list[str]]:
+) -> DataFrame:
     cols = set()
     cols_descs = []
     for d in col_dicts:
@@ -256,7 +254,7 @@ def drop_cols(
     cols_descs = sorted(cols_descs, key=lambda pair: pair[0])
 
     if len(cols) <= 0:  # nothing to drop
-        return df, categoricals, ordinals
+        return df
 
     w = max(len(col) for col in cols) + 2
     info = "\n".join([f"{col:<{w}} {desc}" for col, desc in cols_descs])
@@ -266,11 +264,9 @@ def drop_cols(
         f"Dropped features:\n{info}"
     )
     drops = list(cols)
-    categoricals = list(set(categoricals).difference(drops))
-    ordinals = list(set(ordinals).difference(drops))
 
     df = df.drop(columns=drops, errors="ignore")
-    return df, categoricals, ordinals
+    return df
 
 
 def floatify(df: DataFrame) -> DataFrame:
@@ -284,36 +280,22 @@ def floatify(df: DataFrame) -> DataFrame:
     return df
 
 
-def drop_unusable(
-    df: DataFrame,
-    results: InspectionResults,
-    categoricals: list[str],
-    ordinals: list[str],
-) -> tuple[DataFrame, list[str], list[str]]:
+def drop_unusable(df: DataFrame, results: InspectionResults) -> DataFrame:
     """Drops identifiers, datetime, constants"""
-    cats = categoricals
-    ords = ordinals
-    ids, int_ids, times = results.ids, results.int_ids, results.times
-    consts = results.consts
-    df, cats, ords = drop_cols(df, "identifiers", cats, ords, ids, int_ids)
-    df, cats, ords = drop_cols(df, "datetime data", cats, ords, times)
-    df, cats, ords = drop_cols(df, "constant", cats, ords, consts)
-    return df, cats, ords
+    df = drop_cols(df, "identifiers", results.ids)
+    df = drop_cols(df, "datetime data", results.times)
+    df = drop_cols(df, "constant", results.conts)
+    return df
 
 
 def deflate_categoricals(
     df: DataFrame,
     results: InspectionResults,
-    categoricals: list[str],
-    ordinals: list[str],
     _warn: bool = True,
-) -> tuple[DataFrame, list[str], list[str]]:
+) -> DataFrame:
     df = df.copy()
-    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
-    _cats = set(cats)
 
     infos = results.inflation
-    infos = [info for info in infos if info.col in _cats]
     infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
 
     for info in tqdm(
@@ -349,7 +331,7 @@ def deflate_categoricals(
             f"{message}"
         )
 
-    return df, cats, ords
+    return df
 
 
 def encode_categoricals(
@@ -373,23 +355,31 @@ def encode_categoricals(
 
     y = df[target]
     df = df.drop(columns=target)
-    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
-    df, cats, ords = deflate_categoricals(df, results, cats, ords, _warn=warn_explosion)
-    to_convert = [*cats, *results.cats.infos.keys()]
+    df = drop_unusable(df, results)
+    df = deflate_categoricals(df, results, _warn=warn_explosion)
+    to_convert = [*df.columns]
 
     # below will FAIL if we didn't remove timestamps or etc.
     try:
-        bins = sorted(set(results.bin_cats).intersection(cats))
-        multis = sorted(set(results.multi_cats).intersection(cats))
-        nyans = sorted(set(results.nyan_cats.infos.keys()).intersection(cats))
-
+        bins = sorted(set(results.binaries.cols).intersection(to_convert))
+        multis = sorted(set(results.multi_cats).intersection(to_convert))
         new = df
-        print("One-hot encoding categorical variables")
+        print("One-hot encoding categorical variables...")
+        # note `bins` includes variables that are (1) "constant-binary" (i.e.
+        # either a constant value or NaN), (2) true binary (i.e. two unique
+        # non-NaN values), or (3) binary plus NaN (two unique non-NaN values
+        # and a NaN). In all these cases there is no intepretive confusion or
+        # information loss when representing them as:
+        #
+        # (1) {0, 1}
+        # (2) {0, 1}
+        # (3) {0, 1} + {0, 1} NaN indicator
+        #
+        # i.e. by using pd.get_dummies(..., dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
-        new = pd.get_dummies(new, columns=nyans, dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)
         new = new.astype(float)
-    except TypeError:
+    except (TypeError, ValueError):
         inspect_data(df, target, categoricals, ordinals, _warn=True)
         raise RuntimeError(
             "Could not convert data to floating point after cleaning. Some "
@@ -521,89 +511,3 @@ def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:
     else:
         raise RuntimeError("Unreachable!")
     return df
-
-
-def reconcile_inspections(
-    df: DataFrame,
-    target: str,
-    main_results: InspectionResults,
-    check_results: InspectionResults,
-    is_classification: bool,
-) -> InspectionResults:
-    """
-    Notes
-    -----
-    It would be an interesting idea to try to decide between categorical vs
-    continuous (or ordinal) representations via a predictive test. It seems
-    though since in practice most ambiguous variables just don't have much
-    information anyway, and most will not predict the target at all, this will
-    not really work (and also be extremely expensive).
-
-    """
-    df = convert_categoricals(df, target)
-    infers = check_results.basic_df()
-    sus_infers = infers[infers["inferred"].str.contains("?", regex=False)]
-    df_sus = df[sus_infers["feature_name"].unique()]
-
-    for col in df_sus:
-        if (
-            (col in check_results.times.infos)
-            or (col in check_results.consts.infos)
-            or (col in check_results.ids.infos)
-            or (col in check_results.big_cats)
-        ):
-            df_sus = df_sus.drop(columns=col)
-    if df_sus.empty:
-        return
-
-    y = df[target]
-    if is_classification:
-        df_sus, y = encode_target(df_sus, convert_categorical(y).astype(str))
-    else:
-        df_sus, y = clean_regression_target(df, y)
-
-    print(df_sus)
-    desc = df_sus.describe().T
-    desc["perc_inflated"] = df_sus.apply(inflation)
-    desc["cat_score"] = np.nan
-    desc["ord_score"] = np.nan
-    desc["best_score"] = ""
-    for col in tqdm(df_sus, total=df_sus.shape[1]):
-        try:
-            x = df_sus[col].astype(float).to_frame()
-            target = str(y.name)
-            imputer = SimpleImputer(strategy="median")
-            xn = normalize(x, target).to_numpy()
-            x_ord = imputer.fit_transform(xn).reshape(-1, 1)
-            x_cat = pd.get_dummies(x.astype(str), dummy_na=True, drop_first=True).to_numpy()
-            if is_classification:
-                lin_ords = cross_val_score(
-                    SGDClassifier(loss="log_loss", max_iter=100), x_ord, y, n_jobs=-1
-                )
-                lin_cats = cross_val_score(
-                    SGDClassifier(loss="log_loss", max_iter=100), x_cat, y, n_jobs=-1
-                )
-                # lin_ords = cross_val_score(SVC(max_iter=2000), x_ord, y, n_jobs=-1)
-                # lin_cats = cross_val_score(SVC(max_iter=2000), x_cat, y, n_jobs=-1)
-                lin_ord, lin_cat = np.mean(lin_ords), np.mean(lin_cats)
-                if np.abs(lin_ord - lin_cat) < 0.0001:
-                    best = "none"
-                else:
-                    best = "ord" if lin_ord > lin_cat else "cat"
-            else:
-                lin_ords = cross_val_score(SGDRegressor(max_iter=100), x_ord, y)
-                lin_cats = cross_val_score(SGDRegressor(max_iter=100), x_cat, y)
-                # lin_ords = cross_val_score(SVR(max_iter=2000), x_ord, y)
-                # lin_cats = cross_val_score(SVR(max_iter=2000), x_cat, y)
-                lin_ord, lin_cat = np.mean(lin_ords), np.mean(lin_cats)
-                if np.abs(lin_ord - lin_cat) < 0.01:
-                    best = "none"
-                else:
-                    best = "ord" if lin_ord > lin_cat else "cat"
-            desc.loc[str(col), "cat_score"] = lin_cat
-            desc.loc[str(col), "ord_score"] = lin_ord
-            desc.loc[str(col), "best_score"] = best
-        except ValueError:
-            ...
-            desc.loc[str(col), "best_score"] = "err"
-    print(desc)

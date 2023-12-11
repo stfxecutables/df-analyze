@@ -96,7 +96,11 @@ class InferredKind(Enum):
     CertainId = "id"
     CertainTime = "time"
     CertainNyan = "nyan"
+    Binary = "bin"  # encode to {0, 1}
+    BinaryViaNan = "const+nan"  # encode to {0, 1}
+    BinaryPlusNan = "bin+nan"  # encode to two {0, 1} features
     Const = "const"
+    BigCat = "big-cat"
     CoercedCat = "cat-coerce"
     CoercedOrd = "ord-coerce"
     CoercedCont = "cont-coerce"
@@ -104,8 +108,38 @@ class InferredKind(Enum):
     UserOrdinal = "user-ord"
     NoInference = "none"
 
+    def fmt(self) -> str:
+        fmts = {
+            InferredKind.MaybeOrd: "ord?",
+            InferredKind.MaybeCat: "cat?",
+            InferredKind.MaybeCont: "cont?",
+            InferredKind.MaybeId: "id?",
+            InferredKind.MaybeTime: "time?",
+            InferredKind.CertainOrd: "ord",
+            InferredKind.CertainCat: "cat",
+            InferredKind.CertainCont: "cont",
+            InferredKind.CertainId: "id",
+            InferredKind.CertainTime: "time",
+            InferredKind.CertainNyan: "nyan",
+            InferredKind.Binary: "bin",
+            InferredKind.BinaryViaNan: "const+nan",
+            InferredKind.BinaryPlusNan: "bin+nan",
+            InferredKind.Const: "const",
+            InferredKind.BigCat: "big-cat",
+            InferredKind.CoercedCat: "cat-coerce",
+            InferredKind.CoercedOrd: "ord-coerce",
+            InferredKind.CoercedCont: "cont-coerce",
+            InferredKind.UserCategorical: "user-cat",
+            InferredKind.UserOrdinal: "user-ord",
+            InferredKind.NoInference: "none",
+        }
+        return fmts[self]
+
     def is_certain(self) -> bool:
         return self in [
+            InferredKind.Binary,
+            InferredKind.BinaryViaNan,
+            InferredKind.BinaryPlusNan,
             InferredKind.CertainCat,
             InferredKind.CertainCont,
             InferredKind.CertainOrd,
@@ -114,10 +148,61 @@ class InferredKind(Enum):
             InferredKind.Const,
         ]
 
+    def is_bin(self) -> bool:
+        return self in [
+            InferredKind.Binary,
+            InferredKind.BinaryViaNan,
+            InferredKind.BinaryPlusNan,
+        ]
+
+    def is_cat(self) -> bool:
+        return self in [
+            InferredKind.MaybeCat,
+            InferredKind.CertainCat,
+            InferredKind.CoercedCat,
+            InferredKind.UserCategorical,
+            InferredKind.BigCat,
+        ]
+
+    def is_cont(self) -> bool:
+        return self in [
+            InferredKind.MaybeCont,
+            InferredKind.CertainCont,
+            InferredKind.CoercedCont,
+        ]
+
+    def is_ord(self) -> bool:
+        return self in [
+            InferredKind.MaybeOrd,
+            InferredKind.CertainOrd,
+            InferredKind.CoercedOrd,
+            InferredKind.UserOrdinal,
+        ]
+
+    def is_id(self) -> bool:
+        return self in [
+            InferredKind.MaybeId,
+            InferredKind.CertainId,
+        ]
+
+    def is_time(self) -> bool:
+        return self in [
+            InferredKind.MaybeTime,
+            InferredKind.CertainTime,
+        ]
+
+    def is_const(self) -> bool:
+        return self in [
+            InferredKind.Const,
+        ]
+
+    def overrides_user(self) -> bool:
+        return self.is_certain() or self in [InferredKind.MaybeId, InferredKind.MaybeTime]
+
     def __bool__(self) -> bool:
         if self is InferredKind.NoInference:
             return False
-        return bool(self)
+        return True
 
 
 class Inference:
@@ -127,6 +212,35 @@ class Inference:
 
     def is_certain(self) -> bool:
         return self.kind.is_certain()
+
+    def overrides_user(self) -> bool:
+        return self.is_certain() or self.kind.overrides_user()
+
+    def is_bin(self) -> bool:
+        return self.kind.is_bin()
+
+    def is_cat(self) -> bool:
+        return self.kind.is_cat()
+
+    def is_cont(self) -> bool:
+        return self.kind.is_cont()
+
+    def is_ord(self) -> bool:
+        return self.kind.is_ord()
+
+    def is_id(self) -> bool:
+        return self.kind.is_id()
+
+    def is_time(self) -> bool:
+        return self.kind.is_time()
+
+    def is_const(self) -> bool:
+        return self.kind.is_const()
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({self.kind.name}: {self.reason})"
+
+    __repr__ = __str__
 
     def __bool__(self) -> bool:
         return bool(self.kind)
@@ -213,8 +327,7 @@ def looks_id_like(series: Series) -> Inference:
     desc: str
         A string describing why the variable looks like an identifier
     """
-    f = infer_floatlike(series)[0]
-    if (f is not None) and f.is_certain():
+    if infer_floatlike(series).is_certain():
         return Inference()
 
     if isinstance(series.dtype, CategoricalDtype):
@@ -305,6 +418,32 @@ def converts_to_float(series: Series) -> bool:
         convert_floating=True,  # type: ignore
     )
     return converted.dtype.kind == "f"
+
+
+def infer_binary(series: Series) -> Inference:
+    """To be run AFTER infer_constant, infer_timelike, infer_id"""
+    unqs = series.astype(str).unique()
+    try:
+        str_nan = "nan" in map(str.lower, unqs.astype(str))
+    except Exception:
+        str_nan = False
+    try:
+        numpy_nan = np.isnan(unqs).any()
+    except TypeError:
+        numpy_nan = False
+    try:
+        pandas_nan = pd.isna(unqs).any()
+    except TypeError:
+        pandas_nan = False
+
+    if len(unqs) == 2:
+        if numpy_nan or pandas_nan or str_nan:
+            return Inference(InferredKind.BinaryViaNan, "Only one unique non-NaN value")
+        return Inference(InferredKind.Binary, "Two unique non-Nan values")
+    elif len(unqs) == 3 and (numpy_nan or pandas_nan or str_nan):
+        return Inference(InferredKind.BinaryPlusNan, "Two unique non-Nan values plus NaN")
+
+    return Inference()
 
 
 def infer_ordinal(series: Series) -> Inference:
@@ -415,9 +554,13 @@ def infer_floatlike(series: Series) -> Inference:
     """
     # for some reasons Python None converts inconsistently to NaN...
     if converts_to_int(series):
+        if series.astype(str).str.contains(".", regex=False).any():
+            return Inference(
+                InferredKind.MaybeCont, "Values convert to integers but contain decimals"
+            )
         return Inference()
     ord = infer_ordinal(series)
-    if ord in [InferredKind.MaybeOrd, InferredKind.CertainOrd]:
+    if ord is InferredKind.CertainOrd:
         return Inference()
 
     try:

@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 from pandas import DataFrame
 
-from src.preprocessing.cleaning import reconcile_inspections
 from src.preprocessing.inspection.containers import InspectionInfo, InspectionResults
 from src.preprocessing.inspection.inspection import inflation, inspect_data
 from src.testing.datasets import (
@@ -37,11 +36,10 @@ if __name__ == "__main__":
     for dsname, ds in FAST_INSPECTION.items():
         df = ds.load()
         with redirect_stderr(StringIO()):
-            info, user_info = inspect_data(
-                df=df, target="target", categoricals=ds.categoricals, _warn=False
-            )
-        reconcile_inspections(df, "target", info, user_info, ds.is_classification)
-        print("Done reconciliation")
+            info = inspect_data(df=df, target="target", categoricals=ds.categoricals, _warn=False)
+            info.print_basic_infos()
+            print(info.basic_df())
+            print()
 
         # b = basics = user_info.basic_df()
         # b = b[~b.reason.str.contains("String|Binary|numeric|(?:Single value)")]
