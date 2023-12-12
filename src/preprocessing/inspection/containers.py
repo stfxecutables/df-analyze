@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -10,7 +11,7 @@ import pandas as pd
 from pandas import DataFrame, Index
 from sklearn.experimental import enable_iterative_imputer  # noqa
 
-from src.preprocessing.inspection.inference import Inference
+from src.preprocessing.inspection.inference import Inference, InferredKind
 from src.preprocessing.inspection.text import (
     BIG_INFO,
     BINARY_INFO,
@@ -105,6 +106,23 @@ class InspectionInfo:
         self.cols = set([*self.infos.keys()])
         self.pad = get_width({col: info.reason for col, info in self.infos.items()})
         self.is_empty = len(self.infos) == 0
+
+    def certains(self) -> dict[str, Inference]:
+        return {col: infer for col, infer in self.infos.items() if infer.is_certain()}
+
+    def uncertains(self) -> dict[str, Inference]:
+        return {col: infer for col, infer in self.infos.items() if not infer.is_certain()}
+
+    def certain_lines(self, pad: Optional[int] = None) -> list[str]:
+        return self.lines_from_infos(self.certains(), pad)
+
+    def uncertain_lines(self, pad: Optional[int] = None) -> list[str]:
+        return self.lines_from_infos(self.uncertains(), pad)
+
+    @staticmethod
+    def lines_from_infos(infos: dict[str, Inference], pad: Optional[int] = None) -> list[str]:
+        pad = pad or get_width({col: info.reason for col, info in infos.items()})
+        return [f"{col:<{pad}} {info.reason}" for col, info in infos.items()]
 
     def lines(self, pad: Optional[int] = None) -> list[str]:
         pad = pad or self.pad
@@ -215,6 +233,139 @@ class InspectionResults:
             self.ords,
             self.cats,
         )
+
+    def all_inferences(self) -> dict[str, Inference]:
+        return {
+            **self.cats.infos,
+            **self.ords.infos,
+            **self.conts.infos,
+            **self.binaries.infos,
+            **self.ids.infos,
+            **self.times.infos,
+            **self.consts.infos,
+        }
+
+    def coercions(self) -> dict[str, Inference]:
+        coerced = {}
+        for col, infer in self.all_inferences().items():
+            if infer.kind.is_coerced():
+                coerced[col] = infer
+        return coerced
+
+    def final_binaries(self) -> dict[str, Inference]:
+        coerced = {}
+        for col, infer in self.all_inferences().items():
+            if infer.kind.is_bin():
+                coerced[col] = infer
+        return coerced
+
+    def final_categoricals(self) -> dict[str, Inference]:
+        coerced = {}
+        for col, infer in self.all_inferences().items():
+            if infer.kind in [
+                InferredKind.CertainCat,
+                InferredKind.MaybeCat,
+                InferredKind.UserCategorical,
+                InferredKind.CoercedCat,
+            ]:
+                coerced[col] = infer
+        return coerced
+
+    def big_header(self, title: str, pad: int) -> str:
+        big_sep = "=" * pad
+        return f"{big_sep}\n{title.center(pad)}\n{big_sep}\n"
+
+    def med_header(self, title: str) -> str:
+        underline = "-" * len(title)
+        return f"{title}\n{underline}\n"
+
+    def small_header(self, title: str) -> str:
+        underline = "┄" * (len(title))
+        return f"{title.capitalize()}\n{underline}\n"
+
+    def subsection(self, title: str, lines: list[str]) -> str:
+        if len(lines) <= 0:
+            return ""
+        header = self.small_header(title)
+        joined = "\n".join(lines)
+        return f"\n{header}{joined}\n\n"
+
+    def section(self, title: str, lines: list[str]) -> str:
+        if len(lines) <= 0:
+            return ""
+        header = self.med_header(title)
+        joined = "\n".join(lines)
+        return f"\n{header}{joined}\n\n"
+
+    def full_report(self, pad: Optional[int] = None) -> str:
+        ...
+
+    def short_report(self, pad: Optional[int] = None) -> str:
+        """
+        Ordered from most concerning to least, or from most amount of data
+        manipulation (removal of features or feature levels, or coercion)
+        """
+        pad = pad or get_terminal_size((81, 24))[0]
+
+        # fmt: off
+        coercions    = self.coercions()
+        categoricals = self.final_categoricals()
+        binaries     = self.final_binaries()
+
+        maybe_id_lines     = self.ids.uncertain_lines(pad)
+        certain_id_lines   = self.ids.certain_lines(pad)
+        maybe_time_lines   = self.times.uncertain_lines(pad)
+        certain_time_lines = self.times.certain_lines(pad)
+        consts_lines       = self.consts.certain_lines(pad)
+
+        coercion_lines = InspectionInfo.lines_from_infos(coercions, None)
+        cat_lines      = InspectionInfo.lines_from_infos(categoricals, None)
+        bin_lines      = InspectionInfo.lines_from_infos(binaries, None)
+        ord_lines      = InspectionInfo.lines_from_infos(self.ords.infos, None)
+        cont_lines     = InspectionInfo.lines_from_infos(self.conts.infos, None)
+        # fmt: on
+
+        id_lines = [*maybe_id_lines, *certain_id_lines]
+        time_lines = [*maybe_time_lines, *certain_time_lines]
+        destructives = [*id_lines, *time_lines, *consts_lines, *coercion_lines]
+        removes = [*id_lines, *time_lines, *consts_lines]
+        numerics = [*ord_lines, *cont_lines]
+
+        destruct_header = (
+            self.big_header("Destructive Data Changes", pad) if len(destructives) > 0 else ""
+        )
+        remove_header = self.med_header("Removed Features") if len(removes) > 0 else ""
+        id_section = self.subsection("Ids", id_lines)
+        time_section = self.subsection("Times", time_lines)
+        const_section = self.subsection("Constants", consts_lines)
+        coerce_section = self.section("Cardinality Coercions", coercion_lines)
+        dest_space = "\n\n" if len(destructives) > 0 else ""
+
+        inference_header = self.big_header("Feature Cardinality Inferences", pad)
+
+        bin_section = self.section("Binary Features", bin_lines)
+        cat_section = self.section("Categorical Features", cat_lines)
+        numeric_header = self.med_header("Numeric Features") if len(numerics) > 0 else ""
+        ord_section = self.subsection("Ordinals", ord_lines)
+        cont_section = self.subsection("Continuous", cont_lines)
+
+        deflations = self.big_header("Categorical Deflations", pad)
+        shape_info = self.big_header("Shape info", pad)
+
+        report = (
+            f"{destruct_header}"
+            f"{remove_header}"
+            f"{id_section}{time_section}{const_section}{coerce_section}"
+            f"{dest_space}"
+            f"{inference_header}"
+            f"{bin_section}{cat_section}"
+            f"{numeric_header}"
+            f"{ord_section}{cont_section}"
+            f"\n\nTODO\n"
+            f"{deflations}"
+            f"{shape_info}"
+        )
+        return re.sub(r"(:?\n){3,}", "\n\n", report)
 
     def print_basic_infos(self, pad: Optional[int] = None) -> None:
         basics = self.ordered_basic_infos()

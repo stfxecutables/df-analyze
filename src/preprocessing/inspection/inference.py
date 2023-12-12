@@ -161,6 +161,13 @@ class InferredKind(Enum):
             InferredKind.Const,
         ]
 
+    def is_coerced(self) -> bool:
+        return self in [
+            InferredKind.CoercedCat,
+            InferredKind.CoercedCont,
+            InferredKind.CoercedOrd,
+        ]
+
     def is_bin(self) -> bool:
         return self in [
             InferredKind.Binary,
@@ -225,6 +232,9 @@ class Inference:
 
     def is_certain(self) -> bool:
         return self.kind.is_certain()
+
+    def is_coerced(self) -> bool:
+        return self.kind.is_coerced()
 
     def overrides_user(self) -> bool:
         return self.is_certain() or self.kind.overrides_user()

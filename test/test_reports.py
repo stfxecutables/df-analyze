@@ -24,8 +24,13 @@ if __name__ == "__main__":
         df = ds.load()
         with redirect_stderr(StringIO()):
             info = inspect_data(df=df, target="target", categoricals=ds.categoricals, _warn=False)
-            info.print_basic_infos()
+            report = info.short_report()
             print(info.basic_df())
+            print("")
+            print(report)
+            res = input("Generate next report and print? [Y/n]")
+            if "n" in res.lower():
+                sys.exit()
             print()
 
         # b = basics = user_info.basic_df()
