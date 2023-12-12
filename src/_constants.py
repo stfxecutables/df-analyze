@@ -82,7 +82,7 @@ MAX_STEPWISE_SELECTION_N_FEATURES = 200
 MAX_PERF_N_FEATURES = 500
 """Number of features to warn users about general performance problems"""
 
-N_CAT_LEVEL_MIN = 50
+N_CAT_LEVEL_MIN = 20
 """
 Minimum required number of samples for level of a categorical variable to be
 considered useful in 5-fold analyses.
@@ -90,19 +90,18 @@ considered useful in 5-fold analyses.
 Details
 -------
 
-For each level of categorical variable to be predictively useful, there must be
-enough samples to be statistically meaningful (or to allow some reasonable
-generalization) in each fold used for fitting or analyses. Roughly, this means
-each fold needs to see at least 10-20 samples of each level (depending on how
-strongly / cleanly the level relates to other features - ultimately this is
-just a heuristic). Assuming k-fold is used for validation, then this means
-about k*10 samples per categorical level would a reasonable default minimum
-requirement one might use for culling categorical levels. Under the typical
-assumption of k=5, this means we require useful / reliable categorical levels
-to have 50 samples each.
+For each level of categorical variable to be predictively useful, there must
+be enough samples to be statistically meaningful (or to allow some reasonable
+generalization) in each fold used for fitting or analyses. Roughly, this
+means each fold needs to see at least 10-20 samples of each level (depending
+on how strongly / cleanly the level relates to other features - ultimately
+this is just a heuristic). Assuming k-fold is used for validation, then this
+means about (1 - 1/k) times 10-20 samples per categorical level would a
+reasonable default minimum requirement one might use for culling categorical
+levels. Under the typical assumption of k=5, this means we require useful /
+reliable categorical levels to have 8-16 samples each.
 
-By contrast, each level which does NOT have k*10 samples will mostly uselessly
-inflate the number of features after one-hot encoding.
+Inflation is to categorical variables as noise is to continuous ones.
 """
 
 # from https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html

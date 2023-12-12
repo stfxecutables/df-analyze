@@ -19,6 +19,8 @@ from src.preprocessing.inspection.text import (
     CONST_INFO,
     FLOAT_INFO,
     ID_INFO,
+    INFLATION_HEADER,
+    INFLATION_INFO,
     NYAN_INFO,
     ORD_INFO,
     TIME_INFO,
@@ -245,6 +247,16 @@ class InspectionResults:
             **self.consts.infos,
         }
 
+    def inflation_lines(self, pad: Optional[int] = None) -> list[str]:
+        infos = self.inflation
+        infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
+        if len(infos) <= 0:
+            return []
+        w = pad or max(len(info.col) for info in infos) + 2
+        header = "Deflated categorical variables (before --> after):"
+        lines = [f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}" for info in infos]
+        return [header, *lines, "\n"]
+
     def coercions(self) -> dict[str, Inference]:
         coerced = {}
         for col, infer in self.all_inferences().items():
@@ -349,8 +361,12 @@ class InspectionResults:
         ord_section = self.subsection("Ordinals", ord_lines)
         cont_section = self.subsection("Continuous", cont_lines)
 
-        deflations = self.big_header("Categorical Deflations", pad)
         shape_info = self.big_header("Shape info", pad)
+
+        inflate_lines = self.inflation_lines()
+        inflate_info = "\n".join(inflate_lines)
+        inflate_header = self.med_header("Deflated Categoricals")
+        inflate_desc = f"{INFLATION_HEADER}\n\n" if len(inflate_lines) > 0 else ""
 
         report = (
             f"{destruct_header}"
@@ -359,10 +375,13 @@ class InspectionResults:
             f"{dest_space}"
             f"{inference_header}"
             f"{bin_section}{cat_section}"
+            f"{inflate_header}"
+            f"{inflate_desc}"
+            f"{inflate_info}"
             f"{numeric_header}"
             f"{ord_section}{cont_section}"
             f"\n\nTODO\n"
-            f"{deflations}"
+            # f"{deflations}"
             f"{shape_info}"
         )
         return re.sub(r"(:?\n){3,}", "\n\n", report)

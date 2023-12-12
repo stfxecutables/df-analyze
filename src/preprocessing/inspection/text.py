@@ -1,3 +1,15 @@
+from __future__ import annotations
+
+# fmt: off
+import sys  # isort: skip
+from pathlib import Path  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
+sys.path.append(str(ROOT))  # isort: skip
+# fmt: on
+
+
+from src._constants import N_CAT_LEVEL_MIN
+
 FLOAT_INFO = (
     "Found features that are mostly or entirely continuous values. This means "
     "either that these columns convert to a floating point representation "
@@ -254,4 +266,32 @@ COERCED_CONT_INFO = (
     "mostly convert to floating point. These will be treated as continuous. "
     "\n\n"
     "Features coerced to be continuous:\n\n{info}"
+)
+
+INFLATION_HEADER = (
+    "Found and 'deflated' a number of categorical variables with levels that "
+    "are unlikely to be reliable or useful in prediction. "
+)
+
+INFLATION_INFO = (
+    f"{INFLATION_HEADER}"
+    "\n\n"
+    "For each level of categorical variable to be predictively useful, there "
+    "must be enough samples to be statistically meaningful (or to allow some "
+    "reasonable generalization) in each fold used for fitting or analyses. "
+    "When a categorical variable is full of undersampled levels, these levels "
+    "are essentially noise, and we say the categorical variable is 'inflated'. "
+    "\n\n"
+    "In practice, we would likely rarely feel confident about generalizations "
+    "based on only 10-20 samples of something. Assuming k-fold is used for "
+    "validation, then this means about (1 - 1/k) times 10-20 samples per "
+    "categorical level would a reasonable default minimum inflation threshold. "
+    "Under the typical assumption of k=5, this means we require useful / "
+    "reliable categorical levels to have about 8 to 16 samples each. "
+    "\n\n"
+    "Because `df-analyze` is intended to be a fast tool for exploratory "
+    "analysis, and since large categorical variables greatly expand table "
+    "widths during encoding, we are more aggressive about the inflation "
+    "threshold and require that each level of each categorical variable to "
+    f"have {N_CAT_LEVEL_MIN} samples to not be removed. "
 )
