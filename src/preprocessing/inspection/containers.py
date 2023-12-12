@@ -1,26 +1,16 @@
 from __future__ import annotations
 
 import sys
-import traceback
 from dataclasses import dataclass
 from enum import Enum
-from math import ceil
 from shutil import get_terminal_size
-from typing import Optional, Union
-from warnings import catch_warnings, filterwarnings
+from typing import Optional
 
-import numpy as np
 import pandas as pd
-from dateutil.parser import parse
-from dateutil.parser._parser import UnknownTimezoneWarning
-from joblib import Parallel, delayed
-from pandas import DataFrame, Index, Series
-from pandas.core.dtypes.dtypes import CategoricalDtype
+from pandas import DataFrame, Index
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from tqdm import tqdm
 
-from src._constants import N_CAT_LEVEL_MIN
-from src.preprocessing.inspection.inference import Inference, InferredKind
+from src.preprocessing.inspection.inference import Inference
 from src.preprocessing.inspection.text import (
     BIG_INFO,
     BINARY_INFO,

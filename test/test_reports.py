@@ -10,24 +10,11 @@ sys.path.append(str(ROOT))  # isort: skip
 
 from contextlib import redirect_stderr
 from io import StringIO
-from pprint import pprint
-from shutil import get_terminal_size
-from sys import stderr
-from time import perf_counter
 
-import numpy as np
-import pytest
-from pandas import DataFrame
-
-from src.preprocessing.inspection.containers import InspectionInfo, InspectionResults
-from src.preprocessing.inspection.inspection import inflation, inspect_data
+from src.preprocessing.inspection.inspection import inspect_data
 from src.testing.datasets import (
     FAST_INSPECTION,
     TestDataset,
-    all_ds,
-    fast_ds,
-    med_ds,
-    slow_ds,
 )
 
 if __name__ == "__main__":

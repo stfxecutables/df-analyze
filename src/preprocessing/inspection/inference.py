@@ -1,26 +1,39 @@
 from __future__ import annotations
 
 import re
-import sys
-import traceback
-from dataclasses import dataclass
 from enum import Enum
 from math import ceil
-from shutil import get_terminal_size
-from typing import Optional, Union
 from warnings import catch_warnings, filterwarnings
 
 import numpy as np
 import pandas as pd
 from dateutil.parser import parse
 from dateutil.parser._parser import UnknownTimezoneWarning
-from joblib import Parallel, delayed
-from pandas import DataFrame, Series
+from pandas import Series
 from pandas.core.dtypes.dtypes import CategoricalDtype
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from tqdm import tqdm
 
-from src._constants import N_CAT_LEVEL_MIN
+from src._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
+from src.preprocessing.inspection.text import (
+    BINARY_INFO,
+    BINARY_PLUS_NAN_INFO,
+    BINARY_VIA_NAN_INFO,
+    CERTAIN_CAT_INFO,
+    CERTAIN_CONT_INFO,
+    CERTAIN_ID_INFO,
+    CERTAIN_ORD_INFO,
+    CERTAIN_TIME_INFO,
+    COERCED_CAT_INFO,
+    COERCED_CONT_INFO,
+    COERCED_ORD_INFO,
+    CONST_INFO,
+    CONT_INFO,
+    MAYBE_CAT_INFO,
+    MAYBE_CONT_INFO,
+    MAYBE_ID_INFO,
+    MAYBE_ORD_INFO,
+    MAYBE_TIME_INFO,
+)
 
 TIME_WORDS = [
     r".*time.*",
@@ -110,27 +123,27 @@ class InferredKind(Enum):
 
     def fmt(self) -> str:
         fmts = {
-            InferredKind.MaybeOrd: "ord?",
-            InferredKind.MaybeCat: "cat?",
-            InferredKind.MaybeCont: "cont?",
-            InferredKind.MaybeId: "id?",
-            InferredKind.MaybeTime: "time?",
-            InferredKind.CertainOrd: "ord",
-            InferredKind.CertainCat: "cat",
-            InferredKind.CertainCont: "cont",
-            InferredKind.CertainId: "id",
-            InferredKind.CertainTime: "time",
+            InferredKind.MaybeOrd: MAYBE_ORD_INFO,
+            InferredKind.MaybeCat: MAYBE_CAT_INFO,
+            InferredKind.MaybeCont: MAYBE_CONT_INFO,
+            InferredKind.MaybeId: MAYBE_ID_INFO,
+            InferredKind.MaybeTime: MAYBE_TIME_INFO,
+            InferredKind.CertainOrd: CERTAIN_ORD_INFO,
+            InferredKind.CertainCat: CERTAIN_CAT_INFO,
+            InferredKind.CertainCont: CERTAIN_CONT_INFO,
+            InferredKind.CertainId: CERTAIN_ID_INFO,
+            InferredKind.CertainTime: CERTAIN_TIME_INFO,
             InferredKind.CertainNyan: "nyan",
-            InferredKind.Binary: "bin",
-            InferredKind.BinaryViaNan: "const+nan",
-            InferredKind.BinaryPlusNan: "bin+nan",
-            InferredKind.Const: "const",
+            InferredKind.Binary: BINARY_INFO,
+            InferredKind.BinaryViaNan: BINARY_VIA_NAN_INFO,
+            InferredKind.BinaryPlusNan: BINARY_PLUS_NAN_INFO,
+            InferredKind.Const: CONST_INFO,
             InferredKind.BigCat: "big-cat",
-            InferredKind.CoercedCat: "cat-coerce",
-            InferredKind.CoercedOrd: "ord-coerce",
-            InferredKind.CoercedCont: "cont-coerce",
-            InferredKind.UserCategorical: "user-cat",
-            InferredKind.UserOrdinal: "user-ord",
+            InferredKind.CoercedCat: COERCED_CAT_INFO,
+            InferredKind.CoercedOrd: COERCED_ORD_INFO,
+            InferredKind.CoercedCont: COERCED_CONT_INFO,
+            InferredKind.UserCategorical: "User-specified categorical",
+            InferredKind.UserOrdinal: "User-specified ordinal",
             InferredKind.NoInference: "none",
         }
         return fmts[self]
@@ -274,7 +287,7 @@ def is_timelike(s: str) -> bool:
         return False
 
 
-def looks_timelike(series: Series) -> Inference:
+def infer_timelike(series: Series) -> Inference:
     # we don't want to interpret integer-like data as times, even though
     # they could be e.g. Unix timestamps or something like that
     if converts_to_int(series):
@@ -317,7 +330,7 @@ def looks_timelike(series: Series) -> Inference:
     return Inference()
 
 
-def looks_id_like(series: Series) -> Inference:
+def infer_identifier(series: Series) -> Inference:
     """
     Returns
     -------
@@ -352,6 +365,8 @@ def looks_id_like(series: Series) -> Inference:
         return Inference(InferredKind.CertainId, "All non-NaN values are unique")
 
     if len(unqs) >= (len(dropped) / 2):
+        if converts_to_int(dropped):
+            return Inference()
         return Inference(
             InferredKind.MaybeId, "More unique values than one half of number of non-NaN samples"
         )
@@ -422,7 +437,7 @@ def converts_to_float(series: Series) -> bool:
 
 def infer_binary(series: Series) -> Inference:
     """To be run AFTER infer_constant, infer_timelike, infer_id"""
-    unqs = series.astype(str).unique()
+    unqs = series.astype(str).apply(lambda x: np.nan if x in NAN_STRINGS else x).unique()
     try:
         str_nan = "nan" in map(str.lower, unqs.astype(str))
     except Exception:
@@ -462,7 +477,7 @@ def infer_ordinal(series: Series) -> Inference:
     if np.all(idx):  # columns definitely all not numerical
         return Inference()
 
-    dropped = forced.dropna()
+    dropped = series.dropna()
     if not converts_to_int(dropped):
         return Inference()
 
@@ -593,9 +608,9 @@ def infer_categorical(series: Series) -> Inference:
     if infer_floatlike(series).is_certain():
         return Inference()
 
-    if looks_timelike(series).is_certain():
+    if infer_timelike(series).is_certain():
         return Inference()
-    if looks_id_like(series).is_certain():
+    if infer_identifier(series).is_certain():
         return Inference()
 
     if not converts_to_int(series):  # already checked not float

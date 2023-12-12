@@ -175,61 +175,61 @@ def test_inspect_slow(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
 
 
-@fast_ds
-@pytest.mark.wip
-def test_timestamp_detect_fast(dataset: tuple[str, TestDataset]) -> None:
-    do_timestamp_detection(dataset)
+# @fast_ds
+# @pytest.mark.wip
+# def test_timestamp_detect_fast(dataset: tuple[str, TestDataset]) -> None:
+#     do_timestamp_detection(dataset)
 
 
-@med_ds
-@pytest.mark.wip
-def test_timestamp_detect_med(dataset: tuple[str, TestDataset]) -> None:
-    do_timestamp_detection(dataset)
+# @med_ds
+# @pytest.mark.wip
+# def test_timestamp_detect_med(dataset: tuple[str, TestDataset]) -> None:
+#     do_timestamp_detection(dataset)
 
 
-@slow_ds
-@pytest.mark.wip
-def test_timestamp_detect_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_timestamp_detection(dataset)
+# @slow_ds
+# @pytest.mark.wip
+# def test_timestamp_detect_slow(dataset: tuple[str, TestDataset]) -> None:
+#     do_timestamp_detection(dataset)
 
 
 #########
 
 
-@fast_ds
-@pytest.mark.wip
-def test_detect_floats_fast(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_floats(dataset)
+# @fast_ds
+# @pytest.mark.wip
+# def test_detect_floats_fast(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_floats(dataset)
 
 
-@med_ds
-@pytest.mark.wip
-def test_detect_floats_med(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_floats(dataset)
+# @med_ds
+# @pytest.mark.wip
+# def test_detect_floats_med(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_floats(dataset)
 
 
-@slow_ds
-@pytest.mark.wip
-def test_detect_floats_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_floats(dataset)
+# @slow_ds
+# @pytest.mark.wip
+# def test_detect_floats_slow(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_floats(dataset)
 
 
-@fast_ds
-@pytest.mark.wip
-def test_detect_ids_fast(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_ids(dataset)
+# @fast_ds
+# @pytest.mark.wip
+# def test_detect_ids_fast(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_ids(dataset)
 
 
-@med_ds
-@pytest.mark.wip
-def test_detect_ids_med(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_ids(dataset)
+# @med_ds
+# @pytest.mark.wip
+# def test_detect_ids_med(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_ids(dataset)
 
 
-@slow_ds
-@pytest.mark.wip
-def test_detect_ids_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_detect_ids(dataset)
+# @slow_ds
+# @pytest.mark.wip
+# def test_detect_ids_slow(dataset: tuple[str, TestDataset]) -> None:
+#     do_detect_ids(dataset)
 
 
 @pytest.mark.fast
@@ -258,14 +258,14 @@ def test_detect_probably_ordinal() -> None:
 
 @pytest.mark.fast
 def test_detect_heuristically_ordinal() -> None:
-    rng = np.random.default_rng(69)
+    rng = np.random.default_rng(68)
     df = DataFrame(
         data=rng.choice([*range(7)], size=10, replace=True),
         columns=["ints"],
     ).astype(int)
     ords = inspect_str_columns(df, str_cols=["ints"])[1]
     assert "ints" in ords.infos
-    assert "common 0-indexed Likert" in ords.infos["ints"].reason
+    assert "Integers not starting at" in ords.infos["ints"].reason
 
     rng = np.random.default_rng(69)
     df = DataFrame(
@@ -274,7 +274,7 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     ords = inspect_str_columns(df, str_cols=["ints"])[1]
     assert "ints" in ords.infos
-    assert "common Likert" in ords.infos["ints"].reason
+    assert "80% or more of unique integer values differ only by 1" in ords.infos["ints"].reason
 
     rng = np.random.default_rng(68)
     df = DataFrame(

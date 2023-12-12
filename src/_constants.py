@@ -104,3 +104,29 @@ to have 50 samples each.
 By contrast, each level which does NOT have k*10 samples will mostly uselessly
 inflate the number of features after one-hot encoding.
 """
+
+# from https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
+NAN_STRINGS = [
+    "",
+    "-1.#IND",
+    "-1.#QNAN",
+    "-nan",
+    "-NaN",
+    "#N/A N/A",
+    "#N/A",
+    "#NA",
+    "<NA>",
+    "1.#IND",
+    "1.#QNAN",
+    "n/a",
+    "N/A",
+    "NA",
+    "nan",
+    "NaN",
+    "Nan",
+    "None",
+    "null",
+    "NULL",
+    "-",
+    "_",
+]

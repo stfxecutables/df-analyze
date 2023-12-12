@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
-from typing import Mapping, Optional, Type, overload
+from typing import Mapping, Optional, overload
 
 from optuna import Trial
 
@@ -56,8 +56,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
 from src._constants import SEED
-from src.models.base import NEG_MAE, DfAnalyzeModel
-from src.nonsense import silence_spam
+from src.models.base import DfAnalyzeModel
 
 """
 See:

@@ -16,30 +16,55 @@ ORD_INFO = (
     "Columns inferred to be ordinal:\n\n{info}"
 )
 
-MAYBE_ORD_INFO = ""
-
-CERTAIN_ORD_INFO = """
-    Found features that almost certainly should be interpreted as ordinal. This
-    means either that these features are either binary (i.e. values in {0, 1})
-    or integers containing neither 0 nor 1 as values. For most predictive
-    algorithms, it makes no difference if a binary variable is interpreted as
-    categorical or ordinal, so we choose to interpret binary indicators as
-    ordinal (i.e. no further one-hot encoding is needed, and NaN values are
-    interpolated). Because
-
-    "\n"
-
-    integer values). Check if these features are ordinal or categorical, and
-    then explicitly pass them to either the `--categoricals` or `--ordinals`
-    options when configuring df-analyze.
-
+MAYBE_ORD_INFO = (
+    "Found features that are possibly ordinal. These will generally be "
+    "features with integer values in some typical range [min, max]. However, "
+    "when all values in a small range (e.g. [0, 5]) are well-sampled, these "
+    "features are indistinguishable from a label-encoded categorical variable. "
+    "Make sure the features below do not in fact include features that should "
+    "be included in the `--categoricals` option. "
     "\n\n"
-    "Columns inferred to be ordinal:\n\n{info}"
-"""
+    "Columns inferred to be likely ordinal:\n\n{info}"
+)
+
+CERTAIN_ORD_INFO = (
+    "Found features that almost certainly should be interpreted as ordinal. "
+    "This should mean the feature contains only integer or NaN values, but "
+    "does not contain 0 or 1 as values (categorical variables will almost "
+    "always be encoded starting from 0 or 1). df-analyze will NOT allow theses "
+    "features to be treated as categorical even if passed to the "
+    "`--categoricals` option: to treat them as categorical correct the feature "
+    "values so that they are proper categorical lables (strings or integers "
+    "starting at 0 or 1)."
+    "\n\n"
+    "Features that will be treated as certainly ordinal:\n\n{info}"
+)
+
+COERCED_ORD_INFO = (
+    "Coerced some features to ordinal. In order to avoid excessive compute "
+    "costs, when a feature is neither clearly categorical nor ordinal, "
+    "df-analyze will assume such a feature is ordinal unless the feature is "
+    "well-sampled as a categorical, AND if the feature has a typical "
+    "categorical name."
+    "\n\n"
+    "Features coerced to ordinal:\n\n{info}"
+)
 
 BINARY_INFO = (
     "Found features with only two unique values. These will be treated as "  #
     "binary categorical."
+)
+
+BINARY_VIA_NAN_INFO = (
+    "Found features with only one unique value and NaNs. These will be treated "
+    "as binary categorical.\n\n"
+    "Features that are binary only due to NaNs:\n\n{info}"
+)
+
+BINARY_PLUS_NAN_INFO = (
+    "Found features with only two unique values and NaNs. These will be treated "
+    "as binary categoricals.\n\n"
+    "Features that are binary and also have NaNs:\n\n{info}"
 )
 
 ID_INFO = (
@@ -57,7 +82,27 @@ ID_INFO = (
     "yourself and ensure these features are not better described as either "
     "ordinal or continuous. If so, specify them using the `--ordinals` "
     "`--continous` options to df-analyze.\n\n"
-    "Columns inferred to be identifiers:\n\n{info}"
+    "Features inferred to be identifiers:\n\n{info}"
+)
+
+MAYBE_ID_INFO = """{info}
+    Found features that do not appear to be either continuous or categorical,
+    but have a large number of unique non-NaN values. These may be identifiers.
+    If so, consider adding them to `--drops` to silence this message.
+    "\n\n"
+    "Features inferred to be likely identifiers:\n\n{info}"
+"""
+
+CERTAIN_ID_INFO = (
+    "Found features that do not appear continuous, but have as many unique "
+    "values as non-NaN samples. These are treated as certain to be identifiers "
+    "and are REMOVED from all subsequeny analyses by df-analyze. This removal "
+    "cannot be prevented by specifying these features as `--ordinals` or "
+    "`--categoricals`, and can be mitigated only by editing the data (or "
+    "removing these features or adding them to the `--drops` option to silence "
+    "this message). "
+    "\n\n"
+    "Features inferred to be certainly identifiers:\n\n{info}"
 )
 
 TIME_INFO = (
@@ -102,34 +147,74 @@ TIME_INFO = (
     "(https://www.sktime.net)."
 )
 
+MAYBE_TIME_INFO = """
+    Found features with a large number of values that parse as dates or
+    times, and which have undersampled levels when interpreted as
+    categoricals. These data will be REMOVED from analysis, regardless of
+    whether or not they were specified in `--ordinals` or `--categoricals`.
+    To silence this message, either pass these features to the `--drops`
+    option, or edit them as mentioned above.
+    "\n\n"
+    "Columns inferred likely to be datetime data:\n\n{info}"
+"""
+
+CERTAIN_TIME_INFO = MAYBE_TIME_INFO
+
 CAT_INFO = (
     "Found features that look categorical. These will be one-hot encoded to "
     "allow use in subsequent analyses. To silence this warning, specify them as "
     "categoricals or ordinals manually either via the CLI or in the spreadsheet "
-    "file header, using the `--categoricals` and/or `--ordinals` option.\n\n"
-    "Features that look categorical not specified by `--categoricals`:\n{info}"
+    "file header, using the `--categoricals` and/or `--ordinals` option."
+    "\n\n"
+    "Features that may be categorical:\n\n{info}"
 )
+
+# Probably shouldn't ever be printed?
+MAYBE_CAT_INFO = """
+    "Found features that were interpreted as categorical due to having both "
+    "well-sampled classes AND a name matching some common (English-language) "
+    "categorical variable names. "
+    "\n\n"
+    "Features that may be categorical:\n\n{info}"
+"""
+
+CERTAIN_CAT_INFO = """
+    "Found features that can only be interpreted as categorical. These will be "
+    "one-hot encoded and possibly deflated. "
+    "\n\n"
+    "Features that are certainly categorical:\n\n{info}"
+"""
+
+COERCED_CAT_INFO = """
+    "Found features that were interpreted as categorical due to having both "
+    "well-sampled classes AND a name matching some common (English-language) "
+    "categorical variable names. "
+    "\n\n"
+    "Features coerced to categorical:\n\n{info}"
+"""
 
 CONST_INFO = (
     "Found features that are constant (i.e. all values) are NaN or all values "
     "are the same non-NaN value). These contain no information and will be "
-    "removed automatically.\n\n "
+    "removed automatically. To silence this message, add these feature names "
+    "to the `--drops` option. "
+    "\n\n "
     "Features that are constant:\n{info}"
 )
 
-BIG_INFO = """
-    Found features that, when interpreted as categorical, have more than 50
-    unique levels / classes. Unless you have a large number of samples, or if
-    these features have a highly imbalanced / skewed distribution, then they
-    will cause sparseness after one-hot encoding. This is generally not
-    beneficial to most algorithms. You should inspect these features and think
-    if it makes sense if they would be predictively useful for the given
-    target. If they are unlikely to be useful, consider removing them from the
-    data. This will also likely considerably improve `df-analyze` predictive
-    performance and reduce compute
+BIG_INFO = (
+    "Found features that, when interpreted as categorical, have more than 50 "
+    "unique levels / classes. Unless you have a large number of samples, or if "
+    "these features have a highly imbalanced / skewed distribution, then they "
+    "will cause sparseness after one-hot encoding. This is generally not "
+    "beneficial to most algorithms. You should inspect these features and think "
+    "if it makes sense if they would be predictively useful for the given "
+    "target. If they are unlikely to be useful, consider removing them from the "
+    "data. This will also likely considerably improve `df-analyze` predictive "
+    "performance and reduce compute "
     "times. However, we do NOT remove these features automatically.\n\n"
     "Features with over 50 levels when interpreted as categorical: {info}"
-    """
+)
 NYAN_INFO = (
     "Found features that are constant if dropping NaN values. Whether or not "
     "these features have predictive value will depend on if data is missing "
@@ -139,4 +224,34 @@ NYAN_INFO = (
     "candidates to consider for removal."
     "\n\n"
     "Features that are constant when dropping NaNs: {info}"
+)
+
+CONT_INFO = (
+    "Found features that convert mostly or entirely to a floating point "
+    "representation without loss of information, and which do not appear to be "
+    "ordinal. "
+    "\n\n"
+    "Features that may be continuous:\n\n{info}"
+)
+
+MAYBE_CONT_INFO = (
+    "Found features that convert mostly or entirely to a floating point "
+    "representation without loss of information, and which do not appear to be "
+    "ordinal. "
+    "\n\n"
+    "Features inferred likely to be continuous:\n\n{info}"
+)
+
+CERTAIN_CONT_INFO = (
+    "Found features that convert to floating point representation without loss "
+    "of information, and which do not appear to be ordinal. "
+    "\n\n"
+    "Features inferred to be continuous:\n\n{info}"
+)
+
+COERCED_CONT_INFO = (
+    "Found ambiguous features that contain decimals ('.') and otherwise "
+    "mostly convert to floating point. These will be treated as continuous. "
+    "\n\n"
+    "Features coerced to be continuous:\n\n{info}"
 )

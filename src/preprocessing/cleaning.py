@@ -9,10 +9,7 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.impute import IterativeImputer, SimpleImputer
-from sklearn.linear_model import LinearRegression, LogisticRegression, SGDClassifier, SGDRegressor
-from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
-from sklearn.svm import SVC, SVR
 from tqdm import tqdm
 
 from src._constants import MAX_PERF_N_FEATURES
@@ -21,11 +18,10 @@ from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import (
     InspectionInfo,
     InspectionResults,
-    convert_categorical,
     convert_categoricals,
-    inflation,
     inspect_data,
     messy_inform,
+    unify_nans,
 )
 
 
@@ -45,7 +41,7 @@ class DataCleaningWarning(UserWarning):
 def cleaning_inform(message: str) -> None:
     cols = get_terminal_size((81, 24))[0]
     sep = "=" * cols
-    title = "Removing Data Feature"
+    title = "Cleaing Data Features"
     underline = "." * (len(title) + 1)
     message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
     print(message, file=sys.stderr)
@@ -284,7 +280,7 @@ def drop_unusable(df: DataFrame, results: InspectionResults) -> DataFrame:
     """Drops identifiers, datetime, constants"""
     df = drop_cols(df, "identifiers", results.ids)
     df = drop_cols(df, "datetime data", results.times)
-    df = drop_cols(df, "constant", results.conts)
+    df = drop_cols(df, "constant", results.consts)
     return df
 
 
@@ -355,6 +351,8 @@ def encode_categoricals(
 
     y = df[target]
     df = df.drop(columns=target)
+    df = convert_categoricals(df, target)
+    df = unify_nans(df)
     df = drop_unusable(df, results)
     df = deflate_categoricals(df, results, _warn=warn_explosion)
     to_convert = [*df.columns]
@@ -378,14 +376,18 @@ def encode_categoricals(
         # i.e. by using pd.get_dummies(..., dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)
+        if new.columns.has_duplicates:
+            dupes = new.columns[new.columns.duplicated()]
+            raise ValueError(f"pd.get_dummies created duplicates: {dupes}")
+        new = convert_categoricals(new, target=target)
         new = new.astype(float)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as e:
         inspect_data(df, target, categoricals, ordinals, _warn=True)
         raise RuntimeError(
             "Could not convert data to floating point after cleaning. Some "
             "messy data must be removed or cleaned before `df-analyze` can "
             "continue. See information above."
-        )
+        ) from e
 
     # warn about large number of features
     old_feats = df.shape[1]
@@ -467,7 +469,7 @@ def prepare_data(
 ) -> tuple[DataFrame, Series, list[str]]:
     y = df[target]
     results = inspect_data(df, target, categoricals, ordinals, _warn=_warn)
-    df, cats, ords = drop_unusable(df, results, categoricals, ordinals)
+    df = drop_unusable(df, results)
     raise NotImplementedError()
 
     df = handle_continuous_nans(

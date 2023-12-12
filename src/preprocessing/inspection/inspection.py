@@ -1,26 +1,17 @@
 from __future__ import annotations
 
-import re
 import sys
 import traceback
-from dataclasses import dataclass
-from enum import Enum
-from math import ceil
 from shutil import get_terminal_size
 from typing import Optional, Union
-from warnings import catch_warnings, filterwarnings
 
 import numpy as np
-import pandas as pd
-from dateutil.parser import parse
-from dateutil.parser._parser import UnknownTimezoneWarning
 from joblib import Parallel, delayed
 from pandas import DataFrame, Series
-from pandas.core.dtypes.dtypes import CategoricalDtype
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
 
-from src._constants import N_CAT_LEVEL_MIN
+from src._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 from src.preprocessing.inspection.containers import (
     ColumnDescriptions,
     ColumnType,
@@ -29,7 +20,6 @@ from src.preprocessing.inspection.containers import (
     InspectionResults,
 )
 from src.preprocessing.inspection.inference import (
-    CAT_WORDS,
     Inference,
     InferredKind,
     has_cat_name,
@@ -37,9 +27,9 @@ from src.preprocessing.inspection.inference import (
     infer_categorical,
     infer_constant,
     infer_floatlike,
+    infer_identifier,
     infer_ordinal,
-    looks_id_like,
-    looks_timelike,
+    infer_timelike,
 )
 
 
@@ -135,12 +125,13 @@ def inspect_str_column(
     series: Series,
 ) -> Union[ColumnDescriptions, tuple[str, Exception]]:
     col = str(series.name)
+    series = series.copy(deep=True)
     try:
         result = ColumnDescriptions(col)
 
         # this sould override even user-specified cardinality, as a constant
         # column as we define it here is useless no matter what
-        is_const = infer_constant(series)
+        is_const = infer_constant(series.copy(deep=True))
         if is_const:
             result.const = is_const
             if is_const.is_certain():
@@ -148,13 +139,13 @@ def inspect_str_column(
 
         # Likewise, we are not equipped to handle timeseries features, so this
         # too must override use-specified cardinality
-        maybe_time = looks_timelike(series)
+        maybe_time = infer_timelike(series.copy(deep=True))
         if maybe_time:
             result.time = maybe_time
             if maybe_time.is_certain():
                 return result  # time is bad enough we don't need other checks
 
-        maybe_id = looks_id_like(series)
+        maybe_id = infer_identifier(series.copy(deep=True))
         if maybe_id:
             result.id = maybe_id
             if maybe_id.is_certain():
@@ -166,22 +157,22 @@ def inspect_str_column(
             # binary inference is always certain
             return result
 
-        maybe_ord = infer_ordinal(series)
+        maybe_ord = infer_ordinal(series.copy(deep=True))
         if maybe_ord:
             result.ord = maybe_ord
             if maybe_ord.is_certain():
                 return result
 
-        maybe_float = infer_floatlike(series)
+        maybe_float = infer_floatlike(series.copy(deep=True))
         if maybe_float:
             result.cont = maybe_float
             if maybe_float.is_certain():
                 return result
 
-        if maybe_float or maybe_id or maybe_time:
+        if maybe_id or maybe_time:
             return result
 
-        maybe_cat = infer_categorical(series)
+        maybe_cat = infer_categorical(series.copy(deep=True))
         if maybe_cat:
             result.cat = maybe_cat
 
@@ -194,6 +185,7 @@ def inspect_str_column(
 def inspect_str_columns(
     df: DataFrame,
     str_cols: list[str],
+    max_rows: int = 5000,
     _warn: bool = True,
 ) -> tuple[
     InspectionInfo,
@@ -548,6 +540,11 @@ def convert_categoricals(df: DataFrame, target: str) -> DataFrame:
     return df
 
 
+def unify_nans(df: DataFrame) -> DataFrame:
+    df = df.map(lambda x: np.nan if str(x) in NAN_STRINGS else x)  # type: ignore
+    return df
+
+
 def inspect_data(
     df: DataFrame,
     target: str,
@@ -560,12 +557,13 @@ def inspect_data(
     ordinals = ordinals or []
 
     df = convert_categoricals(df, target)
+    df = unify_nans(df)
     df = df.drop(columns=target, errors="ignore")
 
     arg_cats, arg_ords = set(categoricals), set(ordinals)
 
     all_cols = set(df.columns.to_list())
-    user_cols = arg_cats.union(arg_ords)
+    user_cols = arg_cats.union(arg_ords).intersection(all_cols)
     unk_cols = list(all_cols.difference(user_cols))
 
     (
