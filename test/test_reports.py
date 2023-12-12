@@ -17,6 +17,9 @@ from src.testing.datasets import (
     TestDataset,
 )
 
+REPORTS = ROOT / "results/reports"
+REPORTS.mkdir(exist_ok=True, parents=True)
+
 if __name__ == "__main__":
     dsname: str
     ds: TestDataset
@@ -24,14 +27,10 @@ if __name__ == "__main__":
         df = ds.load()
         with redirect_stderr(StringIO()):
             info = inspect_data(df=df, target="target", categoricals=ds.categoricals, _warn=False)
-            report = info.short_report()
-            print(info.basic_df())
-            print("")
-            print(report)
-            res = input("Generate next report and print? [Y/n]")
-            if "n" in res.lower():
-                sys.exit()
-            print()
+            report = info.short_report(pad=81)
+            out = REPORTS / f"{dsname}.txt"
+            out.write_text(report)
+            print(f"Saved short report to {out}")
 
         # b = basics = user_info.basic_df()
         # b = b[~b.reason.str.contains("String|Binary|numeric|(?:Single value)")]
