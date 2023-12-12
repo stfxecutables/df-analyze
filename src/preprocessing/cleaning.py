@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from shutil import get_terminal_size
+from typing import Any
 from warnings import warn
 
 import numpy as np
@@ -12,7 +13,7 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
-from src._constants import MAX_PERF_N_FEATURES
+from src._constants import MAX_PERF_N_FEATURES, NAN_STRINGS
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import (
@@ -128,23 +129,34 @@ def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
     return X_norm
 
 
+def drop_target_nans(
+    df: DataFrame,
+    target: str,
+) -> tuple[DataFrame, int]:
+    y_str = df[target].copy(deep=True)
+    y_str = y_str.apply(lambda x: np.nan if x in NAN_STRINGS else x)
+
+    idx = ~y_str.isna()
+    df = df.loc[idx]
+    return df, (~idx).sum()
+
+
 def handle_continuous_nans(
     df: DataFrame,
     target: str,
-    categoricals: list[str],
+    results: InspectionResults,
     nans: NanHandling,
     add_indicators: bool = True,
 ) -> tuple[DataFrame, int]:
     """Impute or drop nans based on values not in `cat_cols`"""
     # drop rows where target is NaN: meaningless
-    idx = ~df[target].isna()
-    df = df.loc[idx]
     # NaNs in categoricals are handled as another dummy indicator
-    drops = list(set(categoricals).union([target]))
-    X = df.drop(columns=drops, errors="ignore")
-
-    X_cat = df[categoricals]
+    cats = [*results.cats.infos.keys()]
+    X_cat = df[cats].copy(deep=True)
     y = df[target]
+    df = df.drop(columns=target)
+    X = df.drop(columns=results.drop_cols(), errors="ignore")
+    X = X.drop(columns=cats, errors="ignore")  # now only cats and ords
 
     # construct NaN indicators
     if add_indicators:
@@ -334,8 +346,6 @@ def encode_categoricals(
     df: DataFrame,
     target: str,
     results: InspectionResults,
-    categoricals: list[str],
-    ordinals: list[str],
     warn_explosion: bool = True,
 ) -> tuple[DataFrame, DataFrame]:
     """
@@ -382,7 +392,6 @@ def encode_categoricals(
         new = convert_categoricals(new, target=target)
         new = new.astype(float)
     except (TypeError, ValueError) as e:
-        inspect_data(df, target, categoricals, ordinals, _warn=True)
         raise RuntimeError(
             "Could not convert data to floating point after cleaning. Some "
             "messy data must be removed or cleaned before `df-analyze` can "
@@ -464,24 +473,52 @@ def prepare_data(
     target: str,
     categoricals: list[str],
     ordinals: list[str],
+    results: InspectionResults,
     is_classification: bool,
     _warn: bool = True,
-) -> tuple[DataFrame, Series, list[str]]:
+) -> tuple[DataFrame, Series, DataFrame, dict[str, Any]]:
+    """
+    Returns
+    -------
+    X_encoded: DataFrame
+        All encoded and processed predictors.
+
+    target: Series
+        The regression or classification target, also encoded.
+
+    X_cat: DataFrame
+        The categorical variables remaining after processing (no encoding,
+        for univariate metrics and the like).
+
+    info: dict[str, str]
+        Other information regarding warnings and cleaning effects.
+
+    """
+    df = unify_nans(df)
+    df = convert_categoricals(df, target)
+    df, n_targ_drop = drop_target_nans(df, target)
     y = df[target]
+
     results = inspect_data(df, target, categoricals, ordinals, _warn=_warn)
     df = drop_unusable(df, results)
-    raise NotImplementedError()
-
-    df = handle_continuous_nans(
-        df=df, target=target, categoricals=categoricals, nans=NanHandling.Mean
+    df, n_ind_added = handle_continuous_nans(
+        df=df, target=target, results=results, nans=NanHandling.Mean
     )
+
+    df = deflate_categoricals(df, results, _warn=_warn)
+    df, cats = encode_categoricals(df, target, results=results, warn_explosion=_warn)
 
     df = df.drop(columns=target)
     if is_classification:
         df, y = encode_target(df, y)
     else:
         df, y = clean_regression_target(df, y)
-    return df, y, categoricals
+    return (
+        df,
+        y,
+        cats,
+        {"n_samples_dropped_via_target_NaNs": n_targ_drop, "n_cont_indicator_added": n_ind_added},
+    )
 
 
 def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:

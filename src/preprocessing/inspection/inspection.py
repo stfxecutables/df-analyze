@@ -556,8 +556,6 @@ def inspect_data(
     categoricals = categoricals or []
     ordinals = ordinals or []
 
-    df = convert_categoricals(df, target)
-    df = unify_nans(df)
     df = df.drop(columns=target, errors="ignore")
 
     arg_cats, arg_ords = set(categoricals), set(ordinals)

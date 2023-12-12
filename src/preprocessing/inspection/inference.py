@@ -216,6 +216,9 @@ class InferredKind(Enum):
             InferredKind.Const,
         ]
 
+    def should_drop(self) -> bool:
+        return self.is_time() or self.is_const() or self.is_id()
+
     def overrides_user(self) -> bool:
         return self.is_certain() or self in [InferredKind.MaybeId, InferredKind.MaybeTime]
 
@@ -229,6 +232,9 @@ class Inference:
     def __init__(self, kind: InferredKind = InferredKind.NoInference, reason: str = "") -> None:
         self.kind = kind
         self.reason = reason
+
+    def should_drop(self) -> bool:
+        return self.is_time() or self.is_const() or self.is_id()
 
     def is_certain(self) -> bool:
         return self.kind.is_certain()

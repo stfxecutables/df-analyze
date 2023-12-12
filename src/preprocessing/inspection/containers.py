@@ -9,7 +9,6 @@ from typing import Optional
 
 import pandas as pd
 from pandas import DataFrame, Index
-from sklearn.experimental import enable_iterative_imputer  # noqa
 
 from src.preprocessing.inspection.inference import Inference, InferredKind
 from src.preprocessing.inspection.text import (
@@ -20,7 +19,6 @@ from src.preprocessing.inspection.text import (
     FLOAT_INFO,
     ID_INFO,
     INFLATION_HEADER,
-    INFLATION_INFO,
     NYAN_INFO,
     ORD_INFO,
     TIME_INFO,
@@ -257,6 +255,13 @@ class InspectionResults:
         lines = [f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}" for info in infos]
         return [header, *lines, "\n"]
 
+    def drop_cols(self) -> list[str]:
+        cols = []
+        for col, infer in self.all_inferences().items():
+            if infer.kind.should_drop():
+                cols.append(col)
+        return cols
+
     def coercions(self) -> dict[str, Inference]:
         coerced = {}
         for col, infer in self.all_inferences().items():
@@ -365,7 +370,7 @@ class InspectionResults:
 
         inflate_lines = self.inflation_lines()
         inflate_info = "\n".join(inflate_lines)
-        inflate_header = self.med_header("Deflated Categoricals")
+        inflate_header = self.med_header("Deflated Categoricals") if len(inflate_lines) > 0 else ""
         inflate_desc = f"{INFLATION_HEADER}\n\n" if len(inflate_lines) > 0 else ""
 
         report = (
