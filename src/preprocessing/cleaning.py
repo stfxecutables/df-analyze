@@ -1,4 +1,5 @@
 import sys
+from functools import partial
 from pathlib import Path
 from shutil import get_terminal_size
 from typing import Any
@@ -21,9 +22,11 @@ from src.preprocessing.inspection.inspection import (
     InspectionResults,
     convert_categoricals,
     inspect_data,
+    inspect_target,
     messy_inform,
     unify_nans,
 )
+from src.timing import timed
 
 
 class DataCleaningWarning(UserWarning):
@@ -42,7 +45,7 @@ class DataCleaningWarning(UserWarning):
 def cleaning_inform(message: str) -> None:
     cols = get_terminal_size((81, 24))[0]
     sep = "=" * cols
-    title = "Cleaing Data Features"
+    title = "Cleaning Data Features"
     underline = "." * (len(title) + 1)
     message = f"\n{sep}\n{title}\n{underline}\n{message}\n{sep}"
     print(message, file=sys.stderr)
@@ -199,23 +202,24 @@ def handle_continuous_nans(
     return X, 0
 
 
-def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
+def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[DataFrame, Series]:
     unqs, cnts = np.unique(target, return_counts=True)
     if len(unqs) <= 1:
         raise ValueError(f"Target variable {target.name} is constant.")
     idx = cnts <= 20
     n_cls = len(unqs)
     if np.sum(idx) > 0:
-        cleaning_inform(
-            f"The target variable has a number of class labels ({unqs[idx]}) with "
-            "less than 20 members. This will cause problems with splitting in "
-            "various nested k-fold procedures used in `df-analyze`. In addition, "
-            "any estimates or metrics produced for such a class will not be "
-            "statistically meaningful (i.e. the uncertainty on those metrics or "
-            "estimates will be exceedingly large). We thus remove all samples "
-            "that belong to these labels, bringing the total number of classes "
-            f"down to {n_cls - np.sum(idx)}"
-        )
+        if _warn:
+            cleaning_inform(
+                f"The target variable has a number of class labels ({unqs[idx]}) with "
+                "less than 20 members. This will cause problems with splitting in "
+                "various nested k-fold procedures used in `df-analyze`. In addition, "
+                "any estimates or metrics produced for such a class will not be "
+                "statistically meaningful (i.e. the uncertainty on those metrics or "
+                "estimates will be exceedingly large). We thus remove all samples "
+                "that belong to these labels, bringing the total number of classes "
+                f"down to {n_cls - np.sum(idx)}"
+            )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop]
         target = target[idx_drop]
@@ -250,9 +254,7 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
 
 
 def drop_cols(
-    df: DataFrame,
-    kind: str,
-    *col_dicts: InspectionInfo,
+    df: DataFrame, kind: str, *col_dicts: InspectionInfo, _warn: bool = False
 ) -> DataFrame:
     cols = set()
     cols_descs = []
@@ -268,11 +270,12 @@ def drop_cols(
 
     w = max(len(col) for col in cols) + 2
     info = "\n".join([f"{col:<{w}} {desc}" for col, desc in cols_descs])
-    cleaning_inform(
-        f"Dropping features that appear to be {kind}. Additional information "
-        "should be available above.\n\n"
-        f"Dropped features:\n{info}"
-    )
+    if _warn:
+        cleaning_inform(
+            f"Dropping features that appear to be {kind}. Additional information "
+            "should be available above.\n\n"
+            f"Dropped features:\n{info}"
+        )
     drops = list(cols)
 
     df = df.drop(columns=drops, errors="ignore")
@@ -290,11 +293,11 @@ def floatify(df: DataFrame) -> DataFrame:
     return df
 
 
-def drop_unusable(df: DataFrame, results: InspectionResults) -> DataFrame:
+def drop_unusable(df: DataFrame, results: InspectionResults, _warn: bool = False) -> DataFrame:
     """Drops identifiers, datetime, constants"""
-    df = drop_cols(df, "identifiers", results.ids)
-    df = drop_cols(df, "datetime data", results.times)
-    df = drop_cols(df, "constant", results.consts)
+    df = drop_cols(df, "identifiers", results.ids, _warn=_warn)
+    df = drop_cols(df, "datetime data", results.times, _warn=_warn)
+    df = drop_cols(df, "constant", results.consts, _warn=_warn)
     return df
 
 
@@ -309,7 +312,7 @@ def deflate_categoricals(
     infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
 
     for info in tqdm(
-        infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 20
+        infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 50
     ):
         col = info.col
         nan = df[col].isna()
@@ -365,7 +368,7 @@ def encode_categoricals(
     df = df.drop(columns=target)
     df = convert_categoricals(df, target)
     df = unify_nans(df)
-    df = drop_unusable(df, results)
+    df = drop_unusable(df, results, _warn=False)
     df = deflate_categoricals(df, results, _warn=warn_explosion)
     to_convert = [*df.columns]
 
@@ -374,7 +377,6 @@ def encode_categoricals(
         bins = sorted(set(results.binaries.cols).intersection(to_convert))
         multis = sorted(set(results.multi_cats).intersection(to_convert))
         new = df
-        print("One-hot encoding categorical variables...")
         # note `bins` includes variables that are (1) "constant-binary" (i.e.
         # either a constant value or NaN), (2) true binary (i.e. two unique
         # non-NaN values), or (3) binary plus NaN (two unique non-NaN values
@@ -479,7 +481,7 @@ def prepare_target(
     y = df[target]
     df = df.drop(columns=target)
     if is_classification:
-        df, y = encode_target(df, y)
+        df, y = encode_target(df, y, _warn=_warn)
     else:
         df, y = clean_regression_target(df, y)
     return df, y
@@ -509,29 +511,37 @@ def prepare_data(
         Other information regarding warnings and cleaning effects.
 
     """
-    df = unify_nans(df)
-    df = convert_categoricals(df, target)
-    df, n_targ_drop = drop_target_nans(df, target)
+    times: dict[str, float] = {}
+    timer = partial(timed, times=times)
+    df = timer(unify_nans)(df)
+    df = timer(convert_categoricals)(df, target)
+    info = timer(inspect_target)(df, target, is_classification=is_classification)
+    df, n_targ_drop = timer(drop_target_nans)(df, target)
     y = df[target]
 
-    df = drop_unusable(df, results)
+    df = timer(drop_unusable)(df, results, _warn=_warn)
     df, n_ind_added = handle_continuous_nans(
         df=df, target=target, results=results, nans=NanHandling.Mean
     )
 
-    df = deflate_categoricals(df, results, _warn=_warn)
-    df, cats = encode_categoricals(df, target, results=results, warn_explosion=_warn)
+    df = timer(deflate_categoricals)(df, results, _warn=_warn)
+    df, cats = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)
 
     df = df.drop(columns=target)
     if is_classification:
-        df, y = encode_target(df, y)
+        df, y = timer(encode_target)(df, y)
     else:
-        df, y = clean_regression_target(df, y)
+        df, y = timer(clean_regression_target)(df, y)
     return (
         df,
         y,
         cats,
-        {"n_samples_dropped_via_target_NaNs": n_targ_drop, "n_cont_indicator_added": n_ind_added},
+        {
+            "n_samples_dropped_via_target_NaNs": n_targ_drop,
+            "n_cont_indicator_added": n_ind_added,
+            "target": info,
+            "runtimes": times,
+        },
     )
 
 
