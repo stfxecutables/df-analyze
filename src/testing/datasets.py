@@ -66,14 +66,14 @@ class TestDataset:
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
-            cats = [*self.categoricals, *results.cats.descs.keys()]
-            df, cats, ords = drop_unusable(df, results, cats, [])
-
+            df = drop_unusable(df, results)
             df, nan_ind = handle_continuous_nans(
-                df, target="target", categoricals=cats, nans=NanHandling.Median
+                df, target="target", results=results, nans=NanHandling.Median
             )
             df = encode_categoricals(
-                df, target="target", results=results, categoricals=cats, ordinals=ords
+                df,
+                target="target",
+                results=results,
             )[0]
             df = normalize(df, "target")
             df = df.copy(deep=True)

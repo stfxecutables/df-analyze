@@ -16,10 +16,10 @@ import pandas as pd
 from pandas import DataFrame
 from tqdm import tqdm
 
-from src.preprocessing.cleaning import prepare_data
 from src.preprocessing.inspection.inspection import (
     inspect_data,
 )
+from src.preprocessing.prepare import prepare_data
 from src.testing.datasets import (
     FAST_INSPECTION,
     MEDIUM_INSPECTION,
