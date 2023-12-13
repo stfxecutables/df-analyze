@@ -50,7 +50,7 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
     cat_nan_idx = X_cats.isna().to_numpy()
 
     for nans in [NanHandling.Mean, NanHandling.Median]:
-        dfc, n_added = handle_continuous_nans(df, target="target", categoricals=cats, nans=nans)
+        dfc = handle_continuous_nans(df, target="target", results=None, nans=nans)[0]
         clean = dfc.drop(columns=["target", *cats])
         assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
 
@@ -61,7 +61,7 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 
     for nans in [NanHandling.Drop]:
         try:
-            dfc, n_added = handle_continuous_nans(df, target="target", categoricals=cats, nans=nans)
+            dfc = handle_continuous_nans(df, target="target", results=None, nans=nans)[0]
             clean = dfc.drop(columns=["target", *cats])
             assert clean.isna().sum().sum() == 0, f"NaNs remaining in data {dsname}"
         except RuntimeError as e:
@@ -112,12 +112,12 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
     # with capsys.disabled():
     #     print(f"Performing multivariate imputation for data: {dsname}")
     with pytest.warns(UserWarning, match="Using experimental multivariate"):
-        dfc, n_added = handle_continuous_nans(
+        dfc = handle_continuous_nans(
             df,
             target="target",
-            categoricals=cats,
+            results=None,
             nans=NanHandling.Impute,
-        )
+        )[0]
 
     clean = dfc.drop(columns=["target", *cats])
     assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
@@ -135,9 +135,7 @@ def do_encode(dataset: tuple[str, TestDataset]) -> None:
 
     try:
         results = inspect_data(df, "target", cats)
-        enc = encode_categoricals(
-            df, target="target", results=results, categoricals=cats, ordinals=[]
-        )[0]
+        enc = encode_categoricals(df, target="target", results=results)[0]
     except TypeError as e:
         if dsname == "community_crime" and (
             "Cannot automatically determine the cardinality" in str(e)
@@ -180,6 +178,6 @@ if __name__ == "__main__":
         print("#" * w, file=stderr)
         print(f"Checking {dsname}", file=stderr)
         results = inspect_data(df, "target", ds.categoricals)
-        encode_categoricals(df, "target", results, ds.categoricals, [])
+        encode_categoricals(df, "target", results)
         print("#" * w, file=stderr)
         # input("Continue?")

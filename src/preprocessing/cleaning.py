@@ -150,8 +150,21 @@ def handle_continuous_nans(
     results: InspectionResults,
     nans: NanHandling,
     add_indicators: bool = True,
-) -> tuple[DataFrame, int]:
-    """Impute or drop nans based on values not in `cat_cols`"""
+) -> tuple[DataFrame, DataFrame, int]:
+    """Impute or drop nans based on values not in `cat_cols`
+
+    Returns
+    -------
+    df: DataFrame
+        Imputed and indicator-augmented DataFrame with target included
+
+    X_cont: DataFrame
+        Imputed DataFrame with no target, no indicators (for used in
+        univariate analyses and feature selection, etc)
+
+    n_indicators: int
+        Number of NaN indicator columns added
+    """
     # drop rows where target is NaN: meaningless
     # NaNs in categoricals are handled as another dummy indicator
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
@@ -169,10 +182,10 @@ def handle_continuous_nans(
         X_nan = X_nan.loc[:, X_nan.sum(axis=0) != 0]
 
     if X.empty:
-        X_clean = X
+        X_cont = X
     elif nans is NanHandling.Drop:
-        X_clean = X.dropna(axis="columns", how="any").dropna(axis="index", how="any")
-        if 0 in X_clean.shape:
+        X_cont = X.dropna(axis="columns", how="any").dropna(axis="index", how="any")
+        if 0 in X_cont.shape:
             others = [na.value for na in NanHandling if na is not NanHandling.Drop]
             raise RuntimeError(
                 "Dropping NaNs resulted in either no remaining samples or features. "
@@ -183,23 +196,23 @@ def handle_continuous_nans(
         strategy = "mean" if nans is NanHandling.Mean else "median"
         imputer = SimpleImputer(strategy=strategy, keep_empty_features=True)
         X_fitted = imputer.fit_transform(X)
-        X_clean = DataFrame(data=X_fitted, columns=X.columns)
+        X_cont = DataFrame(data=X_fitted, columns=X.columns)
     elif nans is NanHandling.Impute:
         warn(
             "Using experimental multivariate imputation. This could take a very "
             "long time for even tiny (<500 samples, <30 features) datasets."
         )
         imputer = IterativeImputer(verbose=2, keep_empty_features=True)
-        X_clean = DataFrame(data=imputer.fit_transform(X), columns=X.columns)
+        X_cont = DataFrame(data=imputer.fit_transform(X), columns=X.columns)
     else:
         raise NotImplementedError(f"Unhandled enum case: {nans}")
 
     if add_indicators:
-        X = pd.concat([X_nan, X_clean, X_cat, y], axis=1)  # type: ignore
-        return X, int(X_nan.shape[1])  # type: ignore
+        X = pd.concat([X_nan, X_cont, X_cat, y], axis=1)  # type: ignore
+        return X, X_cont, int(X_nan.shape[1])  # type: ignore
 
-    X = pd.concat([X_clean, X_cat, y], axis=1)
-    return X, 0
+    X = pd.concat([X_cont, X_cat, y], axis=1)
+    return X, X_cont, 0
 
 
 def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[DataFrame, Series]:

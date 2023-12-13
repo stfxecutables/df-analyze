@@ -329,3 +329,10 @@ def feature_target_stats(
         df_cat = pd.concat(df_cats, axis=0)
 
     return df_cont, df_cat
+
+
+def target_associations(
+    df: DataFrame,
+    target: str,
+) -> Any:
+    ...

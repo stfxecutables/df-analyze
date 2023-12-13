@@ -8,9 +8,10 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-from typing import Literal
+from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
+import jsonpickle
 import numpy as np
 import pandas as pd
 import pytest
@@ -28,11 +29,14 @@ from src.preprocessing.cleaning import (
     handle_continuous_nans,
     normalize,
 )
-from src.preprocessing.inspection.inspection import inspect_data
+from src.preprocessing.inspection.inspection import InspectionResults, inspect_data
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
 ALL = sorted(list(CLASSIFICATIONS.glob("*")) + list(REGRESSIONS.glob("*")))
+
+INSPECT_CACHE = TESTDATA / "__INSPECT_CACHE__"
+INSPECT_CACHE.mkdir(exist_ok=True, parents=True)
 
 
 class TestDataset:
@@ -40,6 +44,7 @@ class TestDataset:
         self.root = root
         self.is_classification: bool = root.parent.name == "classification"
         self.datapath = root / f"{root.name}.parquet"
+        self.dsname = root.name
         self.types = root / "types.csv"
         df = pd.read_csv(self.types)
         dfc = df.loc[df["type"] != "categorical"]
@@ -56,6 +61,30 @@ class TestDataset:
             self.is_multiclass = num_classes > 2
         self.shape = df.shape
 
+        self.cachefile = INSPECT_CACHE / f"{self.dsname}_inspect.json"
+
+    def inspect(self, load_cached: bool = True, overwrite_cache: bool = False) -> InspectionResults:
+        if load_cached and overwrite_cache:
+            raise ValueError("Cannot both use and over-write cache, this is pointless.")
+
+        if load_cached and self.cachefile.exists():
+            results = jsonpickle.decode(self.cachefile.read_text())
+            return cast(InspectionResults, results)
+
+        df = self.load()
+        with catch_warnings():
+            filterwarnings("ignore", category=UserWarning)
+            results = inspect_data(df, "target", self.categoricals, [], _warn=False)
+        if overwrite_cache:
+            enc = str(jsonpickle.encode(results))
+            self.cachefile.write_text(enc)
+            return results
+
+        if not self.cachefile.exists():
+            enc = str(jsonpickle.encode(results))
+            self.cachefile.write_text(enc)
+        return results
+
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)
 
@@ -67,7 +96,7 @@ class TestDataset:
             filterwarnings("ignore", category=UserWarning)
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
             df = drop_unusable(df, results)
-            df, nan_ind = handle_continuous_nans(
+            df, X_cont, nan_ind = handle_continuous_nans(
                 df, target="target", results=results, nans=NanHandling.Median
             )
             df = encode_categoricals(

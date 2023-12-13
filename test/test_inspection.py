@@ -174,6 +174,16 @@ def do_inspect_target(dataset: tuple[str, TestDataset]) -> None:
         raise ValueError(f"Could not inspect target for data {dsname}") from e
 
 
+def do_caching(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    ds.inspect(load_cached=True)
+
+
+@all_ds
+def test_caching(dataset: tuple[str, TestDataset]) -> None:
+    do_caching(dataset)
+
+
 @fast_ds
 def test_inspect_fast(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)

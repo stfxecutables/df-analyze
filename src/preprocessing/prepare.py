@@ -23,6 +23,17 @@ from src.preprocessing.inspection.inspection import (
 from src.timing import timed
 
 
+class PreparedData:
+    def __init__(
+        self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series, info: dict[str, Any]
+    ) -> None:
+        self.X: DataFrame = X
+        self.X_cont: DataFrame = X_cont
+        self.X_cat: DataFrame = X_cat
+        self.y: Series = y
+        self.info: dict[str, Any] = info
+
+
 def prepare_target(
     df: DataFrame,
     target: str,
@@ -44,19 +55,23 @@ def prepare_data(
     results: InspectionResults,
     is_classification: bool,
     _warn: bool = True,
-) -> tuple[DataFrame, Series, DataFrame, dict[str, Any]]:
+) -> PreparedData:
     """
     Returns
     -------
     X_encoded: DataFrame
         All encoded and processed predictors.
 
-    target: Series
-        The regression or classification target, also encoded.
-
     X_cat: DataFrame
         The categorical variables remaining after processing (no encoding,
         for univariate metrics and the like).
+
+    X_cont: DataFrame
+        The continues variables remaining after processing (no encoding,
+        for univariate metrics and the like).
+
+    y: Series
+        The regression or classification target, also encoded.
 
     info: dict[str, str]
         Other information regarding warnings and cleaning effects.
@@ -71,23 +86,24 @@ def prepare_data(
     y = df[target]
 
     df = timer(drop_unusable)(df, results, _warn=_warn)
-    df, n_ind_added = handle_continuous_nans(
+    df, X_cont, n_ind_added = handle_continuous_nans(
         df=df, target=target, results=results, nans=NanHandling.Mean
     )
 
     df = timer(deflate_categoricals)(df, results, _warn=_warn)
-    df, cats = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)
+    df, X_cat = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)
 
-    df = df.drop(columns=target)
+    X = df.drop(columns=target)
     if is_classification:
-        df, y = timer(encode_target)(df, y)
+        X, y = timer(encode_target)(X, y)
     else:
-        df, y = timer(clean_regression_target)(df, y)
-    return (
-        df,
-        y,
-        cats,
-        {
+        X, y = timer(clean_regression_target)(X, y)
+    return PreparedData(
+        X=X,
+        X_cont=X_cont,
+        X_cat=X_cat,
+        y=y,
+        info={
             "n_samples_dropped_via_target_NaNs": n_targ_drop,
             "n_cont_indicator_added": n_ind_added,
             "target": info,
