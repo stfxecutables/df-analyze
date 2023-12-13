@@ -204,7 +204,7 @@ def test_mlp_tune_parallel(dataset: tuple[str, TestDataset], capsys: CaptureFixt
         )
         with capsys.disabled():
             model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=-1, verbosity=1)
-            score = model.htune_eval(X_train=X_tr, y_train=y_tr, X_test=X_test, y_test=y_test)
+            score = model.tuned_score(X_test, y_test)
             print(f"Tuned score: {score}")
     except Exception as e:
         raise RuntimeError(f"Got error tuning model on {dsname}") from e
