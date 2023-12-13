@@ -9,6 +9,8 @@ data/testing/**/*.parquet
 
 test_results
 
+results/reports
+
 __cache__
 
 poetry.lock
