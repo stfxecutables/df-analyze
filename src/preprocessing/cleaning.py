@@ -151,7 +151,7 @@ def handle_continuous_nans(
     """Impute or drop nans based on values not in `cat_cols`"""
     # drop rows where target is NaN: meaningless
     # NaNs in categoricals are handled as another dummy indicator
-    cats = [*results.cats.infos.keys()]
+    cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
     X_cat = df[cats].copy(deep=True)
     y = df[target]
     df = df.drop(columns=target)
@@ -201,6 +201,8 @@ def handle_continuous_nans(
 
 def encode_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
     unqs, cnts = np.unique(target, return_counts=True)
+    if len(unqs) <= 1:
+        raise ValueError(f"Target variable {target.name} is constant.")
     idx = cnts <= 20
     n_cls = len(unqs)
     if np.sum(idx) > 0:
@@ -468,11 +470,24 @@ def encode_categoricals(
     return new, df.loc[:, to_convert]
 
 
+def prepare_target(
+    df: DataFrame,
+    target: str,
+    is_classification: bool,
+    _warn: bool = True,
+) -> tuple[DataFrame, Series]:
+    y = df[target]
+    df = df.drop(columns=target)
+    if is_classification:
+        df, y = encode_target(df, y)
+    else:
+        df, y = clean_regression_target(df, y)
+    return df, y
+
+
 def prepare_data(
     df: DataFrame,
     target: str,
-    categoricals: list[str],
-    ordinals: list[str],
     results: InspectionResults,
     is_classification: bool,
     _warn: bool = True,
@@ -499,7 +514,6 @@ def prepare_data(
     df, n_targ_drop = drop_target_nans(df, target)
     y = df[target]
 
-    results = inspect_data(df, target, categoricals, ordinals, _warn=_warn)
     df = drop_unusable(df, results)
     df, n_ind_added = handle_continuous_nans(
         df=df, target=target, results=results, nans=NanHandling.Mean

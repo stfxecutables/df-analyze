@@ -7,9 +7,12 @@ from enum import Enum
 from shutil import get_terminal_size
 from typing import Optional
 
+import numpy as np
 import pandas as pd
-from pandas import DataFrame, Index
+from numpy import ndarray
+from pandas import DataFrame, Index, Series
 
+from src._constants import N_CAT_LEVEL_MIN
 from src.preprocessing.inspection.inference import Inference, InferredKind
 from src.preprocessing.inspection.text import (
     BIG_INFO,
@@ -70,6 +73,26 @@ class InflationInfo:
     n_deflate: int
     n_keep: int
     n_total: int
+
+    @staticmethod
+    def from_series(series: Series) -> tuple[InflationInfo, ndarray, ndarray]:
+        unqs, cnts = np.unique(series.copy(deep=True).astype(str), return_counts=True)
+        n_total = len(unqs)
+        keep_idx = cnts >= N_CAT_LEVEL_MIN
+        n_keep = keep_idx.sum()
+        n_deflate = len(keep_idx) - n_keep
+        return (
+            InflationInfo(
+                col=str(series.name),
+                to_deflate=unqs[~keep_idx].tolist(),
+                to_keep=unqs[keep_idx].tolist(),
+                n_deflate=n_deflate,
+                n_keep=n_keep,
+                n_total=n_total,
+            ),
+            unqs,
+            cnts,
+        )
 
 
 @dataclass
@@ -416,3 +439,24 @@ class InspectionResults:
         df = df[~idx].sort_index().sort_values(by=["user", "inferred"])
 
         return pd.concat([df, coerced], axis=0, ignore_index=False)
+
+
+@dataclass
+class TargetInfo:
+    needs_logarithm: bool
+    has_outliers: bool
+    is_classification: bool
+
+
+@dataclass
+class RegTargetInfo:
+    needs_logarithm: bool
+    has_outliers: bool
+    p_nan: float
+
+
+@dataclass
+class ClsTargetInfo:
+    inflation: InflationInfo
+    p_max_cls: float
+    p_nan: float

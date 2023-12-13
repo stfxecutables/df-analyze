@@ -3,21 +3,26 @@ from __future__ import annotations
 import sys
 import traceback
 from shutil import get_terminal_size
-from typing import Optional, Union
+from typing import Optional, Union, overload
 
 import numpy as np
 from joblib import Parallel, delayed
 from pandas import DataFrame, Series
+from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.model_selection import cross_val_score
 from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 from src.preprocessing.inspection.containers import (
+    ClsTargetInfo,
     ColumnDescriptions,
     ColumnType,
     InflationInfo,
     InspectionInfo,
     InspectionResults,
+    RegTargetInfo,
+    TargetInfo,
 )
 from src.preprocessing.inspection.inference import (
     Inference,
@@ -540,7 +545,17 @@ def convert_categoricals(df: DataFrame, target: str) -> DataFrame:
     return df
 
 
+@overload
 def unify_nans(df: DataFrame) -> DataFrame:
+    ...
+
+
+@overload
+def unify_nans(df: Series) -> Series:
+    ...
+
+
+def unify_nans(df: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
     df = df.map(lambda x: np.nan if str(x) in NAN_STRINGS else x)  # type: ignore
     return df
 
@@ -659,3 +674,43 @@ def inspect_data(
         user_cats=arg_cats,
         user_ords=arg_ords,
     )
+
+
+def inspect_cls_target(series: Series) -> ClsTargetInfo:
+    series = unify_nans(series.copy(deep=True))
+    inflation, unqs, cnts = InflationInfo.from_series(series)
+    if len(unqs) <= 1:
+        raise ValueError(f"Classification target '{series.name}' is constant.")
+    n_values = len(series.dropna().unique())
+    if n_values <= 1:
+        raise ValueError(f"Classification target '{series.name}' is constant after dropping NaNs.")
+
+    p_max = np.max(cnts) / np.sum(cnts)
+    p_nan = unify_nans(series).isna().mean()
+    return ClsTargetInfo(inflation=inflation, p_max_cls=p_max, p_nan=p_nan)
+
+
+def inspect_reg_target(series: Series) -> RegTargetInfo:
+    p_nan = unify_nans(series).isna().mean()
+    if p_nan >= 1.0:
+        raise ValueError(f"Regression target '{series.name}' is all NaN.")
+    if series.dtype.kind == "c":
+        y = np.asarray(series.values, dtype=np.complex128)
+        y = y.real
+    else:
+        y = np.asarray(series.values, dtype=np.float64)
+
+    var = np.nanvar(y, ddof=1)
+    if var <= 0:
+        raise ValueError(f"Regression target {series.name} is constant.")
+
+    return RegTargetInfo(needs_logarithm=False, has_outliers=False, p_nan=p_nan)
+
+
+def inspect_target(
+    df: DataFrame, target: str, is_classification: bool
+) -> Union[ClsTargetInfo, RegTargetInfo]:
+    y = df[target]
+    if is_classification:
+        return inspect_cls_target(y)
+    return inspect_reg_target(y)

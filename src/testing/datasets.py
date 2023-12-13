@@ -225,18 +225,22 @@ INSPECTION_TIMES = {
     "forest_fires": 0.03245541599999946,
 }
 
-FAST_INSPECTION = {}
-MEDIUM_INSPECTION = {}
-SLOW_INSPECTION = {}
+FAST_INSPECTION: list[tuple[str, TestDataset]] = []
+MEDIUM_INSPECTION: list[tuple[str, TestDataset]] = []
+SLOW_INSPECTION: list[tuple[str, TestDataset]] = []
 for dsname, ds in TEST_DATASETS.items():
     if dsname in INSPECTION_TIMES:
         runtime = INSPECTION_TIMES[dsname]
         if runtime < 1.0:
-            FAST_INSPECTION[dsname] = ds
+            FAST_INSPECTION.append((dsname, ds))
         elif runtime < 5.0:
-            MEDIUM_INSPECTION[dsname] = ds
+            MEDIUM_INSPECTION.append((dsname, ds))
         else:
-            SLOW_INSPECTION[dsname] = ds
+            SLOW_INSPECTION.append((dsname, ds))
+
+FAST_INSPECTION = sorted(FAST_INSPECTION, key=lambda d: str(d[0]).lower())
+MEDIUM_INSPECTION = sorted(MEDIUM_INSPECTION, key=lambda d: str(d[0]).lower())
+SLOW_INSPECTION = sorted(SLOW_INSPECTION, key=lambda d: str(d[0]).lower())
 
 
 # https://stackoverflow.com/a/5409569
@@ -257,7 +261,7 @@ all_ds = pytest.mark.parametrize(
 fast_ds = composed(
     pytest.mark.parametrize(
         "dataset",
-        [*FAST_INSPECTION.items()],
+        FAST_INSPECTION,
         ids=lambda pair: str(pair[0]),
     ),
     pytest.mark.fast,
@@ -265,7 +269,7 @@ fast_ds = composed(
 med_ds = composed(
     pytest.mark.parametrize(
         "dataset",
-        [*MEDIUM_INSPECTION.items()],
+        MEDIUM_INSPECTION,
         ids=lambda pair: str(pair[0]),
     ),
     pytest.mark.med,
@@ -273,7 +277,7 @@ med_ds = composed(
 slow_ds = composed(
     pytest.mark.parametrize(
         "dataset",
-        [*SLOW_INSPECTION.items()],
+        SLOW_INSPECTION,
         ids=lambda pair: str(pair[0]),
     ),
     pytest.mark.slow,

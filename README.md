@@ -31,6 +31,7 @@
   - [In progress / Partially Completed:](#in-progress--partially-completed)
   - [To Do (highest priority first):](#to-do-highest-priority-first)
   - [May Not Implement:](#may-not-implement)
+- [Limitations](#limitations)
 
 # What it Does
 
@@ -424,3 +425,8 @@ TODO.
     association measures
   - would thus require three matrices (cont-cat, cont-cont, cat-cat) to avoid
     above
+
+# Limitations
+
+- single target
+-

@@ -21,6 +21,7 @@ from src.preprocessing.inspection.inspection import (
     get_str_cols,
     inspect_data,
     inspect_str_columns,
+    inspect_target,
 )
 from src.testing.datasets import (
     TEST_DATASETS,
@@ -160,6 +161,19 @@ def do_detect_ids(dataset: tuple[str, TestDataset]) -> None:
         raise ValueError("Identifier 'communityname' was not detected") from e
 
 
+def do_inspect_target(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    df = ds.load()
+    try:
+        results = inspect_target(df, "target", is_classification=ds.is_classification)
+    except ValueError as e:
+        message = str(e)
+        if "constant after dropping NaNs" not in message:
+            raise e
+    except Exception as e:
+        raise ValueError(f"Could not inspect target for data {dsname}") from e
+
+
 @fast_ds
 def test_inspect_fast(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
@@ -173,6 +187,21 @@ def test_inspect_medium(dataset: tuple[str, TestDataset]) -> None:
 @slow_ds
 def test_inspect_slow(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
+
+
+@fast_ds
+def test_inspect_targ_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_inspect_target(dataset)
+
+
+@med_ds
+def test_inspect_targ_medium(dataset: tuple[str, TestDataset]) -> None:
+    do_inspect_target(dataset)
+
+
+@slow_ds
+def test_inspect_targ_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_inspect_target(dataset)
 
 
 # @fast_ds
