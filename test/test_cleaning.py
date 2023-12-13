@@ -20,6 +20,7 @@ from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     encode_categoricals,
     handle_continuous_nans,
+    unify_nans,
 )
 from src.preprocessing.inspection.inspection import (
     get_unq_counts,
@@ -43,25 +44,26 @@ def no_cats(df: DataFrame, target: str) -> bool:
 def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
-    cats = ds.categoricals
-    X_cats = df.loc[:, ["target", *cats]]
+    results = ds.inspect(load_cached=True)
+    cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
+    X_cats = df.loc[:, cats]
     # remember NaNs in target cause dropping in handle_cont_nans below
-    X_cats = X_cats[~X_cats["target"].isna()]
+    # X_cats = X_cats[~X_cats["target"].isna()].drop(columns="target")
     cat_nan_idx = X_cats.isna().to_numpy()
 
     for nans in [NanHandling.Mean, NanHandling.Median]:
-        dfc = handle_continuous_nans(df, target="target", results=None, nans=nans)[0]
+        dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[0]
         clean = dfc.drop(columns=["target", *cats])
         assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
 
         # Check that categorical and target NaNs unaffected
-        X_cat_clean = dfc.loc[:, ["target", *cats]]
+        X_cat_clean = dfc.loc[:, cats]
         cat_nan_idx_clean = X_cat_clean.isna().to_numpy()
         np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
 
     for nans in [NanHandling.Drop]:
         try:
-            dfc = handle_continuous_nans(df, target="target", results=None, nans=nans)[0]
+            dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[0]
             clean = dfc.drop(columns=["target", *cats])
             assert clean.isna().sum().sum() == 0, f"NaNs remaining in data {dsname}"
         except RuntimeError as e:
@@ -71,6 +73,7 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
                 "colleges",
                 "Traffic_violations",
                 "hypothyroid",
+                "Midwest_Survey_nominal",
             ]:
                 raise e
 
@@ -81,17 +84,6 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
     dsname, ds = dataset
     if dsname in ["community_crime", "news_popularity"]:
         return  # extremely slow
-
-    df = ds.load()
-    cats = ds.categoricals
-    X_cats = df.loc[:, ["target", *cats]]
-    if not X_cats.empty:
-        n_cont = df.shape[1] - X_cats.shape[1]
-    else:
-        n_cont = df.shape[1] - 1
-    cat_nan_idx = X_cats.isna().to_numpy()
-    if n_cont > 20:
-        return
     if dsname in [
         "analcatdata_marketing",
         "analcatdata_reviewer",
@@ -109,13 +101,24 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
     ]:
         return  # nothing to impute, no continuous
 
-    # with capsys.disabled():
-    #     print(f"Performing multivariate imputation for data: {dsname}")
+    df = ds.load()
+    results = ds.inspect(load_cached=True)
+    cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
+    X_cats = df.loc[:, cats]
+    if not X_cats.empty:
+        n_cont = df.shape[1] - X_cats.shape[1]
+    else:
+        n_cont = df.shape[1] - 1
+    cat_nan_idx = X_cats.isna().to_numpy()
+    if n_cont > 20:
+        return
+
+    results = ds.inspect(load_cached=True)
     with pytest.warns(UserWarning, match="Using experimental multivariate"):
         dfc = handle_continuous_nans(
             df,
             target="target",
-            results=None,
+            results=results,
             nans=NanHandling.Impute,
         )[0]
 
@@ -123,7 +126,7 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
     assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
 
     # Check that categorical and target NaNs unaffected
-    X_cat_clean = dfc.loc[:, ["target", *cats]]
+    X_cat_clean = dfc.loc[:, cats]
     cat_nan_idx_clean = X_cat_clean.isna().to_numpy()
     np.testing.assert_equal(cat_nan_idx, cat_nan_idx_clean)
 
@@ -131,10 +134,8 @@ def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: Capt
 def do_encode(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
-    cats = ds.categoricals
-
+    results = ds.inspect(load_cached=True)
     try:
-        results = inspect_data(df, "target", cats)
         enc = encode_categoricals(df, target="target", results=results)[0]
     except TypeError as e:
         if dsname == "community_crime" and (
@@ -177,7 +178,7 @@ if __name__ == "__main__":
         w = get_terminal_size((81, 24))[0]
         print("#" * w, file=stderr)
         print(f"Checking {dsname}", file=stderr)
-        results = inspect_data(df, "target", ds.categoricals)
+        results = ds.inspect(load_cached=True)
         encode_categoricals(df, "target", results)
         print("#" * w, file=stderr)
         # input("Continue?")

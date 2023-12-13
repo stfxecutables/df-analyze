@@ -20,7 +20,7 @@ PATH = list(TEST_DATASETS.values())[0].datapath
 @pytest.mark.fast
 def test_classifiers() -> None:
     opts = get_options(f"--df {PATH} --categoricals one two three")
-    assert opts.categoricals == ["one", "two", "three"]
+    assert opts.categoricals == sorted(["one", "two", "three"])
 
 
 @pytest.mark.fast

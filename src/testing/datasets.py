@@ -94,7 +94,7 @@ class TestDataset:
         df = self.load()
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
-            results = inspect_data(df, "target", self.categoricals, [], _warn=False)
+            results = self.inspect(load_cached=True)
             df = drop_unusable(df, results)
             df, X_cont, nan_ind = handle_continuous_nans(
                 df, target="target", results=results, nans=NanHandling.Median

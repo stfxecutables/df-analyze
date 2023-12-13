@@ -508,7 +508,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
 
     cli_args = parse_and_merge_args(parser, args)
-    cats = set(cli_args.classifiers)
+    cats = set(cli_args.categoricals)
     ords = set(cli_args.ordinals)
     for cat in cats:
         if cat in ords:

@@ -216,7 +216,7 @@ def handle_continuous_nans(
 
 
 def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[DataFrame, Series]:
-    unqs, cnts = np.unique(target, return_counts=True)
+    unqs, cnts = np.unique(unify_nans(target).astype(str), return_counts=True)
     if len(unqs) <= 1:
         raise ValueError(f"Target variable {target.name} is constant.")
     idx = cnts <= 20

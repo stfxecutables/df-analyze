@@ -34,10 +34,9 @@ from src.testing.datasets import (
 def do_prepare(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
-    cats = ds.categoricals
 
     try:
-        results = inspect_data(df, "target", cats)
+        results = ds.inspect(load_cached=True)
         prepare_data(
             df=df,
             target="target",
@@ -76,18 +75,15 @@ if __name__ == "__main__":
         cats = ds.categoricals
 
         try:
-            sink = StringIO()
-            with redirect_stderr(sink):
-                with redirect_stdout(sink):
-                    results = inspect_data(df, "target", cats)
-            X, y, X_cat, info = prepare_data(
+            results = ds.inspect(load_cached=True)
+            prepared = prepare_data(
                 df=df,
                 target="target",
                 results=results,
                 is_classification=ds.is_classification,
                 _warn=False,
             )
-            funcs, times = [*zip(*info["runtimes"].items())]
+            funcs, times = [*zip(*prepared.info["runtimes"].items())]
             tinfo = DataFrame(data=[times], columns=funcs, index=[dsname])
             tinfos.append(tinfo)
 
