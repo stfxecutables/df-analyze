@@ -25,12 +25,22 @@ from src.timing import timed
 
 class PreparedData:
     def __init__(
-        self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series, info: dict[str, Any]
+        self,
+        X: DataFrame,
+        X_cont: DataFrame,
+        X_cat: DataFrame,
+        y: Series,
+        inspection: InspectionResults,
+        is_classification: bool,
+        info: dict[str, Any],
     ) -> None:
         self.X: DataFrame = X
         self.X_cont: DataFrame = X_cont
         self.X_cat: DataFrame = X_cat
         self.y: Series = y
+        self.target = self.y.name
+        self.inspection: InspectionResults = inspection
+        self.is_classification: bool = is_classification
         self.info: dict[str, Any] = info
 
 
@@ -109,4 +119,6 @@ def prepare_data(
             "target": info,
             "runtimes": times,
         },
+        inspection=results,
+        is_classification=is_classification,
     )

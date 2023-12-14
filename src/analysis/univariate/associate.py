@@ -17,6 +17,7 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+from numpy import ndarray
 from pandas import DataFrame, Series
 from scipy.stats import (
     brunnermunzel,
@@ -29,9 +30,12 @@ from scipy.stats import (
 from sklearn.feature_selection import f_regression
 from sklearn.feature_selection import mutual_info_classif as minfo_cat
 from sklearn.feature_selection import mutual_info_regression as minfo_cont
+from sklearn.preprocessing import LabelEncoder
 
 from src._types import EstimationMode
 from src.analysis.metrics import auroc, cohens_d, cramer_v
+from src.preprocessing.inspection.inspection import InspectionResults
+from src.preprocessing.prepare import PreparedData
 
 
 def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> DataFrame:
@@ -139,12 +143,14 @@ def continuous_feature_target_stats(
     continuous: DataFrame,
     column: str,
     target: Series,
-    mode: EstimationMode,
+    is_classification: bool,
 ) -> DataFrame:
     ...
     x = continuous[column]
     y = target
-    if mode == "classify":
+    if len(x) != len(y):
+        raise ValueError("Continuous features and target do not have same number of samples.")
+    if is_classification:
         levels = np.unique(y).tolist()
         descs = []
         for level in levels:
@@ -168,11 +174,12 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
         "H_p",
     ]
 
-    xx = x.to_numpy().ravel()
+    xx = x.astype(str).to_numpy().reshape(-1, 1)
+    x_enc = np.asarray(LabelEncoder().fit_transform(xx)).reshape(-1, 1)
     yy = y.to_numpy().ravel()
 
-    minfo = minfo_cont(xx.reshape(-1, 1), y, discrete_features=True)
-    H, H_p = kruskal(x, y)
+    minfo = minfo_cont(x_enc, y, discrete_features=True)
+    H, H_p = kruskal(x_enc.ravel(), y)
 
     data = {
         "mut_info": minfo,
@@ -214,27 +221,32 @@ def categorical_feature_target_stats(
     categoricals: DataFrame,
     column: str,
     target: Series,
-    mode: EstimationMode,
+    is_classification: bool,
 ) -> DataFrame:
     ...
     x = categoricals[column]
     y = target
-    if mode == "classify":
-        levels = np.unique(y).tolist()
+
+    if is_classification:
+        xx = x.astype(str).to_numpy().reshape(-1, 1)
+        x_enc = np.asarray(LabelEncoder().fit_transform(xx)).ravel()
+        xs = Series(data=x_enc, name=x.name)
+        levels = np.unique(y.astype(str)).tolist()
+        is_multiclass = len(levels) > 2
+
         descs = []
         for level in levels:
-            desc = cat_feature_cat_target_level_stats(x, y, level=level)
+            desc = cat_feature_cat_target_level_stats(xs, y, level=level)
             descs.append(desc)
         desc = pd.concat(descs, axis=0)
-        is_multiclass = len(levels) > 2
+
         if is_multiclass:
-            V = cramer_v(x, y)
-            minfo = minfo_cat(x.to_numpy().reshape(-1, 1), y, discrete_features=True)
+            V = cramer_v(x_enc.reshape(-1, 1), y)
+            minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
             df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}_{y.name}"])
             desc = pd.concat([desc, df], axis=0)
             # TODO: collect mean stats when this makes sense?
             # TODO: collect some other fancy stat?
-            ...
         return desc
 
     return cat_feature_cont_target_stats(x, y)
@@ -311,7 +323,7 @@ def feature_target_stats(
                     continuous=continuous,
                     column=col,
                     target=target,
-                    mode=mode,
+                    is_classification=mode == "classify",
                 )
             )
 
@@ -321,7 +333,7 @@ def feature_target_stats(
                     categoricals=categoricals,
                     column=col,
                     target=target,
-                    mode=mode,
+                    is_classification=mode == "classify",
                 )
             )
 
@@ -332,7 +344,40 @@ def feature_target_stats(
 
 
 def target_associations(
-    df: DataFrame,
-    target: str,
+    data: PreparedData,
 ) -> Any:
     ...
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        df_conts = []
+        df_cats = []
+
+        cont = data.X_cont
+        for col in cont.columns:
+            df_conts.append(
+                continuous_feature_target_stats(
+                    continuous=cont,
+                    column=col,
+                    target=data.y,
+                    is_classification=data.is_classification,
+                )
+            )
+
+        # Currently X_cat is the raw cat data, neither label- nor one-hot-
+        # encoded.
+        cats = data.X_cat
+        for col in cats.columns:
+            df_cats.append(
+                categorical_feature_target_stats(
+                    categoricals=cats,
+                    column=col,
+                    target=data.y,
+                    is_classification=data.is_classification,
+                )
+            )
+
+        df_cont = pd.concat(df_conts, axis=0) if len(df_conts) > 0 else None
+        df_cat = pd.concat(df_cats, axis=0) if len(df_cats) > 0 else None
+
+    return df_cont, df_cat

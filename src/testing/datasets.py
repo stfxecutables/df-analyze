@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import pickle
 from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
@@ -30,13 +31,14 @@ from src.preprocessing.cleaning import (
     normalize,
 )
 from src.preprocessing.inspection.inspection import InspectionResults, inspect_data
+from src.preprocessing.prepare import PreparedData, prepare_data
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
 ALL = sorted(list(CLASSIFICATIONS.glob("*")) + list(REGRESSIONS.glob("*")))
 
-INSPECT_CACHE = TESTDATA / "__INSPECT_CACHE__"
-INSPECT_CACHE.mkdir(exist_ok=True, parents=True)
+TEST_CACHE = TESTDATA / "__TEST_CACHE__"
+TEST_CACHE.mkdir(exist_ok=True, parents=True)
 
 
 class TestDataset:
@@ -61,14 +63,15 @@ class TestDataset:
             self.is_multiclass = num_classes > 2
         self.shape = df.shape
 
-        self.cachefile = INSPECT_CACHE / f"{self.dsname}_inspect.json"
+        self.inspect_cachefile = TEST_CACHE / f"{self.dsname}_inspect.json"
+        self.prep_cachefile = TEST_CACHE / f"{self.dsname}_prepare.pickle"
 
     def inspect(self, load_cached: bool = True, overwrite_cache: bool = False) -> InspectionResults:
         if load_cached and overwrite_cache:
             raise ValueError("Cannot both use and over-write cache, this is pointless.")
 
-        if load_cached and self.cachefile.exists():
-            results = jsonpickle.decode(self.cachefile.read_text())
+        if load_cached and self.inspect_cachefile.exists():
+            results = jsonpickle.decode(self.inspect_cachefile.read_text())
             return cast(InspectionResults, results)
 
         df = self.load()
@@ -77,13 +80,38 @@ class TestDataset:
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
         if overwrite_cache:
             enc = str(jsonpickle.encode(results))
-            self.cachefile.write_text(enc)
+            self.inspect_cachefile.write_text(enc)
             return results
 
-        if not self.cachefile.exists():
+        if not self.inspect_cachefile.exists():
             enc = str(jsonpickle.encode(results))
-            self.cachefile.write_text(enc)
+            self.inspect_cachefile.write_text(enc)
         return results
+
+    def prepared(self, load_cached: bool = True, overwrite_cache: bool = False) -> PreparedData:
+        if load_cached and self.prep_cachefile.exists():
+            # results = jsonpickle.decode(self.prep_cachefile.read_text())
+            with open(self.prep_cachefile, "rb") as handle:
+                results = pickle.load(handle)
+            return cast(PreparedData, results)
+
+        df = self.load()
+        inspect = self.inspect(load_cached=True)
+        prep = prepare_data(df, "target", inspect, self.is_classification)
+
+        if overwrite_cache:
+            # enc = str(jsonpickle.encode(prep))
+            # self.prep_cachefile.write_text(enc)
+            with open(self.prep_cachefile, "wb") as handle:
+                pickle.dump(prep, handle)
+            return prep
+
+        if not self.prep_cachefile.exists():
+            # enc = str(jsonpickle.encode(prep))
+            # self.prep_cachefile.write_text(enc)
+            with open(self.prep_cachefile, "wb") as handle:
+                pickle.dump(prep, handle)
+        return prep
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)

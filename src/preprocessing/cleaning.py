@@ -383,7 +383,9 @@ def encode_categoricals(
     df = unify_nans(df)
     df = drop_unusable(df, results, _warn=False)
     df = deflate_categoricals(df, results, _warn=warn_explosion)
-    to_convert = [*df.columns]
+    cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
+    X_cat = df.loc[:, cats].copy(deep=True)
+    to_convert = cats
 
     # below will FAIL if we didn't remove timestamps or etc.
     try:
@@ -482,7 +484,7 @@ def encode_categoricals(
         )
 
     new = pd.concat([new, y], axis=1)
-    return new, df.loc[:, to_convert]
+    return new, X_cat
 
 
 def load_as_df(path: Path, spreadsheet: bool) -> DataFrame:

@@ -17,12 +17,12 @@ from pandas import DataFrame, Series
 from sklearn.model_selection import train_test_split
 
 from src._types import EstimationMode
-from src.analysis.univariate.associate import feature_target_stats
+from src.analysis.univariate.associate import feature_target_stats, target_associations
 from src.analysis.univariate.predict.predict import feature_target_predictions
-from src.preprocessing.cleaning import (
+from src.preprocessing.prepare import (
     prepare_data,
 )
-from src.testing.datasets import TEST_DATASETS
+from src.testing.datasets import TEST_DATASETS, TestDataset, fast_ds, med_ds, slow_ds
 
 logging.captureWarnings(capture=True)
 logger = logging.getLogger("py.warnings")
@@ -117,6 +117,29 @@ def test_random_associate() -> None:
     print("Continuous stats:\n", df_cont_stats)
     print("Categorical target level stats:\n", cat_level_stats)
     print("Categorical full target stats:\n", cat_stats)
+
+
+def do_associate(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["credit-approval_reproduced"]:  # const targets
+        return
+    prepared = ds.prepared(load_cached=False)
+    cont, cat = target_associations(prepared)
+
+
+@fast_ds
+def test_associate_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_associate(dataset)
+
+
+@med_ds
+def test_associate_med(dataset: tuple[str, TestDataset]) -> None:
+    do_associate(dataset)
+
+
+@slow_ds
+def test_associate_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_associate(dataset)
 
 
 if __name__ == "__main__":

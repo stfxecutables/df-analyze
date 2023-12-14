@@ -12,8 +12,10 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pprint import pprint
 
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
+from sklearn.utils.validation import check_X_y
 from tqdm import tqdm
 
 from src.preprocessing.inspection.inspection import (
@@ -37,13 +39,46 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
 
     try:
         results = ds.inspect(load_cached=True)
-        prepare_data(
+        prepared = prepare_data(
             df=df,
             target="target",
             results=results,
             is_classification=ds.is_classification,
             _warn=False,
         )
+        X = prepared.X
+        y = prepared.y
+        check_X_y(X, y, y_numeric=True)
+        check_X_y(prepared.X_cont, y, y_numeric=True)
+        lens = np.array([len(X), len(y), len(prepared.X_cat), len(prepared.X_cont)])
+        assert np.all(lens == lens[0]), "Lengths of returned cardinality splits differ"
+
+        cats = prepared.inspection.cats
+        conts = prepared.inspection.conts
+        if len(cats.cols.intersection(conts.cols)) > 0:
+            raise RuntimeError("Inspection categorical and continuous overlap")
+
+        X_cont, X_cat = prepared.X_cont, prepared.X_cat
+        cats = set(X_cat.columns.to_list())
+        conts = set(X_cont.columns.to_list())
+        if len(cats.intersection(conts)) > 0:
+            raise RuntimeError("Returned X_cat and X_cont overlap")
+
+    except ValueError as e:
+        if dsname == "credit-approval_reduced":
+            message = str(e)
+            assert "Target" in message
+            assert "is constant" in message
+    except Exception as e:
+        raise ValueError(f"Could not prepare data: {dsname}") from e
+
+
+def do_prep_cached(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+
+    try:
+        ds.inspect(load_cached=True)
+        ds.prepared(load_cached=True)
     except ValueError as e:
         if dsname == "credit-approval_reduced":
             message = str(e)
@@ -68,21 +103,42 @@ def test_prepare_slow(dataset: tuple[str, TestDataset]) -> None:
     do_prepare(dataset)
 
 
+@fast_ds
+def test_prep_cached_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_prep_cached(dataset)
+
+
+@med_ds
+def test_prep_cached_med(dataset: tuple[str, TestDataset]) -> None:
+    do_prep_cached(dataset)
+
+
+@slow_ds
+def test_prep_cached_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_prep_cached(dataset)
+
+
 if __name__ == "__main__":
     tinfos = []
-    for dsname, ds in tqdm(SLOW_INSPECTION):
+    for dsname, ds in tqdm(FAST_INSPECTION):
+        if dsname != "abalone":
+            continue
         df = ds.load()
         cats = ds.categoricals
 
         try:
-            results = ds.inspect(load_cached=True)
-            prepared = prepare_data(
-                df=df,
-                target="target",
-                results=results,
-                is_classification=ds.is_classification,
-                _warn=False,
-            )
+            prepared = ds.prepared(load_cached=False)
+            cats = prepared.inspection.cats
+            conts = prepared.inspection.conts
+            if len(cats.cols.intersection(conts.cols)) > 0:
+                raise RuntimeError("Inspection categorical and continuous overlap")
+
+            X_cont, X_cat = prepared.X_cont, prepared.X_cat
+            cats = set(X_cat.columns.to_list())
+            conts = set(X_cont.columns.to_list())
+            if len(cats.intersection(conts)) > 0:
+                raise RuntimeError("Returned X_cat and X_cont overlap")
+
             funcs, times = [*zip(*prepared.info["runtimes"].items())]
             tinfo = DataFrame(data=[times], columns=funcs, index=[dsname])
             tinfos.append(tinfo)
