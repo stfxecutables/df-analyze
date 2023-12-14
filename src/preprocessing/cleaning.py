@@ -181,9 +181,20 @@ def handle_continuous_nans(
         # remove constant indicators
         X_nan = X_nan.loc[:, X_nan.sum(axis=0) != 0]
 
+    if nans is NanHandling.Drop:
+        warn(
+            "Dropping NaNs is currently not implemented as it can render "
+            "usable data unusable, and is unnecessarily destructive of "
+            "potential information relative to the use of indicator features "
+            "and/or imputation strategies. NaN handling will be set to "
+            f"'{NanHandling.Median.value}' instead."
+        )
+        nans = NanHandling.Median
+
     if X.empty:
         X_cont = X
     elif nans is NanHandling.Drop:
+        raise NotImplementedError("Not implemented currently due to shape changes.")
         X_cont = X.dropna(axis="columns", how="any").dropna(axis="index", how="any")
         if 0 in X_cont.shape:
             others = [na.value for na in NanHandling if na is not NanHandling.Drop]
@@ -234,14 +245,15 @@ def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[D
                 f"down to {n_cls - np.sum(idx)}"
             )
         idx_drop = ~target.isin(unqs[idx])
-        df = df.copy().loc[idx_drop]
-        target = target[idx_drop]
+        df = df.copy().loc[idx_drop].reset_index(drop=True)
+        # reset index extremely important for later concats
+        target = target[idx_drop].reset_index(drop=True)
 
     # drop NaNs: Makes no sense to count correct NaN predictions toward
     # classification performance
     idx_drop = ~target.isna()
-    df = df.copy().loc[idx_drop]
-    target = target[idx_drop]
+    df = df.copy().loc[idx_drop].reset_index(drop=True)
+    target = target[idx_drop].reset_index(drop=True)
 
     encoded = np.array(LabelEncoder().fit_transform(target))
     return df, Series(encoded, name=target.name)
@@ -253,8 +265,9 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
     of metrics
     """
     idx_drop = ~target.isna()
-    df = df.loc[idx_drop]
-    target = target[idx_drop]
+    # reset index extremely important for later concats
+    df = df.loc[idx_drop].reset_index(drop=True)
+    target = target[idx_drop].reset_index(drop=True)
 
     y = (
         RobustScaler(quantile_range=(2.5, 97.5))

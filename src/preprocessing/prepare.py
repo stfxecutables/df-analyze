@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from functools import partial
 from typing import Any
 
@@ -34,6 +36,7 @@ class PreparedData:
         is_classification: bool,
         info: dict[str, Any],
     ) -> None:
+        X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
         self.X: DataFrame = X
         self.X_cont: DataFrame = X_cont
         self.X_cat: DataFrame = X_cat
@@ -42,6 +45,32 @@ class PreparedData:
         self.inspection: InspectionResults = inspection
         self.is_classification: bool = is_classification
         self.info: dict[str, Any] = info
+
+    def validate(
+        self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series
+    ) -> tuple[DataFrame, DataFrame, DataFrame, Series]:
+        n_samples = len(X)
+        if len(X_cont) != n_samples:
+            raise ValueError(
+                f"Continuous data number of samples ({len(X_cont)}) does not "
+                f"match number of samples in processed data ({n_samples})"
+            )
+        if len(X_cat) != n_samples:
+            raise ValueError(
+                f"Categorical data number of samples ({len(X_cat)}) does not "
+                f"match number of samples in processed data ({n_samples})"
+            )
+        if len(y) != n_samples:
+            raise ValueError(
+                f"Target number of samples ({len(X_cat)}) does not "
+                f"match number of samples in processed data ({n_samples})"
+            )
+        # Handle some BS due to stupid Pandas index behaviour
+        X.reset_index(drop=True, inplace=True)
+        X_cont.index = X.index.copy(deep=True)
+        X_cat.index = X.index.copy(deep=True)
+        y.index = X.index.copy(deep=True)
+        return X, X_cont, X_cat, y
 
 
 def prepare_target(
@@ -93,21 +122,20 @@ def prepare_data(
     df = timer(convert_categoricals)(df, target)
     info = timer(inspect_target)(df, target, is_classification=is_classification)
     df, n_targ_drop = timer(drop_target_nans)(df, target)
-    y = df[target]
+    if is_classification:
+        df, y = timer(encode_target)(df, df[target])
+    else:
+        df, y = timer(clean_regression_target)(df, df[target])
 
     df = timer(drop_unusable)(df, results, _warn=_warn)
     df, X_cont, n_ind_added = handle_continuous_nans(
-        df=df, target=target, results=results, nans=NanHandling.Mean
+        df=df, target=target, results=results, nans=NanHandling.Median
     )
 
     df = timer(deflate_categoricals)(df, results, _warn=_warn)
     df, X_cat = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)
 
-    X = df.drop(columns=target)
-    if is_classification:
-        X, y = timer(encode_target)(X, y)
-    else:
-        X, y = timer(clean_regression_target)(X, y)
+    X = df.drop(columns=target).reset_index(drop=True)
     return PreparedData(
         X=X,
         X_cont=X_cont,

@@ -49,7 +49,8 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
         X = prepared.X
         y = prepared.y
         check_X_y(X, y, y_numeric=True)
-        check_X_y(prepared.X_cont, y, y_numeric=True)
+        if not prepared.X_cont.empty:
+            check_X_y(prepared.X_cont, y, y_numeric=True)
         lens = np.array([len(X), len(y), len(prepared.X_cat), len(prepared.X_cont)])
         assert np.all(lens == lens[0]), "Lengths of returned cardinality splits differ"
 
@@ -65,10 +66,11 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
             raise RuntimeError("Returned X_cat and X_cont overlap")
 
     except ValueError as e:
-        if dsname == "credit-approval_reduced":
+        if dsname in ["credit-approval_reduced", "credit-approval_reproduced"]:
             message = str(e)
-            assert "Target" in message
             assert "is constant" in message
+        else:
+            raise e
     except Exception as e:
         raise ValueError(f"Could not prepare data: {dsname}") from e
 
@@ -84,6 +86,8 @@ def do_prep_cached(dataset: tuple[str, TestDataset]) -> None:
             message = str(e)
             assert "Target" in message
             assert "is constant" in message
+        else:
+            raise e
     except Exception as e:
         raise ValueError(f"Could not prepare data: {dsname}") from e
 

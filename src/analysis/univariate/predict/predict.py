@@ -36,8 +36,7 @@ def continuous_feature_target_preds(
     target: Series,
     mode: EstimationMode,
 ) -> DataFrame:
-    X = continuous[column].to_numpy().reshape(-1, 1)
-    X = MinMaxScaler().fit_transform(X)
+    x = continuous[column].to_numpy().reshape(-1, 1)
     y = target
     is_multi = False
     if mode == "classify":
@@ -54,7 +53,7 @@ def continuous_feature_target_preds(
     for model_cls in models:
         pbar.set_description(f"Tuning {model_cls.__name__}")
         model = model_cls()
-        score, spam = model.evaluate(X, y)
+        score, spam = model.evaluate(x, y)
         score.insert(0, "model", model.short)
         score.index = pd.Index([column], name="feature")
         scores.append(score)

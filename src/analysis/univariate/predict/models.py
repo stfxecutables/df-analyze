@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import os
 import sys
+import warnings
 from abc import ABC
 from contextlib import redirect_stdout
 from io import StringIO
@@ -18,9 +19,12 @@ from typing import Any, Callable, Optional, Type, Union
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
+from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.linear_model import ElasticNetCV, LinearRegression, LogisticRegressionCV
+from sklearn.linear_model import SGDClassifier as SklearnSGDClassifier
+from sklearn.linear_model import SGDRegressor as SklearnSGDRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.svm import SVC, SVR
@@ -36,6 +40,8 @@ AnyModel = Union[
     ElasticNetCV,
     LinearRegression,
     LogisticRegressionCV,
+    SklearnSGDRegressor,
+    SklearnSGDClassifier,
     SVC,
     SVR,
 ]
@@ -52,7 +58,9 @@ class UnivariatePredictor(ABC):
         self.__opt: Optional[GridSearchCV] = None
         self.short: str = "abstract"
 
-    def evaluate(self, X: Union[Series, DataFrame], target: Series) -> tuple[DataFrame, str]:
+    def evaluate(
+        self, X: Union[Series, DataFrame, ndarray], target: Series
+    ) -> tuple[DataFrame, str]:
         opt = self.optimizer
         y = target
 
@@ -60,7 +68,12 @@ class UnivariatePredictor(ABC):
         before = os.environ.get("PYTHONWARNINGS", "")
         os.environ["PYTHONWARNINGS"] = "ignore"
         f = StringIO()
-        with redirect_stdout(f):
+        with redirect_stdout(f), warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="One or more of the test scores are non-finite",
+                category=UserWarning,
+            )
             opt.fit(X, y)
         os.environ["PYTHONWARNINGS"] = before
         res = self.get_best_scores(opt)
@@ -175,6 +188,32 @@ class DumbRegressor(UnivariatePredictor):
         self.short = "dummy"
 
 
+class SGDRegressor(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = SklearnSGDRegressor
+        self.grid = {
+            "loss": ["squared_error", "huber", "epsilon_insensitive"],
+            "penalty": ["l1", "l2"],
+            "early_stopping": [True, False],
+        }
+        self.is_classifier = False
+        self.short = "sgd-linear"
+
+
+class SGDClassifier(UnivariatePredictor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.model = SklearnSGDClassifier
+        self.grid = {
+            "loss": ["hinge", "log_loss", "modified_huber"],
+            "penalty": ["l1", "l2"],
+            "early_stopping": [True, False],
+        }
+        self.is_classifier = True
+        self.short = "sgd-linear"
+
+
 class ElasticNetRegressor(UnivariatePredictor):
     def __init__(self) -> None:
         super().__init__()
@@ -227,16 +266,18 @@ class LightGBMRegressor(UnivariatePredictor):
 
 REG_MODELS: list[Type[UnivariatePredictor]] = [
     DumbRegressor,
-    ElasticNetRegressor,
-    LinearRegressor,
-    SVMRegressor,
+    # ElasticNetRegressor,
+    # LinearRegressor,
+    # SVMRegressor,
+    SGDRegressor,
     # LightGBMRegressor,
 ]
 CLS_MODELS: list[Type[UnivariatePredictor]] = [
     DumbClassifier,
-    LogisticClassifier,
-    SVMClassifier,
+    # LogisticClassifier,
+    # SVMClassifier,
     # LightGBMClassifier,
+    SGDClassifier,
 ]
 
 

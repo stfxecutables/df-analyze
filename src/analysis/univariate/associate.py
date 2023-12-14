@@ -57,7 +57,13 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
     y_bin = idx_level.astype(float)
     g0 = x[~idx_level]
     g1 = x[idx_level]
-    tt_res = ttest_ind(g0, g1, equal_var=False)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Precision loss occurred in moment calculation",
+            category=RuntimeWarning,
+        )
+        tt_res = ttest_ind(g0, g1, equal_var=False)
     t, t_p = tt_res.statistic, tt_res.pvalue  # type: ignore
     U_res = mannwhitneyu(g0, g1)
     U, U_p = U_res.statistic, U_res.pvalue
@@ -174,7 +180,7 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
         "H_p",
     ]
 
-    xx = x.astype(str).to_numpy().reshape(-1, 1)
+    xx = x.astype(str).to_numpy().ravel()
     x_enc = np.asarray(LabelEncoder().fit_transform(xx)).reshape(-1, 1)
     yy = y.to_numpy().ravel()
 
@@ -228,7 +234,7 @@ def categorical_feature_target_stats(
     y = target
 
     if is_classification:
-        xx = x.astype(str).to_numpy().reshape(-1, 1)
+        xx = x.astype(str).to_numpy().ravel()
         x_enc = np.asarray(LabelEncoder().fit_transform(xx)).ravel()
         xs = Series(data=x_enc, name=x.name)
         levels = np.unique(y.astype(str)).tolist()
@@ -252,12 +258,9 @@ def categorical_feature_target_stats(
     return cat_feature_cont_target_stats(x, y)
 
 
-def feature_target_stats(
-    continuous: DataFrame,
-    categoricals: DataFrame,
-    target: Series,
-    mode: EstimationMode,
-) -> tuple[DataFrame, DataFrame]:
+def target_associations(
+    data: PreparedData,
+) -> Any:
     """
     For each non-categorical (including ordinal) feature:
 
@@ -312,41 +315,6 @@ def feature_target_stats(
             - Mutual Info (sklearn.feature_selection.mutual_info_regression)
 
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=FutureWarning)
-        df_conts = []
-        df_cats = []
-
-        for col in continuous.columns:
-            df_conts.append(
-                continuous_feature_target_stats(
-                    continuous=continuous,
-                    column=col,
-                    target=target,
-                    is_classification=mode == "classify",
-                )
-            )
-
-        for col in categoricals.columns:
-            df_cats.append(
-                categorical_feature_target_stats(
-                    categoricals=categoricals,
-                    column=col,
-                    target=target,
-                    is_classification=mode == "classify",
-                )
-            )
-
-        df_cont = pd.concat(df_conts, axis=0)
-        df_cat = pd.concat(df_cats, axis=0)
-
-    return df_cont, df_cat
-
-
-def target_associations(
-    data: PreparedData,
-) -> Any:
-    ...
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
