@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import sys
+import traceback
 import warnings
 from pathlib import Path
 from typing import (
@@ -17,6 +18,7 @@ from typing import (
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from pandas import DataFrame, Series
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from tqdm import tqdm
@@ -36,30 +38,30 @@ def continuous_feature_target_preds(
     target: Series,
     mode: EstimationMode,
 ) -> DataFrame:
-    x = continuous[column].to_numpy().reshape(-1, 1)
-    y = target
-    is_multi = False
-    if mode == "classify":
-        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
-        is_multi = len(np.unique(y)) > 2
-    models = REG_MODELS if mode == "regress" else CLS_MODELS
-    # if is_multi and len(y) > 5000:  # takes way too long
-    if len(y.ravel()) > 5000:  # takes way too long
-        models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
-    scores = []
-    pbar = tqdm(
-        models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
-    )
-    for model_cls in models:
-        pbar.set_description(f"Tuning {model_cls.__name__}")
-        model = model_cls()
-        score, spam = model.evaluate(x, y)
-        score.insert(0, "model", model.short)
-        score.index = pd.Index([column], name="feature")
-        scores.append(score)
-        pbar.update()
-    pbar.clear()
-    return pd.concat(scores, axis=0)
+    try:
+        x = continuous[column].to_numpy().reshape(-1, 1)
+        y = target
+        if mode == "classify":
+            y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
+        models = REG_MODELS if mode == "regress" else CLS_MODELS
+        scores = []
+        pbar = tqdm(
+            models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+        )
+        for model_cls in models:
+            pbar.set_description(f"Tuning {model_cls.__name__}")
+            model = model_cls()
+            score, spam = model.evaluate(x, y)
+            score.insert(0, "model", model.short)
+            score.index = pd.Index([column], name="feature")
+            scores.append(score)
+            pbar.update()
+        pbar.clear()
+        return pd.concat(scores, axis=0)
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Got error generating predictions for column {column}: {e}")
+        return DataFrame()
 
 
 def categorical_feature_target_preds(
@@ -69,28 +71,33 @@ def categorical_feature_target_preds(
     mode: EstimationMode,
 ) -> DataFrame:
     """Must be UN-ENCODED categoricals"""
-    X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
-    y = target
-    if mode == "classify":
-        y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
-    models = REG_MODELS if mode == "regress" else CLS_MODELS
-    # if is_multi and len(y) > 5000:  # takes way too long
-    if len(y.ravel()) > 5000:  # takes way too long
-        models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
-    scores = []
-    pbar = tqdm(
-        models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
-    )
-    for model_cls in models:
-        pbar.set_description(f"Tuning {model_cls.__name__}")
-        model = model_cls()
-        score, spam = model.evaluate(X, y)
-        score.insert(0, "model", model.short)
-        score.index = pd.Index([column], name="feature")
-        scores.append(score)
-        pbar.update()
-    pbar.clear()
-    return pd.concat(scores, axis=0)
+    try:
+        X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
+        y = target
+        if mode == "classify":
+            y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
+        models = REG_MODELS if mode == "regress" else CLS_MODELS
+        # if is_multi and len(y) > 5000:  # takes way too long
+        if len(y.ravel()) > 5000:  # takes way too long
+            models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
+        scores = []
+        pbar = tqdm(
+            models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+        )
+        for model_cls in models:
+            pbar.set_description(f"Tuning {model_cls.__name__}")
+            model = model_cls()
+            score, spam = model.evaluate(X, y)
+            score.insert(0, "model", model.short)
+            score.index = pd.Index([column], name="feature")
+            scores.append(score)
+            pbar.update()
+        pbar.clear()
+        return pd.concat(scores, axis=0)
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Got error generating predictions for column {column}: {e}")
+        return DataFrame()
 
 
 def feature_target_predictions(
@@ -101,40 +108,34 @@ def feature_target_predictions(
 ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
-        df_conts = []
-        df_cats = []
+        df_conts: list[DataFrame] = []
+        df_cats: list[DataFrame] = []
 
-        for col in tqdm(
-            continuous.columns,
-            desc="Predicting continuous features",
-            total=continuous.shape[1],
-            leave=True,
-            position=0,
-        ):
-            df_conts.append(
-                continuous_feature_target_preds(
-                    continuous=continuous,
-                    column=col,
-                    target=target,
-                    mode=mode,
-                )
+        df_conts = Parallel(n_jobs=-1)(
+            delayed(continuous_feature_target_preds)(
+                continuous=continuous, column=col, target=target, mode=mode
             )
+            for col in tqdm(
+                continuous.columns,
+                desc="Predicting continuous features",
+                total=continuous.shape[1],
+                leave=True,
+                position=0,
+            )
+        )  # type: ignore
 
-        for col in tqdm(
-            categoricals.columns,
-            desc="Predicting categorical features",
-            total=categoricals.shape[1],
-            leave=True,
-            position=0,
-        ):
-            df_cats.append(
-                categorical_feature_target_preds(
-                    categoricals=categoricals,
-                    column=col,
-                    target=target,
-                    mode=mode,
-                )
+        df_cats = Parallel(n_jobs=-1)(
+            delayed(categorical_feature_target_preds)(
+                categoricals=categoricals, column=col, target=target, mode=mode
             )
+            for col in tqdm(
+                categoricals.columns,
+                desc="Predicting categorical features",
+                total=categoricals.shape[1],
+                leave=True,
+                position=0,
+            )
+        )  # type: ignore
 
         df_cont = pd.concat(df_conts, axis=0) if len(df_conts) != 0 else None
         df_cat = pd.concat(df_cats, axis=0) if len(df_cats) != 0 else None

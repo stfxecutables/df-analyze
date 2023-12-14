@@ -100,7 +100,8 @@ class UnivariatePredictor(ABC):
                 scoring=self.scorers,
                 refit=self.refit,
                 cv=5,
-                n_jobs=-1,
+                n_jobs=1,
+                # n_jobs=-1,
                 # verbose=2,
             )
         return self.__opt
