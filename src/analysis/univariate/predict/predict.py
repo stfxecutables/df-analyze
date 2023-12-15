@@ -14,7 +14,9 @@ import warnings
 from pathlib import Path
 from typing import (
     Optional,
+    Union,
 )
+from warnings import WarningMessage
 
 import numpy as np
 import pandas as pd
@@ -37,31 +39,31 @@ def continuous_feature_target_preds(
     column: str,
     target: Series,
     mode: EstimationMode,
-) -> DataFrame:
-    try:
-        x = continuous[column].to_numpy().reshape(-1, 1)
-        y = target
-        if mode == "classify":
-            y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
-        models = REG_MODELS if mode == "regress" else CLS_MODELS
-        scores = []
-        pbar = tqdm(
-            models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
-        )
-        for model_cls in models:
-            pbar.set_description(f"Tuning {model_cls.__name__}")
-            model = model_cls()
-            score, spam = model.evaluate(x, y)
-            score.insert(0, "model", model.short)
-            score.index = pd.Index([column], name="feature")
-            scores.append(score)
-            pbar.update()
-        pbar.clear()
-        return pd.concat(scores, axis=0)
-    except Exception as e:
-        traceback.print_exc()
-        print(f"Got error generating predictions for column {column}: {e}")
-        return DataFrame()
+) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
+    with warnings.catch_warnings(record=True) as warns:
+        warnings.simplefilter("once")
+        try:
+            x = continuous[column].to_numpy().reshape(-1, 1)
+            y = target
+            models = REG_MODELS if mode == "regress" else CLS_MODELS
+            scores = []
+            # pbar = tqdm(
+            #     models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+            # )
+            for model_cls in models:
+                # pbar.set_description(f"Tuning {model_cls.__name__}")
+                model = model_cls()
+                score, spam = model.evaluate(x, y)
+                score.insert(0, "model", model.short)
+                score.index = pd.Index([column], name="feature")
+                scores.append(score)
+                # pbar.update()
+            # pbar.clear()
+            return pd.concat(scores, axis=0), None, warns
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Got error generating predictions for column {column}: {e}")
+            return DataFrame(), e, warns
 
 
 def categorical_feature_target_preds(
@@ -69,35 +71,34 @@ def categorical_feature_target_preds(
     column: str,
     target: Series,
     mode: EstimationMode,
-) -> DataFrame:
+) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
     """Must be UN-ENCODED categoricals"""
-    try:
-        X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
-        y = target
-        if mode == "classify":
-            y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
-        models = REG_MODELS if mode == "regress" else CLS_MODELS
-        # if is_multi and len(y) > 5000:  # takes way too long
-        if len(y.ravel()) > 5000:  # takes way too long
-            models = [m for m in models if m not in (SVMRegressor, SVMClassifier)]
-        scores = []
-        pbar = tqdm(
-            models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
-        )
-        for model_cls in models:
-            pbar.set_description(f"Tuning {model_cls.__name__}")
-            model = model_cls()
-            score, spam = model.evaluate(X, y)
-            score.insert(0, "model", model.short)
-            score.index = pd.Index([column], name="feature")
-            scores.append(score)
-            pbar.update()
-        pbar.clear()
-        return pd.concat(scores, axis=0)
-    except Exception as e:
-        traceback.print_exc()
-        print(f"Got error generating predictions for column {column}: {e}")
-        return DataFrame()
+    with warnings.catch_warnings(record=True) as warns:
+        warnings.simplefilter("once")
+        try:
+            X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
+            y = target
+            if mode == "classify":
+                y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
+            models = REG_MODELS if mode == "regress" else CLS_MODELS
+            scores = []
+            # pbar = tqdm(
+            #     models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
+            # )
+            for model_cls in models:
+                # pbar.set_description(f"Tuning {model_cls.__name__}")
+                model = model_cls()
+                score, spam = model.evaluate(X, y)
+                score.insert(0, "model", model.short)
+                score.index = pd.Index([column], name="feature")
+                scores.append(score)
+                # pbar.update()
+            # pbar.clear()
+            return pd.concat(scores, axis=0), None, warns
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Got error generating predictions for column {column}: {e}")
+            return DataFrame(), e, warns
 
 
 def feature_target_predictions(
@@ -105,13 +106,14 @@ def feature_target_predictions(
     continuous: DataFrame,
     target: Series,
     mode: EstimationMode,
-) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
+) -> tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
-        df_conts: list[DataFrame] = []
-        df_cats: list[DataFrame] = []
+        df_conts: list[DataFrame]
+        df_cats: list[DataFrame]
+        results: list[tuple[DataFrame, Optional[Exception], list[WarningMessage]]]
 
-        df_conts = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1)(
             delayed(continuous_feature_target_preds)(
                 continuous=continuous, column=col, target=target, mode=mode
             )
@@ -123,8 +125,12 @@ def feature_target_predictions(
                 position=0,
             )
         )  # type: ignore
+        if len(results) > 0:
+            df_conts, cont_errors, cont_warns = list(zip(*results))
+        else:
+            df_conts, cont_errors, cont_warns = [], [], []
 
-        df_cats = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1)(
             delayed(categorical_feature_target_preds)(
                 categoricals=categoricals, column=col, target=target, mode=mode
             )
@@ -137,7 +143,22 @@ def feature_target_predictions(
             )
         )  # type: ignore
 
+        if len(results) > 0:
+            df_cats, cat_errors, cat_warns = list(zip(*results))
+        else:
+            df_cats, cat_errors, cat_warns = [], [], []
+
         df_cont = pd.concat(df_conts, axis=0) if len(df_conts) != 0 else None
         df_cat = pd.concat(df_cats, axis=0) if len(df_cats) != 0 else None
+        errs = [*cont_errors, *cat_errors]
+        errs = [e for e in errs if e is not None]
+        all_warns = []
+        if isinstance(cont_warns, tuple):
+            cont_warns = list(cont_warns)
+        if isinstance(cat_warns, tuple):
+            cat_warns = list(cat_warns)
+        for warns in cont_warns + cat_warns:
+            all_warns.extend(warns)
+        all_warns = [w for w in all_warns if w is not None]
 
-    return df_cont, df_cat
+    return df_cont, df_cat, errs, all_warns

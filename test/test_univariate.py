@@ -10,12 +10,15 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import logging
 import sys
+from math import ceil
 from pathlib import Path
 from typing import Optional
+from warnings import WarningMessage, filterwarnings
 
 import numpy as np
 from pandas import DataFrame, Series
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, train_test_split
+from sklearn.preprocessing import KBinsDiscretizer
 
 from src._types import EstimationMode
 from src.analysis.univariate.associate import target_associations
@@ -30,6 +33,39 @@ logger = logging.getLogger("py.warnings")
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
+
+
+def validate_y(y_encoded: Series, n_splits: int = 5) -> None:
+    y_counts = np.bincount(y_encoded)
+    min_groups = np.min(y_counts)
+    if np.all(n_splits > y_counts):
+        raise ValueError(
+            f"n_splits={n_splits} cannot be greater than the " "number of members in each class."
+        )
+    if n_splits > min_groups:
+        raise ValueError(
+            f"The least populated class in y has only {min_groups}"
+            f" members, which is less than n_splits={n_splits}."
+        )
+
+
+def will_work(n_min_cls: int, n_sub: int, n_max: int) -> bool:
+    return (n_sub / n_max) * n_min_cls > 1.5
+
+
+def min_sample(n_min_cls: int, n_max: int) -> int:
+    """Why does this work? Not sure at the moment"""
+    return ceil(1.5 * n_max / n_min_cls) + 1
+
+
+def min_subsample(y: Series) -> int:
+    """Get smallest possible subsample of y that results in valid internal
+    k-folds
+    """
+    cnts = np.bincount(y)
+    n_min_cls = np.min(cnts).item()
+    n_max = len(y)
+    return min_sample(n_min_cls, n_max)
 
 
 def print_preds(
@@ -48,7 +84,12 @@ def print_preds(
         print(df_cat.to_markdown(tablefmt="simple", floatfmt="0.4f"))
 
 
-def do_predict(dataset: tuple[str, TestDataset]) -> None:
+def do_predict(
+    dataset: tuple[str, TestDataset]
+) -> Optional[
+    tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]
+]:
+    filterwarnings("ignore", message="Bins whose width are too small", category=UserWarning)
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:
         return  # target is constant after dropping NaN
@@ -60,32 +101,40 @@ def do_predict(dataset: tuple[str, TestDataset]) -> None:
 
     # TODO: make this a CLI option?
     # make fast
-    strat = y if mode == "classify" else None
-    N = min(500, len(X))
-    if N < len(X):
-        if mode == "classify":
-            ss = StratifiedShuffleSplit(n_splits=1, train_size=N)
-        else:
-            ss = ShuffleSplit(n_splits=1, train_size=N)
-        idx = next(ss.split(X, y))[0]
-        X = X.iloc[idx, :]
-        y = y.loc[idx]
-        X_cat = X_cat.loc[idx, :]
-        X_cont = X_cont.loc[idx, :]
+    if mode == "classify":
+        strat = y
+    else:
+        kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
+        strat = kb.fit_transform(y.to_numpy().reshape(-1, 1))
+    # N = min(1000, len(X))
+
+    if len(X) > 1000:
+        N = min_subsample(y)
+        n_train = max(1000, N)
+        ss = StratifiedShuffleSplit(n_splits=1, train_size=n_train)
+        idx = next(ss.split(X, strat))[0]
+        X = prepared.X.iloc[idx, :].copy(deep=True)
+        y = prepared.y.loc[idx].copy(deep=True)
+        X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
+        X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
 
     try:
-        df_cont, df_cat = feature_target_predictions(
+        df_cont, df_cat, errs, warns = feature_target_predictions(
             categoricals=X_cat,
             continuous=X_cont,
             target=y,
             mode=mode,
         )
+        if len(errs) > 0:
+            raise errs[0]
         print_preds(dsname, df_cont, df_cat, mode)
+        return df_cont, df_cat, errs, warns
     except ValueError as e:
         if dsname in ["credit-approval_reproduced"]:
             message = str(e)
             if "constant after dropping NaNs" not in message:
                 raise e
+
     except Exception as e:
         raise ValueError(f"Failed to make univariate predictions for {dsname}") from e
 
@@ -131,4 +180,33 @@ def test_predict_slow(dataset: tuple[str, TestDataset]) -> None:
 
 if __name__ == "__main__":
     # test_associate()
-    test_datasets_predict()
+    skip: bool = True
+    for dataset in TEST_DATASETS.items():
+        dsname, ds = dataset
+        # if dsname == "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc":
+        #     skip = False
+        #     continue
+        # if skip:
+        #     continue
+        if dsname != "Mercedes_Benz_Greener_Manufacturing":
+            continue
+        """
+Traceback (most recent call last):
+File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 194, in <module>
+results = do_predict(dataset)
+File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 112, in do_predict
+N = min_subsample(y)
+File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 68, in min_subsample
+return min_sample(n_min_cls, n_max)
+File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 58, in min_sample
+return ceil(1.5 * n_max / n_min_cls) + 1
+ZeroDivisionError: float division by zero
+        """
+        print(f"Starting: {dsname}")
+        results = do_predict(dataset)
+        print(f"Completed: {dsname}")
+        if results is None:
+            continue
+        df_cont, df_cat, errs, warns = results
+        if len(warns) > 0:
+            raise ValueError(f"Got warning for {dataset[0]}:\n{warns[0]}")

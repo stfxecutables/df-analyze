@@ -31,6 +31,7 @@ from sklearn.svm import SVC, SVR
 
 from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORING
 from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORING
+from src.nonsense import enable_spam, silence_spam
 
 AnyModel = Union[
     LGBMClassifier,
@@ -67,6 +68,7 @@ class UnivariatePredictor(ABC):
         # so much freaking uncatchable spam from this, captuing stdout only way
         before = os.environ.get("PYTHONWARNINGS", "")
         os.environ["PYTHONWARNINGS"] = "ignore"
+        silence_spam()
         f = StringIO()
         with redirect_stdout(f), warnings.catch_warnings():
             warnings.filterwarnings(
@@ -74,8 +76,14 @@ class UnivariatePredictor(ABC):
                 message="One or more of the test scores are non-finite",
                 category=UserWarning,
             )
+            warnings.filterwarnings(
+                "ignore",
+                message="invalid value encountered in divide",
+                category=RuntimeWarning,
+            )
             opt.fit(X, y)
         os.environ["PYTHONWARNINGS"] = before
+        enable_spam()
         res = self.get_best_scores(opt)
         lines = []
         for line in f.readlines():
@@ -207,8 +215,11 @@ class SGDClassifier(UnivariatePredictor):
         super().__init__()
         self.model = SklearnSGDClassifier
         self.grid = {
-            "loss": ["hinge", "log_loss", "modified_huber"],
-            "penalty": ["l1", "l2"],
+            # below are only methods that enable `predict_proba`
+            "loss": ["log_loss", "modified_huber"],
+            "learning_rate": ["adaptive"],
+            "eta0": [3e-1, 3e-2, 3e-3, 3e-4],
+            "penalty": ["l2"],
             "early_stopping": [True, False],
         }
         self.is_classifier = True

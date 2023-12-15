@@ -76,7 +76,7 @@ REGRESSION_TEST_SCORERS = {
     "MAE": mae_scorer,
     "MSqE": mse_scorer,
     "MdAE": mdae_scorer,
-    "MAPE": mape_scorer,
+    # "MAPE": mape_scorer,
     "R2": r2_scorer,
     "Var exp": expl_var_scorer,
 }

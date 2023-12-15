@@ -1,3 +1,7 @@
+import warnings
+from typing import Any, Callable
+
+import numpy as np
 from numpy import ndarray
 from sklearn.metrics import (
     accuracy_score,
@@ -26,8 +30,25 @@ def specificity(y_true: ndarray, y_pred: ndarray) -> float:
     return specs.mean()
 
 
+def silent_scorer(f: Callable) -> Callable:
+    def silent(*args, **kwargs) -> Any:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Scoring failed", category=UserWarning)
+            try:
+                return f(*args, **kwargs)
+            except ValueError as e:
+                if "Number of classes in y_true not equal" in str(e):
+                    return np.nan
+                if "Input contains NaN" in str(e):
+                    return np.nan
+
+    return silent
+
+
 accuracy_scorer = make_scorer(accuracy_score)
-auc_scorer = make_scorer(roc_auc_score, needs_proba=True, multi_class="ovr", average="macro")
+auc_scorer = make_scorer(
+    silent_scorer(roc_auc_score), needs_proba=True, multi_class="ovr", average="macro"
+)
 sensitivity_scorer = make_scorer(sensitivity)
 specificity_scorer = make_scorer(specificity)
 

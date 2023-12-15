@@ -14,7 +14,7 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
-from src._constants import MAX_PERF_N_FEATURES, NAN_STRINGS
+from src._constants import MAX_PERF_N_FEATURES, N_TARG_LEVEL_MIN, NAN_STRINGS
 from src.enumerables import NanHandling
 from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import (
@@ -230,19 +230,20 @@ def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[D
     unqs, cnts = np.unique(unify_nans(target).astype(str), return_counts=True)
     if len(unqs) <= 1:
         raise ValueError(f"Target variable {target.name} is constant.")
-    idx = cnts <= 20
+    idx = cnts <= N_TARG_LEVEL_MIN
     n_cls = len(unqs)
     if np.sum(idx) > 0:
         if _warn:
             cleaning_inform(
-                f"The target variable has a number of class labels ({unqs[idx]}) with "
-                "less than 20 members. This will cause problems with splitting in "
-                "various nested k-fold procedures used in `df-analyze`. In addition, "
-                "any estimates or metrics produced for such a class will not be "
-                "statistically meaningful (i.e. the uncertainty on those metrics or "
-                "estimates will be exceedingly large). We thus remove all samples "
-                "that belong to these labels, bringing the total number of classes "
-                f"down to {n_cls - np.sum(idx)}"
+                "The target variable has a number of class labels "
+                f"({unqs[idx]}) with less than {N_TARG_LEVEL_MIN} members. This "
+                "will cause problems with splitting in various nested k-fold "
+                "procedures used in `df-analyze`. In addition, any estimates "
+                "or metrics produced for such a class will not be "
+                "statistically meaningful (i.e. the uncertainty on those "
+                "metrics or estimates will be exceedingly large). We thus "
+                "remove all samples that belong to these labels, bringing the "
+                f"total number of classes down to {n_cls - np.sum(idx)} "
             )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop].reset_index(drop=True)

@@ -3,9 +3,11 @@ from __future__ import annotations
 from functools import partial
 from typing import Any
 
+import numpy as np
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 
+from src._constants import N_TARG_LEVEL_MIN
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
@@ -36,15 +38,16 @@ class PreparedData:
         is_classification: bool,
         info: dict[str, Any],
     ) -> None:
+        self.is_classification: bool = is_classification
+        self.inspection: InspectionResults = inspection
+        self.info: dict[str, Any] = info
+
         X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
         self.X: DataFrame = X
         self.X_cont: DataFrame = X_cont
         self.X_cat: DataFrame = X_cat
         self.y: Series = y
         self.target = self.y.name
-        self.inspection: InspectionResults = inspection
-        self.is_classification: bool = is_classification
-        self.info: dict[str, Any] = info
 
     def validate(
         self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series
@@ -65,6 +68,10 @@ class PreparedData:
                 f"Target number of samples ({len(X_cat)}) does not "
                 f"match number of samples in processed data ({n_samples})"
             )
+
+        if self.is_classification and np.bincount(y).min() < N_TARG_LEVEL_MIN:
+            raise ValueError(f"Target {y} has undersampled levels")
+
         # Handle some BS due to stupid Pandas index behaviour
         X.reset_index(drop=True, inplace=True)
         X_cont.index = X.index.copy(deep=True)

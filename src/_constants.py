@@ -90,8 +90,8 @@ N_CAT_LEVEL_MIN = 20
 Minimum required number of samples for level of a categorical variable to be
 considered useful in 5-fold analyses.
 
-Details
--------
+Notes
+-----
 
 For each level of categorical variable to be predictively useful, there must
 be enough samples to be statistically meaningful (or to allow some reasonable
@@ -105,6 +105,29 @@ levels. Under the typical assumption of k=5, this means we require useful /
 reliable categorical levels to have 8-16 samples each.
 
 Inflation is to categorical variables as noise is to continuous ones.
+"""
+
+N_TARG_LEVEL_MIN = 50
+"""
+Minimum required number of samples for level of a categorical target variable
+to be considered useful in 5-fold analyses.
+
+Notes
+-----
+Suppose the smallest target class or level has N samples. With stratified
+k-fold, a k-fold training set will have floor((1 - 1/k) * N) samples of that
+level. For k in {3, 5}, this is either floor(2N/3) or floor(0.8*N) samples.
+Now if we use k-fold again internally (e.g. nested k-fold), with internal
+k=m, then there are again floor( (1 - 1/m)(1 - 1/k) * N ) samples of that
+level, i.e. for (k, m) in {(3, 3), (3, 5), (5, 5)} we have floor(0.444 * N),
+floor(0.5333 * N), or floor(0.64*N) = floor(16N/25) samples in the training
+set. In the test set the numbers are just floor(N/9), floor(N/15),
+floor(N/25).
+
+So far we use only 5-fold, so to guarantee one sample of each level in an
+internal fold, we need floor(N/25) > 1 ==> N > 25.
+
+
 """
 
 # from https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
