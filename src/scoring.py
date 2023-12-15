@@ -19,7 +19,7 @@ from sklearn.metrics import (
 
 
 def sensitivity(y_true: ndarray, y_pred: ndarray) -> float:
-    return float(recall_score(y_true, y_pred, average="macro"))
+    return float(recall_score(y_true, y_pred, average="macro", zero_division=np.nan))
 
 
 def specificity(y_true: ndarray, y_pred: ndarray) -> float:
