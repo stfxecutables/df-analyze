@@ -62,7 +62,7 @@ def min_subsample(y: Series) -> int:
     """Get smallest possible subsample of y that results in valid internal
     k-folds
     """
-    cnts = np.bincount(y)
+    cnts = np.unique(y, return_counts=True)[1]
     n_min_cls = np.min(cnts).item()
     n_max = len(y)
     return min_sample(n_min_cls, n_max)
@@ -93,6 +93,8 @@ def do_predict(
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:
         return  # target is constant after dropping NaN
+    if dsname in ["internet_usage"]:
+        return  # huge multiclass target causes splitting / reduction problems
 
     mode: EstimationMode = "classify" if ds.is_classification else "regress"
     prepared = ds.prepared(load_cached=True)
@@ -104,19 +106,32 @@ def do_predict(
     if mode == "classify":
         strat = y
     else:
-        kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
+        kb = KBinsDiscretizer(n_bins=3, encode="ordinal")
         strat = kb.fit_transform(y.to_numpy().reshape(-1, 1))
     # N = min(1000, len(X))
 
     if len(X) > 1000:
-        N = min_subsample(y)
-        n_train = max(1000, N)
-        ss = StratifiedShuffleSplit(n_splits=1, train_size=n_train)
-        idx = next(ss.split(X, strat))[0]
-        X = prepared.X.iloc[idx, :].copy(deep=True)
-        y = prepared.y.loc[idx].copy(deep=True)
-        X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
-        X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
+        if ds.is_classification:
+            # this doesn't work for large multiclass
+            N = min_subsample(y)
+            n_train = max(1000, N)
+        else:
+            n_train = 1000
+
+        # TODO: improve below loop to just drop undersampled cats
+        ss = StratifiedShuffleSplit(n_splits=100, train_size=n_train)
+        for idx, _ in ss.split(X, strat):
+            X = prepared.X.iloc[idx, :].copy(deep=True)
+            y = prepared.y.loc[idx].copy(deep=True)
+            X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
+            X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
+            # stop if y is well-sampled for all levels
+            if np.unique(y, return_counts=True)[1].min() > 10:
+                break
+            # otherwise expand train size and try again
+            n_train = n_train * 1.025
+            if n_train > len(prepared.y):
+                break
 
     try:
         df_cont, df_cat, errs, warns = feature_target_predictions(
@@ -183,25 +198,13 @@ if __name__ == "__main__":
     skip: bool = True
     for dataset in TEST_DATASETS.items():
         dsname, ds = dataset
-        # if dsname == "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc":
+        # if dsname == "internet_usage":
         #     skip = False
         #     continue
         # if skip:
         #     continue
-        if dsname != "Mercedes_Benz_Greener_Manufacturing":
+        if dsname != "nomao":
             continue
-        """
-Traceback (most recent call last):
-File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 194, in <module>
-results = do_predict(dataset)
-File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 112, in do_predict
-N = min_subsample(y)
-File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 68, in min_subsample
-return min_sample(n_min_cls, n_max)
-File "/Users/derekberger/Documents/Antigonish/df-analyze/test/test_univariate.py", line 58, in min_sample
-return ceil(1.5 * n_max / n_min_cls) + 1
-ZeroDivisionError: float division by zero
-        """
         print(f"Starting: {dsname}")
         results = do_predict(dataset)
         print(f"Completed: {dsname}")
