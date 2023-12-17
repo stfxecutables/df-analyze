@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pickle
-from typing import Literal, cast
+from typing import Literal, Optional, cast
 from warnings import catch_warnings, filterwarnings
 
 import jsonpickle
@@ -21,6 +21,7 @@ from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
 
 from src._constants import TESTDATA
+from src.analysis.univariate.associate import target_associations
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
@@ -65,6 +66,22 @@ class TestDataset:
 
         self.inspect_cachefile = TEST_CACHE / f"{self.dsname}_inspect.json"
         self.prep_cachefile = TEST_CACHE / f"{self.dsname}_prepare.pickle"
+
+        self.assoc_cachedir = TEST_CACHE / f"{self.dsname}_associate"
+        self.preds_cachedir = TEST_CACHE / f"{self.dsname}_preds"
+        if not self.assoc_cachedir.exists():
+            self.assoc_cachedir.mkdir(exist_ok=True, parents=True)
+        if not self.preds_cachedir.exists():
+            self.preds_cachedir.mkdir(exist_ok=True, parents=True)
+
+        self.assoc_cachefiles = {
+            "cont": self.assoc_cachedir / "cont.parquet",
+            "cat": self.assoc_cachedir / "cat.parquet",
+        }
+        self.preds_cachefiles = {
+            "cont": self.preds_cachedir / "cont.parquet",
+            "cat": self.preds_cachedir / "cat.parquet",
+        }
 
     def inspect(self, load_cached: bool = True, overwrite_cache: bool = False) -> InspectionResults:
         if load_cached and overwrite_cache:
@@ -112,6 +129,82 @@ class TestDataset:
             with open(self.prep_cachefile, "wb") as handle:
                 pickle.dump(prep, handle)
         return prep
+
+    def associations(
+        self, load_cached: bool = True, overwrite_cache: bool = False
+    ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
+        if load_cached and all(file.exists() for file in self.assoc_cachefiles.values()):
+            conts = pd.read_parquet(self.assoc_cachefiles["cont"])
+            cats = pd.read_parquet(self.assoc_cachefiles["cat"])
+            if conts.empty:
+                conts = None
+            if cats.empty:
+                cats = None
+            return conts, cats
+
+        prep = self.prepared(load_cached=True)
+        conts, cats = target_associations(prep)
+        if conts is None:
+            conts = DataFrame()
+        if cats is None:
+            cats = DataFrame()
+
+        if overwrite_cache:
+            conts.to_parquet(self.assoc_cachefiles["cont"])
+            cats.to_parquet(self.assoc_cachefiles["cat"])
+            if conts.empty:
+                conts = None
+            if cats.empty:
+                cats = None
+            return conts, cats
+
+        if not all(file.exists() for file in self.assoc_cachefiles.values()):
+            conts.to_parquet(self.assoc_cachefiles["cont"])
+            cats.to_parquet(self.assoc_cachefiles["cat"])
+
+        if conts.empty:
+            conts = None
+        if cats.empty:
+            cats = None
+        return conts, cats
+
+    def predictions(
+        self, load_cached: bool = True, overwrite_cache: bool = False
+    ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
+        if load_cached and all(file.exists() for file in self.preds_cachefiles.values()):
+            conts = pd.read_parquet(self.preds_cachefiles["cont"])
+            cats = pd.read_parquet(self.preds_cachefiles["cat"])
+            if conts.empty:
+                conts = None
+            if cats.empty:
+                cats = None
+            return conts, cats
+
+        prep = self.prepared(load_cached=True)
+        conts, cats = target_associations(prep)
+        if conts is None:
+            conts = DataFrame()
+        if cats is None:
+            cats = DataFrame()
+
+        if overwrite_cache:
+            conts.to_parquet(self.assoc_cachefiles["cont"])
+            cats.to_parquet(self.assoc_cachefiles["cat"])
+            if conts.empty:
+                conts = None
+            if cats.empty:
+                cats = None
+            return conts, cats
+
+        if not all(file.exists() for file in self.assoc_cachefiles.values()):
+            conts.to_parquet(self.assoc_cachefiles["cont"])
+            cats.to_parquet(self.assoc_cachefiles["cat"])
+
+        if conts.empty:
+            conts = None
+        if cats.empty:
+            cats = None
+        return conts, cats
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)

@@ -35,22 +35,21 @@ from src.testing.datasets import (
 
 def do_prepare(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
-    df = ds.load()
 
     try:
-        results = ds.inspect(load_cached=True)
-        prepared = prepare_data(
-            df=df,
-            target="target",
-            results=results,
-            is_classification=ds.is_classification,
-            _warn=False,
-        )
+        prepared = ds.prepared(load_cached=False)
+        #     df=df,
+        #     target="target",
+        #     results=results,
+        #     is_classification=ds.is_classification,
+        #     _warn=False,
+        # )
         X = prepared.X
         y = prepared.y
         check_X_y(X, y, y_numeric=True)
         if not prepared.X_cont.empty:
             check_X_y(prepared.X_cont, y, y_numeric=True)
+        assert prepared.X_cont.shape[0] == prepared.X_cat.shape[0] == len(y)
         lens = np.array([len(X), len(y), len(prepared.X_cat), len(prepared.X_cont)])
         assert np.all(lens == lens[0]), "Lengths of returned cardinality splits differ"
 

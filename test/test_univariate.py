@@ -158,8 +158,15 @@ def do_associate(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    prepared = ds.prepared(load_cached=False)
-    cont, cat = target_associations(prepared)
+    cont, cat = ds.associations(load_cached=False)
+    return
+
+
+def do_associate_cached(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["credit-approval_reproduced"]:  # const targets
+        return
+    cont, cat = ds.associations(load_cached=True)
     return
 
 
@@ -176,6 +183,21 @@ def test_associate_med(dataset: tuple[str, TestDataset]) -> None:
 @slow_ds
 def test_associate_slow(dataset: tuple[str, TestDataset]) -> None:
     do_associate(dataset)
+
+
+@fast_ds
+def test_associate_cached_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_associate_cached(dataset)
+
+
+@med_ds
+def test_associate_cached_med(dataset: tuple[str, TestDataset]) -> None:
+    do_associate_cached(dataset)
+
+
+@slow_ds
+def test_associate_cached_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_associate_cached(dataset)
 
 
 @fast_ds
