@@ -22,6 +22,7 @@ from sklearn.preprocessing import KBinsDiscretizer
 
 from src._constants import TESTDATA
 from src.analysis.univariate.associate import target_associations
+from src.analysis.univariate.predict.predict import univariate_predictions
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
@@ -83,11 +84,11 @@ class TestDataset:
             "cat": self.preds_cachedir / "cat.parquet",
         }
 
-    def inspect(self, load_cached: bool = True, overwrite_cache: bool = False) -> InspectionResults:
-        if load_cached and overwrite_cache:
-            raise ValueError("Cannot both use and over-write cache, this is pointless.")
+    def inspect(self, load_cached: bool = True, force: bool = False) -> InspectionResults:
+        if load_cached and force:
+            raise ValueError("Cannot both use and overwrite cache, this is pointless.")
 
-        if load_cached and self.inspect_cachefile.exists():
+        if load_cached and self.inspect_cachefile.exists() and not force:
             results = jsonpickle.decode(self.inspect_cachefile.read_text())
             return cast(InspectionResults, results)
 
@@ -95,7 +96,7 @@ class TestDataset:
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
             results = inspect_data(df, "target", self.categoricals, [], _warn=False)
-        if overwrite_cache:
+        if force:
             enc = str(jsonpickle.encode(results))
             self.inspect_cachefile.write_text(enc)
             return results
@@ -105,8 +106,8 @@ class TestDataset:
             self.inspect_cachefile.write_text(enc)
         return results
 
-    def prepared(self, load_cached: bool = True, overwrite_cache: bool = False) -> PreparedData:
-        if load_cached and self.prep_cachefile.exists():
+    def prepared(self, load_cached: bool = True, force: bool = False) -> PreparedData:
+        if load_cached and self.prep_cachefile.exists() and (not force):
             # results = jsonpickle.decode(self.prep_cachefile.read_text())
             with open(self.prep_cachefile, "rb") as handle:
                 results = pickle.load(handle)
@@ -116,7 +117,7 @@ class TestDataset:
         inspect = self.inspect(load_cached=True)
         prep = prepare_data(df, "target", inspect, self.is_classification)
 
-        if overwrite_cache:
+        if force:
             # enc = str(jsonpickle.encode(prep))
             # self.prep_cachefile.write_text(enc)
             with open(self.prep_cachefile, "wb") as handle:
@@ -131,9 +132,13 @@ class TestDataset:
         return prep
 
     def associations(
-        self, load_cached: bool = True, overwrite_cache: bool = False
+        self, load_cached: bool = True, force: bool = False
     ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
-        if load_cached and all(file.exists() for file in self.assoc_cachefiles.values()):
+        if (
+            load_cached
+            and all(file.exists() for file in self.assoc_cachefiles.values())
+            and (not force)
+        ):
             conts = pd.read_parquet(self.assoc_cachefiles["cont"])
             cats = pd.read_parquet(self.assoc_cachefiles["cat"])
             if conts.empty:
@@ -149,7 +154,7 @@ class TestDataset:
         if cats is None:
             cats = DataFrame()
 
-        if overwrite_cache:
+        if force:
             conts.to_parquet(self.assoc_cachefiles["cont"])
             cats.to_parquet(self.assoc_cachefiles["cat"])
             if conts.empty:
@@ -169,9 +174,13 @@ class TestDataset:
         return conts, cats
 
     def predictions(
-        self, load_cached: bool = True, overwrite_cache: bool = False
+        self, load_cached: bool = True, force: bool = False
     ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
-        if load_cached and all(file.exists() for file in self.preds_cachefiles.values()):
+        if (
+            load_cached
+            and all(file.exists() for file in self.preds_cachefiles.values())
+            and (not force)
+        ):
             conts = pd.read_parquet(self.preds_cachefiles["cont"])
             cats = pd.read_parquet(self.preds_cachefiles["cat"])
             if conts.empty:
@@ -181,24 +190,24 @@ class TestDataset:
             return conts, cats
 
         prep = self.prepared(load_cached=True)
-        conts, cats = target_associations(prep)
+        conts, cats, ers, warns = univariate_predictions(prep, self.is_classification)
         if conts is None:
             conts = DataFrame()
         if cats is None:
             cats = DataFrame()
 
-        if overwrite_cache:
-            conts.to_parquet(self.assoc_cachefiles["cont"])
-            cats.to_parquet(self.assoc_cachefiles["cat"])
+        if force:
+            conts.to_parquet(self.preds_cachefiles["cont"])
+            cats.to_parquet(self.preds_cachefiles["cat"])
             if conts.empty:
                 conts = None
             if cats.empty:
                 cats = None
             return conts, cats
 
-        if not all(file.exists() for file in self.assoc_cachefiles.values()):
-            conts.to_parquet(self.assoc_cachefiles["cont"])
-            cats.to_parquet(self.assoc_cachefiles["cat"])
+        if not all(file.exists() for file in self.preds_cachefiles.values()):
+            conts.to_parquet(self.preds_cachefiles["cont"])
+            cats.to_parquet(self.preds_cachefiles["cat"])
 
         if conts.empty:
             conts = None

@@ -41,6 +41,7 @@ def no_cats(df: DataFrame, target: str) -> bool:
 
 
 @fast_ds
+@pytest.mark.cached
 def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
@@ -79,6 +80,7 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 
 
 @all_ds
+@pytest.mark.cached
 @pytest.mark.fast
 def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
     dsname, ds = dataset
@@ -149,16 +151,19 @@ def do_encode(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
+@pytest.mark.cached
 def test_encoding_fast(dataset: tuple[str, TestDataset]) -> None:
     do_encode(dataset)
 
 
 @med_ds
+@pytest.mark.cached
 def test_encoding_med(dataset: tuple[str, TestDataset]) -> None:
     do_encode(dataset)
 
 
 @slow_ds
+@pytest.mark.cached
 def test_encoding_slow(dataset: tuple[str, TestDataset]) -> None:
     do_encode(dataset)
 

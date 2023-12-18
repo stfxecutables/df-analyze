@@ -107,7 +107,7 @@ reliable categorical levels to have 8-16 samples each.
 Inflation is to categorical variables as noise is to continuous ones.
 """
 
-N_TARG_LEVEL_MIN = 50
+N_TARG_LEVEL_MIN = 30
 """
 Minimum required number of samples for level of a categorical target variable
 to be considered useful in 5-fold analyses.
@@ -126,9 +126,10 @@ floor(N/25).
 
 So far we use only 5-fold, so to guarantee one sample of each level in an
 internal fold, we need floor(N/25) > 1 ==> N > 25.
-
-
 """
+
+UNIVARIATE_PRED_MAX_N_SAMPLES = 1500
+"""Maximum number of samples to use in univariate predictive analyses"""
 
 # from https://pandas.pydata.org/docs/reference/api/pandas.read_csv.html
 NAN_STRINGS = [

@@ -15,16 +15,21 @@ from pathlib import Path
 from typing import (
     Optional,
     Union,
+    cast,
 )
 from warnings import WarningMessage
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from numpy import ndarray
+from numpy.random import Generator
 from pandas import DataFrame, Series
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, train_test_split
+from sklearn.preprocessing import KBinsDiscretizer, LabelEncoder, MinMaxScaler
 from tqdm import tqdm
 
+from src._constants import N_CAT_LEVEL_MIN, N_TARG_LEVEL_MIN, UNIVARIATE_PRED_MAX_N_SAMPLES
 from src._types import EstimationMode
 from src.analysis.univariate.predict.models import (
     CLS_MODELS,
@@ -32,20 +37,22 @@ from src.analysis.univariate.predict.models import (
     SVMClassifier,
     SVMRegressor,
 )
+from src.preprocessing.inspection.inspection import inspect_cls_target
+from src.preprocessing.prepare import PreparedData
 
 
 def continuous_feature_target_preds(
     continuous: DataFrame,
     column: str,
     target: Series,
-    mode: EstimationMode,
+    is_classification: bool,
 ) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
     with warnings.catch_warnings(record=True) as warns:
         warnings.simplefilter("once")
         try:
             x = continuous[column].to_numpy().reshape(-1, 1)
             y = target
-            models = REG_MODELS if mode == "regress" else CLS_MODELS
+            models = CLS_MODELS if is_classification else REG_MODELS
             scores = []
             # pbar = tqdm(
             #     models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
@@ -70,7 +77,7 @@ def categorical_feature_target_preds(
     categoricals: DataFrame,
     column: str,
     target: Series,
-    mode: EstimationMode,
+    is_classification: bool,
 ) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
     """Must be UN-ENCODED categoricals"""
     with warnings.catch_warnings(record=True) as warns:
@@ -78,9 +85,9 @@ def categorical_feature_target_preds(
         try:
             X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
             y = target
-            if mode == "classify":
+            if is_classification:
                 y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
-            models = REG_MODELS if mode == "regress" else CLS_MODELS
+            models = CLS_MODELS if is_classification else REG_MODELS
             scores = []
             # pbar = tqdm(
             #     models, total=len(models), desc=models[0].__class__.__name__, leave=False, position=1
@@ -105,7 +112,7 @@ def feature_target_predictions(
     categoricals: DataFrame,
     continuous: DataFrame,
     target: Series,
-    mode: EstimationMode,
+    is_classification: bool,
 ) -> tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
@@ -115,7 +122,10 @@ def feature_target_predictions(
 
         results = Parallel(n_jobs=-1)(
             delayed(continuous_feature_target_preds)(
-                continuous=continuous, column=col, target=target, mode=mode
+                continuous=continuous,
+                column=col,
+                target=target,
+                is_classification=is_classification,
             )
             for col in tqdm(
                 continuous.columns,
@@ -132,7 +142,10 @@ def feature_target_predictions(
 
         results = Parallel(n_jobs=-1)(
             delayed(categorical_feature_target_preds)(
-                categoricals=categoricals, column=col, target=target, mode=mode
+                categoricals=categoricals,
+                column=col,
+                target=target,
+                is_classification=is_classification,
             )
             for col in tqdm(
                 categoricals.columns,
@@ -162,3 +175,131 @@ def feature_target_predictions(
         all_warns = [w for w in all_warns if w is not None]
 
     return df_cont, df_cat, errs, all_warns
+
+
+def viable_subsample(
+    df: DataFrame,
+    target: Series,
+    n_sub: int = 2000,
+    rng: Optional[Generator] = None,
+) -> ndarray:
+    rng = rng or np.random.default_rng()
+    unqs, cnts = np.unique(target, return_counts=True)
+    n_min = N_CAT_LEVEL_MIN
+    idx_count = cnts < n_min
+    idx_final = np.arange(len(target))
+    drop_vals = unqs[idx_count]
+    unqs = unqs[~idx_count]
+    idx_keep = ~target.isin(drop_vals)
+    X: ndarray
+    y: ndarray
+    idx_final = idx_final[idx_keep]
+    X = df.copy(deep=True).values[idx_keep]
+    y = target.copy(deep=True).values[idx_keep]
+    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Keep fail"
+
+    # shuffle once to allow getting random first n of each class later
+    idx_shuffle = rng.permutation(len(y))
+    idx_final = idx_final[idx_shuffle]
+    X = X[idx_shuffle]
+    y = y[idx_shuffle]
+    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Shuffle fail"
+    #
+    idx = np.argsort(y)
+    idx_final = idx_final[idx]
+    X = X[idx]
+    y = y[idx]
+    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Argsort fail"
+    # this gives e.g. stops[i]:stops[i+1] are class i
+    stops = np.searchsorted(y, unqs)
+    cls_idxs = []
+    for i in range(len(stops) - 1):
+        start, stop = stops[i], stops[i + 1]
+        shuf = rng.permutation(stop - start)
+        cls_idxs.append(np.arange(start, stop)[shuf][:n_min])
+    shuf = rng.permutation(len(y) - stops[-1])
+    cls_idxs.append(np.arange(stops[-1], len(y))[shuf][:n_min])
+
+    idx_required = np.concatenate(cls_idxs).ravel()
+    idx_final_req = idx_final[idx_required]
+    X_req, y_req = X[idx_required], y[idx_required]
+    assert np.bincount(y_req).min() >= N_CAT_LEVEL_MIN, "collect fail"
+
+    n_remain = n_sub - len(y_req)
+    if n_remain <= 0:
+        return idx_final_req
+
+    idx_remain = np.ones_like(y, dtype=bool)
+    idx_remain[idx_required] = False
+    idx_final_rem = idx_final[idx_remain]
+    X_remain, y_remain = X[idx_remain], y[idx_remain]
+    n_remain = min(n_remain, len(y))
+    if n_remain >= len(y):
+        idx_full = np.concatenate([idx_final_req, idx_final_rem])
+        assert np.bincount(target[idx_full]).min() >= N_CAT_LEVEL_MIN, "remain fail"
+        return idx_full
+    else:
+        ent = rng.bit_generator.seed_seq.entropy  # type: ignore
+        smax = 2**32 - 1
+        while ent > smax:
+            ent //= 2
+
+        ss = ShuffleSplit(
+            n_splits=1,
+            train_size=n_remain,
+            random_state=ent,
+        )
+        idx = next(ss.split(X_remain))[0]
+        idx_final_strat = idx_final_rem[idx]
+        idx_full = np.concatenate([idx_final_req, idx_final_strat])
+        assert np.bincount(target[idx_full]).min() >= N_CAT_LEVEL_MIN, "concat fail"
+        return idx_full
+
+
+def get_representative_subsample(
+    prepared: PreparedData,
+    is_classification: bool,
+    rng: Optional[Generator] = None,
+) -> tuple[DataFrame, DataFrame, DataFrame, Series]:
+    X, X_cont, X_cat = prepared.X, prepared.X_cont, prepared.X_cat
+    y = prepared.y
+    rng = rng or np.random.default_rng()
+
+    if len(X) <= UNIVARIATE_PRED_MAX_N_SAMPLES:
+        return X, X_cont, X_cat, y
+
+    if is_classification:
+        strat = y
+        idx = viable_subsample(df=X, target=y, n_sub=UNIVARIATE_PRED_MAX_N_SAMPLES, rng=rng)
+        X = X.iloc[idx]
+        X_cont = X_cont.iloc[idx]
+        X_cat = X_cat.iloc[idx]
+        y = y.iloc[idx]
+    else:
+        kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
+        strat = kb.fit_transform(prepared.y.to_numpy().reshape(-1, 1))
+        n_train = UNIVARIATE_PRED_MAX_N_SAMPLES
+        ss = StratifiedShuffleSplit(n_splits=1, train_size=n_train)
+        idx = next(ss.split(strat, strat))[0]
+        X = cast(DataFrame, prepared.X.iloc[idx, :].copy(deep=True))
+        y = prepared.y.loc[idx].copy(deep=True)
+        X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
+        X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
+
+    return X, X_cont, X_cat, y
+
+
+def univariate_predictions(
+    prepared: PreparedData,
+    is_classification: bool,
+) -> tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]:
+    X, X_cont, X_cat, y = get_representative_subsample(
+        prepared=prepared, is_classification=is_classification
+    )
+    df_cont, df_cat, errs, warns = feature_target_predictions(
+        categoricals=X_cat,
+        continuous=X_cont,
+        target=y,
+        is_classification=is_classification,
+    )
+    return df_cont, df_cat, errs, warns

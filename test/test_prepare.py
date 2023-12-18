@@ -14,6 +14,7 @@ from pprint import pprint
 
 import numpy as np
 import pandas as pd
+import pytest
 from pandas import DataFrame
 from sklearn.utils.validation import check_X_y
 from tqdm import tqdm
@@ -107,16 +108,19 @@ def test_prepare_slow(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
+@pytest.mark.cached
 def test_prep_cached_fast(dataset: tuple[str, TestDataset]) -> None:
     do_prep_cached(dataset)
 
 
 @med_ds
+@pytest.mark.cached
 def test_prep_cached_med(dataset: tuple[str, TestDataset]) -> None:
     do_prep_cached(dataset)
 
 
 @slow_ds
+@pytest.mark.cached
 def test_prep_cached_slow(dataset: tuple[str, TestDataset]) -> None:
     do_prep_cached(dataset)
 

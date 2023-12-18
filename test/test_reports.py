@@ -23,10 +23,10 @@ REPORTS.mkdir(exist_ok=True, parents=True)
 if __name__ == "__main__":
     dsname: str
     ds: TestDataset
-    for dsname, ds in FAST_INSPECTION.items():
+    for dsname, ds in FAST_INSPECTION:
         df = ds.load()
         with redirect_stderr(StringIO()):
-            info = inspect_data(df=df, target="target", categoricals=ds.categoricals, _warn=False)
+            info = ds.inspect(load_cached=True)
             report = info.short_report(pad=81)
             out = REPORTS / f"{dsname}.txt"
             out.write_text(report)

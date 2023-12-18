@@ -54,7 +54,7 @@ torchvision = [
 skorch = "^0.15.0"
 openml = "^0.14.1"
 jsonpickle = "^3.0.2"
-pytest-xdist = {extras = ["psutil"], version = "^3.5.0"}
+pytest-xdist = { extras = ["psutil"], version = "^3.5.0" }
 
 
 [[tool.poetry.source]]
@@ -92,5 +92,6 @@ markers = [
   "med: marks tests as medium (deselect with '-m \"not med\"')",
   "medium: marks tests as medium (deselect with '-m \"not medium\"')",
   "fast: marks tests as fast (deselect with '-m \"not fast\"')",
+  "cached: marks tests as using cached results (deselect with '-m \"not cached\"')",
   "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
 ]

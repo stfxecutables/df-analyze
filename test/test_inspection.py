@@ -180,6 +180,7 @@ def do_caching(dataset: tuple[str, TestDataset]) -> None:
 
 
 @all_ds
+@pytest.mark.cached
 def test_caching(dataset: tuple[str, TestDataset]) -> None:
     do_caching(dataset)
 

@@ -458,5 +458,8 @@ class RegTargetInfo:
 @dataclass
 class ClsTargetInfo:
     inflation: InflationInfo
+    unqs: ndarray
+    cnts: ndarray
     p_max_cls: float
+    p_min_cls: float
     p_nan: float
