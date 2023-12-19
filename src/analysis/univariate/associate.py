@@ -230,7 +230,6 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
 
     xx = x.astype(str).to_numpy().ravel()
     x_enc = np.asarray(LabelEncoder().fit_transform(xx)).reshape(-1, 1)
-    yy = y.to_numpy().ravel()
 
     minfo = minfo_cont(x_enc, y, discrete_features=True)
     H, H_p = kruskal(x_enc.ravel(), y)

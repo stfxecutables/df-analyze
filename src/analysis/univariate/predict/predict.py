@@ -281,7 +281,7 @@ def viable_subsample(
 
     idx_required = np.concatenate(cls_idxs).ravel()
     idx_final_req = idx_final[idx_required]
-    X_req, y_req = X[idx_required], y[idx_required]
+    y_req = y[idx_required]
     assert np.bincount(y_req).min() >= N_CAT_LEVEL_MIN, "collect fail"
 
     n_remain = n_sub - len(y_req)
@@ -291,7 +291,7 @@ def viable_subsample(
     idx_remain = np.ones_like(y, dtype=bool)
     idx_remain[idx_required] = False
     idx_final_rem = idx_final[idx_remain]
-    X_remain, y_remain = X[idx_remain], y[idx_remain]
+    X_remain = X[idx_remain]
     n_remain = min(n_remain, len(y))
     if n_remain >= len(y):
         idx_full = np.concatenate([idx_final_req, idx_final_rem])

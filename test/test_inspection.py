@@ -165,7 +165,7 @@ def do_inspect_target(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
     try:
-        results = inspect_target(df, "target", is_classification=ds.is_classification)
+        inspect_target(df, "target", is_classification=ds.is_classification)
     except ValueError as e:
         message = str(e)
         if "constant after dropping NaNs" not in message:

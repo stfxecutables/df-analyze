@@ -116,16 +116,14 @@ def do_associate(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    assocs = ds.associations(load_cached=False, force=True)
-    return
+    ds.associations(load_cached=False, force=True)
 
 
 def do_associate_cached(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    assocs = ds.associations(load_cached=True)
-    return
+    ds.associations(load_cached=True)
 
 
 @fast_ds
