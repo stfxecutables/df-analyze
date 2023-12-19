@@ -11,6 +11,8 @@ sys.path.append(str(ROOT))  # isort: skip
 import sys
 import traceback
 import warnings
+from argparse import Namespace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     Optional,
@@ -39,6 +41,69 @@ from src.analysis.univariate.predict.models import (
 )
 from src.preprocessing.inspection.inspection import inspect_cls_target
 from src.preprocessing.prepare import PreparedData
+
+
+@dataclass
+class PredFiles:
+    conts = "cont.parquet"
+    cats = "cat.parquet"
+    idx = "subsample.npy"
+
+
+class PredResults:
+    def __init__(
+        self,
+        conts: Optional[DataFrame],
+        cats: Optional[DataFrame],
+        is_classification: bool,
+        idx: Optional[ndarray] = None,
+        errs: Optional[list[BaseException]] = None,
+        warns: Optional[list[WarningMessage]] = None,
+    ) -> None:
+        self.conts = conts
+        self.cats = cats
+        self.is_classification = is_classification
+        self.errs = errs
+        self.warns = warns
+        self.idx_subsample = idx
+        self.files = PredFiles()
+
+    def save(self, cachedir: Path) -> None:
+        if self.conts is not None:
+            self.conts.to_parquet(cachedir / self.files.conts)
+        else:
+            DataFrame().to_parquet(cachedir / self.files.conts)
+        if self.cats is not None:
+            self.cats.to_parquet(cachedir / self.files.cats)
+        else:
+            DataFrame().to_parquet(cachedir / self.files.conts)
+        if self.idx_subsample is not None:
+            with open(self.files.idx, "wb") as handle:
+                np.save(handle, self.idx_subsample, allow_pickle=False, fix_imports=False)
+
+    @staticmethod
+    def is_saved(cachedir: Path) -> bool:
+        files = PredFiles()
+        conts = cachedir / files.conts
+        cats = cachedir / files.cats
+        return conts.exists() and cats.exists()
+
+    @staticmethod
+    def load(cachedir: Path, is_classification: bool) -> PredResults:
+        preds = PredResults(conts=None, cats=None, is_classification=is_classification)
+        try:
+            conts = pd.read_parquet(cachedir / preds.files.conts)
+            cats = pd.read_parquet(cachedir / preds.files.cats)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Missing cached predictions at {cachedir}")
+
+        preds.conts = None if conts.empty else conts
+        preds.cats = None if cats.empty else cats
+
+        npy_file = cachedir / preds.files.idx
+        if npy_file.exists():
+            preds.idx_subsample = np.load(npy_file, allow_pickle=False, fix_imports=False)
+        return preds
 
 
 def continuous_feature_target_preds(
@@ -260,13 +325,13 @@ def get_representative_subsample(
     prepared: PreparedData,
     is_classification: bool,
     rng: Optional[Generator] = None,
-) -> tuple[DataFrame, DataFrame, DataFrame, Series]:
+) -> tuple[DataFrame, DataFrame, DataFrame, Series, ndarray]:
     X, X_cont, X_cat = prepared.X, prepared.X_cont, prepared.X_cat
     y = prepared.y
     rng = rng or np.random.default_rng()
 
     if len(X) <= UNIVARIATE_PRED_MAX_N_SAMPLES:
-        return X, X_cont, X_cat, y
+        return X, X_cont, X_cat, y, np.arange(len(y), dtype=np.int64)
 
     if is_classification:
         strat = y
@@ -286,14 +351,14 @@ def get_representative_subsample(
         X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
         X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
 
-    return X, X_cont, X_cat, y
+    return X, X_cont, X_cat, y, idx
 
 
 def univariate_predictions(
     prepared: PreparedData,
     is_classification: bool,
-) -> tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]:
-    X, X_cont, X_cat, y = get_representative_subsample(
+) -> PredResults:
+    X, X_cont, X_cat, y, idx = get_representative_subsample(
         prepared=prepared, is_classification=is_classification
     )
     df_cont, df_cat, errs, warns = feature_target_predictions(
@@ -302,4 +367,11 @@ def univariate_predictions(
         target=y,
         is_classification=is_classification,
     )
-    return df_cont, df_cat, errs, warns
+    return PredResults(
+        conts=df_cont,
+        cats=df_cat,
+        is_classification=is_classification,
+        idx=idx,
+        errs=errs,
+        warns=warns,
+    )

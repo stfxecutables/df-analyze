@@ -24,6 +24,7 @@ from sklearn.preprocessing import KBinsDiscretizer
 from src._types import EstimationMode
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import (
+    PredResults,
     feature_target_predictions,
     univariate_predictions,
 )
@@ -37,20 +38,6 @@ logger = logging.getLogger("py.warnings")
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
-
-
-def validate_y(y_encoded: Series, n_splits: int = 5) -> None:
-    y_counts = np.bincount(y_encoded)
-    min_groups = np.min(y_counts)
-    if np.all(n_splits > y_counts):
-        raise ValueError(
-            f"n_splits={n_splits} cannot be greater than the " "number of members in each class."
-        )
-    if n_splits > min_groups:
-        raise ValueError(
-            f"The least populated class in y has only {min_groups}"
-            f" members, which is less than n_splits={n_splits}."
-        )
 
 
 def will_work(n_min_cls: int, n_sub: int, n_max: int) -> bool:
@@ -88,9 +75,7 @@ def print_preds(
         print(df_cat.to_markdown(tablefmt="simple", floatfmt="0.4f"))
 
 
-def do_predict(
-    dataset: tuple[str, TestDataset]
-) -> Optional[tuple[Optional[DataFrame], Optional[DataFrame]]]:
+def do_predict(dataset: tuple[str, TestDataset]) -> Optional[PredResults]:
     filterwarnings("ignore", message="Bins whose width are too small", category=UserWarning)
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:
@@ -99,11 +84,9 @@ def do_predict(
         return  # huge multiclass target causes splitting / reduction problems
 
     try:
-        df_cont, df_cat = ds.predictions(load_cached=False, force=True)
-        # if len(errs) > 0:
-        #     raise errs[0]
-        print_preds(dsname, df_cont, df_cat, ds.is_classification)
-        return df_cont, df_cat
+        preds = ds.predictions(load_cached=False, force=True)
+        print_preds(dsname, preds.conts, preds.cats, ds.is_classification)
+        return preds
     except ValueError as e:
         if dsname in ["credit-approval_reproduced"]:
             message = str(e)
@@ -125,9 +108,9 @@ def do_predict_cached(
         return  # huge multiclass target causes splitting / reduction problems
 
     try:
-        df_cont, df_cat = ds.predictions(load_cached=True)
-        print_preds(dsname, df_cont, df_cat, ds.is_classification)
-        return df_cont, df_cat
+        preds = ds.predictions(load_cached=True)
+        print_preds(dsname, preds.conts, preds.cats, ds.is_classification)
+        return preds.conts, preds.cats
     except ValueError as e:
         if dsname in ["credit-approval_reproduced"]:
             message = str(e)
@@ -142,7 +125,7 @@ def do_associate(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    cont, cat = ds.associations(load_cached=False, force=True)
+    assocs = ds.associations(load_cached=False, force=True)
     return
 
 
@@ -150,7 +133,7 @@ def do_associate_cached(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    cont, cat = ds.associations(load_cached=True)
+    assocs = ds.associations(load_cached=True)
     return
 
 
@@ -237,6 +220,5 @@ if __name__ == "__main__":
         print(f"Completed: {dsname}")
         if results is None:
             continue
-        df_cont, df_cat, errs, warns = results
-        if len(warns) > 0:
-            raise ValueError(f"Got warning for {dataset[0]}:\n{warns[0]}")
+        if results.warns is not None and (len(results.warns) > 0):
+            raise ValueError(f"Got warning for {dataset[0]}:\n{results.warns[0]}")

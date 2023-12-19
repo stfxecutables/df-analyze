@@ -21,8 +21,8 @@ from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
 
 from src._constants import TESTDATA
-from src.analysis.univariate.associate import target_associations
-from src.analysis.univariate.predict.predict import univariate_predictions
+from src.analysis.univariate.associate import AssocResults, target_associations
+from src.analysis.univariate.predict.predict import PredResults, univariate_predictions
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
@@ -75,15 +75,6 @@ class TestDataset:
         if not self.preds_cachedir.exists():
             self.preds_cachedir.mkdir(exist_ok=True, parents=True)
 
-        self.assoc_cachefiles = {
-            "cont": self.assoc_cachedir / "cont.parquet",
-            "cat": self.assoc_cachedir / "cat.parquet",
-        }
-        self.preds_cachefiles = {
-            "cont": self.preds_cachedir / "cont.parquet",
-            "cat": self.preds_cachedir / "cat.parquet",
-        }
-
     def inspect(self, load_cached: bool = True, force: bool = False) -> InspectionResults:
         if load_cached and force:
             raise ValueError("Cannot both use and overwrite cache, this is pointless.")
@@ -131,89 +122,37 @@ class TestDataset:
                 pickle.dump(prep, handle)
         return prep
 
-    def associations(
-        self, load_cached: bool = True, force: bool = False
-    ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
-        if (
-            load_cached
-            and all(file.exists() for file in self.assoc_cachefiles.values())
-            and (not force)
-        ):
-            conts = pd.read_parquet(self.assoc_cachefiles["cont"])
-            cats = pd.read_parquet(self.assoc_cachefiles["cat"])
-            if conts.empty:
-                conts = None
-            if cats.empty:
-                cats = None
-            return conts, cats
+    def associations(self, load_cached: bool = True, force: bool = False) -> AssocResults:
+        if load_cached and AssocResults.is_saved(self.assoc_cachedir) and (not force):
+            return AssocResults.load(self.assoc_cachedir, self.is_classification)
 
         prep = self.prepared(load_cached=True)
-        conts, cats = target_associations(prep)
-        if conts is None:
-            conts = DataFrame()
-        if cats is None:
-            cats = DataFrame()
+        assocs = target_associations(prep)
 
         if force:
-            conts.to_parquet(self.assoc_cachefiles["cont"])
-            cats.to_parquet(self.assoc_cachefiles["cat"])
-            if conts.empty:
-                conts = None
-            if cats.empty:
-                cats = None
-            return conts, cats
+            assocs.save(self.assoc_cachedir)
+            return assocs
 
-        if not all(file.exists() for file in self.assoc_cachefiles.values()):
-            conts.to_parquet(self.assoc_cachefiles["cont"])
-            cats.to_parquet(self.assoc_cachefiles["cat"])
+        if not AssocResults.is_saved(self.assoc_cachedir):
+            assocs.save(self.assoc_cachedir)
 
-        if conts.empty:
-            conts = None
-        if cats.empty:
-            cats = None
-        return conts, cats
+        return assocs
 
-    def predictions(
-        self, load_cached: bool = True, force: bool = False
-    ) -> tuple[Optional[DataFrame], Optional[DataFrame]]:
-        if (
-            load_cached
-            and all(file.exists() for file in self.preds_cachefiles.values())
-            and (not force)
-        ):
-            conts = pd.read_parquet(self.preds_cachefiles["cont"])
-            cats = pd.read_parquet(self.preds_cachefiles["cat"])
-            if conts.empty:
-                conts = None
-            if cats.empty:
-                cats = None
-            return conts, cats
+    def predictions(self, load_cached: bool = True, force: bool = False) -> PredResults:
+        if load_cached and PredResults.is_saved(self.preds_cachedir) and (not force):
+            return PredResults.load(self.preds_cachedir, self.is_classification)
 
         prep = self.prepared(load_cached=True)
-        conts, cats, ers, warns = univariate_predictions(prep, self.is_classification)
-        if conts is None:
-            conts = DataFrame()
-        if cats is None:
-            cats = DataFrame()
+        preds = univariate_predictions(prep, self.is_classification)
 
         if force:
-            conts.to_parquet(self.preds_cachefiles["cont"])
-            cats.to_parquet(self.preds_cachefiles["cat"])
-            if conts.empty:
-                conts = None
-            if cats.empty:
-                cats = None
-            return conts, cats
+            preds.save(self.preds_cachedir)
+            return preds
 
-        if not all(file.exists() for file in self.preds_cachefiles.values()):
-            conts.to_parquet(self.preds_cachefiles["cont"])
-            cats.to_parquet(self.preds_cachefiles["cat"])
+        if not preds.is_saved(self.preds_cachedir):
+            preds.save(self.preds_cachedir)
 
-        if conts.empty:
-            conts = None
-        if cats.empty:
-            cats = None
-        return conts, cats
+        return preds
 
     def load(self) -> DataFrame:
         return pd.read_parquet(self.datapath)

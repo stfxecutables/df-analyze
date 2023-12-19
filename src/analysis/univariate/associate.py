@@ -10,9 +10,11 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     Any,
+    Optional,
 )
 
 import numpy as np
@@ -36,6 +38,55 @@ from src._types import EstimationMode
 from src.analysis.metrics import auroc, cohens_d, cramer_v
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.preprocessing.prepare import PreparedData
+
+
+@dataclass
+class AssocFiles:
+    conts = "cont.parquet"
+    cats = "cat.parquet"
+
+
+class AssocResults:
+    def __init__(
+        self,
+        conts: Optional[DataFrame],
+        cats: Optional[DataFrame],
+        is_classification: bool,
+    ) -> None:
+        self.conts = conts
+        self.cats = cats
+        self.is_classification = is_classification
+        self.files = AssocFiles()
+
+    def save(self, cachedir: Path) -> None:
+        if self.conts is not None:
+            self.conts.to_parquet(cachedir / self.files.conts)
+        else:
+            DataFrame().to_parquet(cachedir / self.files.conts)
+        if self.cats is not None:
+            self.cats.to_parquet(cachedir / self.files.cats)
+        else:
+            DataFrame().to_parquet(cachedir / self.files.conts)
+
+    @staticmethod
+    def is_saved(cachedir: Path) -> bool:
+        files = AssocFiles()
+        conts = cachedir / files.conts
+        cats = cachedir / files.cats
+        return conts.exists() and cats.exists()
+
+    @staticmethod
+    def load(cachedir: Path, is_classification: bool) -> AssocResults:
+        preds = AssocResults(conts=None, cats=None, is_classification=is_classification)
+        try:
+            conts = pd.read_parquet(cachedir / preds.files.conts)
+            cats = pd.read_parquet(cachedir / preds.files.cats)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Missing cached associations at {cachedir}")
+
+        preds.conts = None if conts.empty else conts
+        preds.cats = None if cats.empty else cats
+        return preds
 
 
 def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> DataFrame:
@@ -260,7 +311,7 @@ def categorical_feature_target_stats(
 
 def target_associations(
     data: PreparedData,
-) -> Any:
+) -> AssocResults:
     """
     For each non-categorical (including ordinal) feature:
 
@@ -348,4 +399,8 @@ def target_associations(
         df_cont = pd.concat(df_conts, axis=0) if len(df_conts) > 0 else None
         df_cat = pd.concat(df_cats, axis=0) if len(df_cats) > 0 else None
 
-    return df_cont, df_cat
+    return AssocResults(
+        conts=df_cont,
+        cats=df_cat,
+        is_classification=data.is_classification,
+    )

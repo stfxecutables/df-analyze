@@ -6,7 +6,7 @@ data/*.rar
 data/testing/**/*.csv
 data/testing/**/*.txt
 data/testing/**/*.parquet
-data/testing/__INSPECT_CACHE__
+data/testing/__*_CACHE__
 
 test_results
 
