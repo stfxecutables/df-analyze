@@ -8,9 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
-from pprint import pprint
 
 import numpy as np
 import pandas as pd
@@ -19,14 +16,8 @@ from pandas import DataFrame
 from sklearn.utils.validation import check_X_y
 from tqdm import tqdm
 
-from src.preprocessing.inspection.inspection import (
-    inspect_data,
-)
-from src.preprocessing.prepare import prepare_data
 from src.testing.datasets import (
     FAST_INSPECTION,
-    MEDIUM_INSPECTION,
-    SLOW_INSPECTION,
     TestDataset,
     fast_ds,
     med_ds,

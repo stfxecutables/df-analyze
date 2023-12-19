@@ -1,8 +1,6 @@
 import sys
-from functools import partial
 from pathlib import Path
 from shutil import get_terminal_size
-from typing import Any
 from warnings import warn
 
 import numpy as np
@@ -21,12 +19,9 @@ from src.preprocessing.inspection.inspection import (
     InspectionInfo,
     InspectionResults,
     convert_categoricals,
-    inspect_data,
-    inspect_target,
     messy_inform,
     unify_nans,
 )
-from src.timing import timed
 
 
 class DataCleaningWarning(UserWarning):

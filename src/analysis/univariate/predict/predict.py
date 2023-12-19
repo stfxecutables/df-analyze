@@ -11,12 +11,10 @@ sys.path.append(str(ROOT))  # isort: skip
 import sys
 import traceback
 import warnings
-from argparse import Namespace
 from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     Optional,
-    Union,
     cast,
 )
 from warnings import WarningMessage
@@ -27,19 +25,15 @@ from joblib import Parallel, delayed
 from numpy import ndarray
 from numpy.random import Generator
 from pandas import DataFrame, Series
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, train_test_split
-from sklearn.preprocessing import KBinsDiscretizer, LabelEncoder, MinMaxScaler
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
+from sklearn.preprocessing import KBinsDiscretizer, LabelEncoder
 from tqdm import tqdm
 
-from src._constants import N_CAT_LEVEL_MIN, N_TARG_LEVEL_MIN, UNIVARIATE_PRED_MAX_N_SAMPLES
-from src._types import EstimationMode
+from src._constants import N_CAT_LEVEL_MIN, UNIVARIATE_PRED_MAX_N_SAMPLES
 from src.analysis.univariate.predict.models import (
     CLS_MODELS,
     REG_MODELS,
-    SVMClassifier,
-    SVMRegressor,
 )
-from src.preprocessing.inspection.inspection import inspect_cls_target
 from src.preprocessing.prepare import PreparedData
 
 

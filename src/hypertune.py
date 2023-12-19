@@ -50,7 +50,6 @@ from src.scoring import (
     auc_scorer,
     expl_var_scorer,
     mae_scorer,
-    mape_scorer,
     mdae_scorer,
     mse_scorer,
     r2_scorer,

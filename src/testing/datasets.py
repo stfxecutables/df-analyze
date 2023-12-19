@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pickle
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
 import jsonpickle

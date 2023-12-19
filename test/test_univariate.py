@@ -13,23 +13,14 @@ import sys
 from math import ceil
 from pathlib import Path
 from typing import Optional
-from warnings import WarningMessage, filterwarnings
+from warnings import filterwarnings
 
 import numpy as np
 import pytest
 from pandas import DataFrame, Series
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit, train_test_split
-from sklearn.preprocessing import KBinsDiscretizer
 
-from src._types import EstimationMode
-from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import (
     PredResults,
-    feature_target_predictions,
-    univariate_predictions,
-)
-from src.preprocessing.prepare import (
-    prepare_data,
 )
 from src.testing.datasets import TEST_DATASETS, TestDataset, fast_ds, med_ds, slow_ds
 

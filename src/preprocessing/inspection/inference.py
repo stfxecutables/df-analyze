@@ -27,7 +27,6 @@ from src.preprocessing.inspection.text import (
     COERCED_CONT_INFO,
     COERCED_ORD_INFO,
     CONST_INFO,
-    CONT_INFO,
     MAYBE_CAT_INFO,
     MAYBE_CONT_INFO,
     MAYBE_ID_INFO,

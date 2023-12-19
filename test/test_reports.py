@@ -11,7 +11,6 @@ sys.path.append(str(ROOT))  # isort: skip
 from contextlib import redirect_stderr
 from io import StringIO
 
-from src.preprocessing.inspection.inspection import inspect_data
 from src.testing.datasets import (
     FAST_INSPECTION,
     TestDataset,

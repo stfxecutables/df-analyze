@@ -8,9 +8,7 @@ from typing import Optional, Union, overload
 import numpy as np
 from joblib import Parallel, delayed
 from pandas import DataFrame, Series
-from sklearn.dummy import DummyClassifier, DummyRegressor
 from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.model_selection import cross_val_score
 from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
@@ -22,7 +20,6 @@ from src.preprocessing.inspection.containers import (
     InspectionInfo,
     InspectionResults,
     RegTargetInfo,
-    TargetInfo,
 )
 from src.preprocessing.inspection.inference import (
     Inference,

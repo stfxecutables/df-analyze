@@ -19,7 +19,6 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from numpy import ndarray
 from pandas import DataFrame, Series
 from scipy.stats import (
     brunnermunzel,
@@ -34,9 +33,7 @@ from sklearn.feature_selection import mutual_info_classif as minfo_cat
 from sklearn.feature_selection import mutual_info_regression as minfo_cont
 from sklearn.preprocessing import LabelEncoder
 
-from src._types import EstimationMode
 from src.analysis.metrics import auroc, cohens_d, cramer_v
-from src.preprocessing.inspection.inspection import InspectionResults
 from src.preprocessing.prepare import PreparedData
 
 
