@@ -11,14 +11,17 @@ sys.path.append(str(ROOT))  # isort: skip
 import sys
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import (
     Any,
     Optional,
+    Union,
 )
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from pandas import DataFrame, Series
 from scipy.stats import (
     brunnermunzel,
@@ -32,9 +35,217 @@ from sklearn.feature_selection import f_regression
 from sklearn.feature_selection import mutual_info_classif as minfo_cat
 from sklearn.feature_selection import mutual_info_regression as minfo_cont
 from sklearn.preprocessing import LabelEncoder
+from tqdm import tqdm
 
 from src.analysis.metrics import auroc, cohens_d, cramer_v
 from src.preprocessing.prepare import PreparedData
+
+
+class Association:
+    def has_significance(self) -> bool:
+        raise NotImplementedError()
+
+    def higher_is_better(self) -> bool:
+        raise NotImplementedError()
+
+    def p_value(self) -> Optional[str]:
+        raise NotImplementedError()
+
+    @staticmethod
+    def default() -> Enum:
+        raise NotImplementedError()
+
+
+class ContAssociation(Association):
+    pass
+
+
+class CatAssociation(Association):
+    pass
+
+
+class ContClsStats(ContAssociation, Enum):
+    TTest = "t"
+    MannWhitneyU = "U"
+    BrunnerMunzelW = "W"
+    Correlation = "corr"
+    CohensD = "cohen_d"
+    AUROC = "AUROC"
+    MutualInfo = "mut_info"
+
+    @staticmethod
+    def default() -> ContClsStats:
+        return ContClsStats.MutualInfo
+
+    def has_significance(self) -> bool:
+        return {
+            ContClsStats.TTest: True,
+            ContClsStats.MannWhitneyU: True,
+            ContClsStats.BrunnerMunzelW: True,
+            ContClsStats.Correlation: True,
+            ContClsStats.CohensD: False,
+            ContClsStats.AUROC: False,
+            ContClsStats.MutualInfo: False,
+        }[self]
+
+    def higher_is_better(self) -> bool:
+        return {
+            ContClsStats.TTest: True,
+            ContClsStats.MannWhitneyU: True,
+            ContClsStats.BrunnerMunzelW: True,
+            ContClsStats.Correlation: True,
+            ContClsStats.CohensD: True,
+            ContClsStats.AUROC: True,
+            ContClsStats.MutualInfo: True,
+        }[self]
+
+    def p_value(self) -> str:
+        if not self.has_significance():
+            raise ValueError(f"No statistical signficance for {self}")
+        return {
+            ContClsStats.TTest: "t_p",
+            ContClsStats.MannWhitneyU: "U_p",
+            ContClsStats.BrunnerMunzelW: "W_p",
+            ContClsStats.Correlation: "corr_p",
+        }[self]
+
+
+class CatClsStats(CatAssociation, Enum):
+    MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
+    KruskalWallaceH = "H"
+    CramerV = "V"  # Cramer's V
+
+    @staticmethod
+    def default() -> CatClsStats:
+        # on test datasets, Cramer V and mut_info have Pearson correlations
+        # over 0.94 and Spearman correlations of up to 1.0 and most above
+        # 0.96. CramerV is in [0, 1], this gives the illusion of
+        # interpretability and comparability that people usually want, but
+        # also it can fail where mutual information does not.
+        return CatClsStats.MutualInfo
+
+    def has_significance(self) -> bool:
+        return {
+            CatClsStats.MutualInfo: False,
+            CatClsStats.KruskalWallaceH: True,
+            CatClsStats.CramerV: False,
+        }[self]
+
+    def higher_is_better(self) -> bool:
+        return {
+            CatClsStats.MutualInfo: True,
+            CatClsStats.KruskalWallaceH: True,
+            CatClsStats.CramerV: True,
+        }[self]
+
+    def p_value(self) -> Optional[str]:
+        if not self.has_significance():
+            raise ValueError(f"No statistical signficance for {self}")
+        return {
+            CatClsStats.MutualInfo: None,
+            CatClsStats.KruskalWallaceH: "H_p",
+            CatClsStats.CramerV: None,
+        }[self]
+
+
+class ContRegStats(ContAssociation, Enum):
+    PearsonR = "pearson_r"
+    SpearmanR = "spearman_r"
+    MutualInfo = "mut_info"
+    F = "F"
+
+    @staticmethod
+    def default() -> ContRegStats:
+        return ContRegStats.F
+
+    def has_significance(self) -> bool:
+        return {
+            ContRegStats.PearsonR: True,
+            ContRegStats.SpearmanR: True,
+            ContRegStats.MutualInfo: False,
+            ContRegStats.F: True,
+        }[self]
+
+    def higher_is_better(self) -> bool:
+        return {
+            ContRegStats.PearsonR: True,
+            ContRegStats.SpearmanR: True,
+            ContRegStats.MutualInfo: True,
+            ContRegStats.F: True,
+        }[self]
+
+    def p_value(self) -> Optional[str]:
+        if not self.has_significance():
+            raise ValueError(f"No statistical signficance for {self}")
+        return {
+            ContRegStats.PearsonR: "pearson_p",
+            ContRegStats.SpearmanR: "spearman_p",
+            ContRegStats.MutualInfo: None,
+            ContRegStats.F: "F_p",
+        }[self]
+
+
+class CatRegStats(CatAssociation, Enum):
+    MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
+    H = "H"  # Kruskal-Wallace H
+
+    @staticmethod
+    def default() -> CatRegStats:
+        return CatRegStats.H
+
+    def has_significance(self) -> bool:
+        return {
+            CatRegStats.MutualInfo: False,
+            CatRegStats.H: True,
+        }[self]
+
+    def higher_is_better(self) -> bool:
+        return {
+            CatRegStats.MutualInfo: True,
+            CatRegStats.H: True,
+        }[self]
+
+    def p_value(self) -> Optional[str]:
+        if not self.has_significance():
+            raise ValueError(f"No statistical signficance for {self}")
+        return {
+            CatRegStats.MutualInfo: None,
+            CatRegStats.H: "H_p",
+        }[self]
+
+
+CONT_FEATURE_CAT_TARGET_LEVEL_STATS = [
+    "t",
+    "t_p",
+    "U",
+    "U_p",
+    "W",
+    "W_p",
+    "cohen_d",
+    "AUROC",
+    "corr",
+    "corr_p",
+    "mut_info",
+]
+
+CONT_FEATURE_CONT_TARGET_STATS = [
+    "pearson_r",
+    "pearson_p",
+    "spearman_r",
+    "spearman_p",
+    "F",
+    "F_p",
+    "mut_info",
+]
+
+CAT_FEATURE_CONT_TARGET_STATS = [
+    "mut_info",  # sklearn.feature_selection.mutual_info_regression
+    "H",  # Kruskal-Wallace H
+    "H_p",
+]
+
+CAT_FEATURE_CAT_TARGET_LEVEL_STATS = ["cramer_v"]
+CAT_FEATURE_CAT_TARGET_STATS = ["cramer_v", "H", "mut_info"]
 
 
 @dataclass
@@ -56,14 +267,11 @@ class AssocResults:
         self.files = AssocFiles()
 
     def save(self, cachedir: Path) -> None:
-        if self.conts is not None:
-            self.conts.to_parquet(cachedir / self.files.conts)
-        else:
-            DataFrame().to_parquet(cachedir / self.files.conts)
-        if self.cats is not None:
-            self.cats.to_parquet(cachedir / self.files.cats)
-        else:
-            DataFrame().to_parquet(cachedir / self.files.conts)
+        conts = DataFrame() if self.conts is None else self.conts
+        cats = DataFrame() if self.cats is None else self.cats
+
+        conts.to_parquet(cachedir / self.files.conts)
+        cats.to_parquet(cachedir / self.files.cats)
 
     @staticmethod
     def is_saved(cachedir: Path) -> bool:
@@ -87,19 +295,7 @@ class AssocResults:
 
 
 def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> DataFrame:
-    stats = [
-        "t",
-        "t_p",
-        "U",
-        "U_p",
-        "W",
-        "W_p",
-        "cohen_d",
-        "AUROC",
-        "corr",
-        "corr_p",
-        "mut_info",
-    ]
+    stats = CONT_FEATURE_CAT_TARGET_LEVEL_STATS
 
     idx_level = y == level
     y_bin = idx_level.astype(float)
@@ -157,15 +353,7 @@ def cont_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
     stats: DataFrame
         Table of stats
     """
-    stats = [
-        "pearson_r",
-        "pearson_p",
-        "spearman_r",
-        "spearman_p",
-        "F",
-        "F_p",
-        "mut_info",
-    ]
+    stats = CONT_FEATURE_CONT_TARGET_STATS
 
     xx = x.to_numpy().ravel()
     yy = y.to_numpy().ravel()
@@ -188,7 +376,7 @@ def cont_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
 
     return DataFrame(
         data=data,
-        index=[f"{x.name}_{y.name}"],
+        index=[f"{x.name}"],
         columns=stats,
     )
 
@@ -222,11 +410,7 @@ def continuous_feature_target_stats(
 
 
 def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
-    stats = [
-        "mut_info",  # sklearn.feature_selection.mutual_info_regression
-        "H",  # Kruskal-Wallace H
-        "H_p",
-    ]
+    stats = CAT_FEATURE_CONT_TARGET_STATS
 
     xx = x.astype(str).to_numpy().ravel()
     x_enc = np.asarray(LabelEncoder().fit_transform(xx)).reshape(-1, 1)
@@ -242,30 +426,35 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
 
     return DataFrame(
         data=data,
-        index=[f"{x.name}_{y.name}"],
+        index=[f"{x.name}"],
         columns=stats,
     )
 
 
-def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str) -> DataFrame:
-    # stats = ["cramer_v", "mut_info"]
-    # stats = ["cramer_v", "kl_div"]
-    stats = ["cramer_v"]
-
+def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str, label: str) -> DataFrame:
+    stats = ["cramer_v", "H", "H_p", "mut_info"]
     idx_level = y == level
-    y_bin = idx_level.astype(float)
+    y_bin = idx_level.astype(np.int64)
 
-    # minfo = minfo_cat(xx.reshape(-1, 1), y_bin, discrete_features=True)
+    xx = x.astype(str).to_numpy().ravel()
+    x_enc = np.asarray(LabelEncoder().fit_transform(xx)).reshape(-1, 1)
+    try:
+        H, H_p = kruskal(x_enc.ravel(), y_bin)
+    except ValueError:  # "All numbers are identical in kruskal"
+        H, H_p = 0, np.nan
+
+    minfo = minfo_cat(x_enc.reshape(-1, 1), y_bin, discrete_features=True)
 
     data = {
-        "cramer_v": cramer_v(x, y_bin),
-        # "kl_div": relative_entropy(x, y_bin),  # need x and y have same n_cls
-        # "mut_into": minfo,  # always NaN
+        "cramer_v": cramer_v(x_enc, y_bin),
+        "H": H,
+        "H_p": H_p,
+        "mut_info": minfo.item(),
     }
 
     return DataFrame(
         data=data,
-        index=[f"{x.name}_{y.name}.{level}"],
+        index=[f"{x.name}__{y.name}.{label}"],
         columns=stats,
     )
 
@@ -274,6 +463,7 @@ def categorical_feature_target_stats(
     categoricals: DataFrame,
     column: str,
     target: Series,
+    labels: Optional[dict[int, str]],
     is_classification: bool,
 ) -> DataFrame:
     ...
@@ -281,32 +471,33 @@ def categorical_feature_target_stats(
     y = target
 
     if is_classification:
+        assert labels is not None, "Missing target labels"
         xx = x.astype(str).to_numpy().ravel()
         x_enc = np.asarray(LabelEncoder().fit_transform(xx)).ravel()
         xs = Series(data=x_enc, name=x.name)
-        levels = np.unique(y.astype(str)).tolist()
-        is_multiclass = len(levels) > 2
+        levels = np.unique(y).tolist()
 
         descs = []
         for level in levels:
-            desc = cat_feature_cat_target_level_stats(xs, y, level=level)
+            label = labels[int(level)]
+            desc = cat_feature_cat_target_level_stats(xs, y, level=level, label=label)
             descs.append(desc)
         desc = pd.concat(descs, axis=0)
 
-        if is_multiclass:
-            V = cramer_v(x_enc.reshape(-1, 1), y)
-            minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
-            df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}_{y.name}"])
-            desc = pd.concat([desc, df], axis=0)
-            # TODO: collect mean stats when this makes sense?
-            # TODO: collect some other fancy stat?
+        V = cramer_v(x_enc.reshape(-1, 1), y)
+        minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
+        df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}"])
+        desc = desc.dropna(axis="columns", how="all")
+        desc = pd.concat([desc, df], axis=0)
+        # TODO: collect mean stats when this makes sense?
+        # TODO: collect some other fancy stat?
         return desc
 
     return cat_feature_cont_target_stats(x, y)
 
 
 def target_associations(
-    data: PreparedData,
+    prepared: PreparedData,
 ) -> AssocResults:
     """
     For each non-categorical (including ordinal) feature:
@@ -365,32 +556,40 @@ def target_associations(
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
-        df_conts = []
         df_cats = []
 
-        cont = data.X_cont
-        for col in cont.columns:
-            df_conts.append(
-                continuous_feature_target_stats(
-                    continuous=cont,
-                    column=col,
-                    target=data.y,
-                    is_classification=data.is_classification,
-                )
+        cont = prepared.X_cont
+        df_conts: list[DataFrame] = Parallel(n_jobs=-1)(
+            delayed(continuous_feature_target_stats)(
+                continuous=cont,
+                column=col,
+                target=prepared.y,
+                is_classification=prepared.is_classification,
             )
+            for col in tqdm(
+                cont.columns,
+                desc="Computing associations for continuous features",
+                total=cont.shape[1],
+            )
+        )  # type: ignore
 
         # Currently X_cat is the raw cat data, neither label- nor one-hot-
         # encoded.
-        cats = data.X_cat
-        for col in cats.columns:
-            df_cats.append(
-                categorical_feature_target_stats(
-                    categoricals=cats,
-                    column=col,
-                    target=data.y,
-                    is_classification=data.is_classification,
-                )
+        cats = prepared.X_cat
+        df_cats: list[DataFrame] = Parallel(n_jobs=-1)(
+            delayed(categorical_feature_target_stats)(
+                categoricals=cats,
+                column=col,
+                target=prepared.y,
+                labels=prepared.labels,
+                is_classification=prepared.is_classification,
             )
+            for col in tqdm(
+                cats.columns,
+                desc="Computing associations for categorical features",
+                total=cats.shape[1],
+            )
+        )  # type: ignore
 
         df_cont = pd.concat(df_conts, axis=0) if len(df_conts) > 0 else None
         df_cat = pd.concat(df_cats, axis=0) if len(df_cats) > 0 else None
@@ -398,5 +597,5 @@ def target_associations(
     return AssocResults(
         conts=df_cont,
         cats=df_cat,
-        is_classification=data.is_classification,
+        is_classification=prepared.is_classification,
     )

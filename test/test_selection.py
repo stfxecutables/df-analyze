@@ -4,8 +4,68 @@ from _pytest.capture import CaptureFixture
 from src._constants import ROOT
 from src.cli.cli import get_options
 from src.feature_selection import select_features
+from src.selection.filter import filter_by_univariate_associations, filter_by_univariate_predictions
+from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
 DATA = ROOT / "data/banking/bank.json"
+
+
+def do_association_select(dataset: tuple[str, TestDataset]) -> list[str]:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    assocs = ds.associations(load_cached=True)
+    results = filter_by_univariate_associations(
+        prepared=prepared,
+        associations=assocs,
+    )
+    return results
+
+
+def do_predict_select(dataset: tuple[str, TestDataset]) -> list[str]:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    predictions = ds.predictions(load_cached=True)
+    results = filter_by_univariate_predictions(
+        prepared=prepared,
+        predictions=predictions,
+    )
+    return results
+
+
+@fast_ds
+def test_associate_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    dsname = dataset[0]
+    if dsname in ["credit-approval_reproduced"]:
+        return
+    do_association_select(dataset)
+
+
+@med_ds
+def test_associate_select_med(dataset: tuple[str, TestDataset]) -> None:
+    do_association_select(dataset)
+
+
+@slow_ds
+def test_associate_select_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_association_select(dataset)
+
+
+@fast_ds
+def test_predict_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    dsname = dataset[0]
+    if dsname in ["credit-approval_reproduced"]:
+        return
+    do_predict_select(dataset)
+
+
+@med_ds
+def test_predict_select_med(dataset: tuple[str, TestDataset]) -> None:
+    do_predict_select(dataset)
+
+
+@slow_ds
+def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_predict_select(dataset)
 
 
 class TestBasicSelections:

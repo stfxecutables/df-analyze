@@ -272,6 +272,7 @@ INSPECTION_TIMES = {
     "bank-marketing": 1.5273100420000034,
     "cholesterol": 1.4553109579999997,
     "ames_housing": 1.2510204170000012,
+    "community_crime": 1.2,  # guess
     "ipums_la_97-small": 1.0387160410000007,
     "ipums_la_99-small": 0.9914642499999999,
     "ipums_la_98-small": 0.9687000410000017,

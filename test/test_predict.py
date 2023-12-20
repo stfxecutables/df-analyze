@@ -112,53 +112,6 @@ def do_predict_cached(
         raise ValueError(f"Failed to make univariate predictions for {dsname}") from e
 
 
-def do_associate(dataset: tuple[str, TestDataset]) -> None:
-    dsname, ds = dataset
-    if dsname in ["credit-approval_reproduced"]:  # const targets
-        return
-    ds.associations(load_cached=False, force=True)
-
-
-def do_associate_cached(dataset: tuple[str, TestDataset]) -> None:
-    dsname, ds = dataset
-    if dsname in ["credit-approval_reproduced"]:  # const targets
-        return
-    ds.associations(load_cached=True)
-
-
-@fast_ds
-def test_associate_fast(dataset: tuple[str, TestDataset]) -> None:
-    do_associate(dataset)
-
-
-@med_ds
-def test_associate_med(dataset: tuple[str, TestDataset]) -> None:
-    do_associate(dataset)
-
-
-@slow_ds
-def test_associate_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_associate(dataset)
-
-
-@pytest.mark.cached
-@fast_ds
-def test_associate_cached_fast(dataset: tuple[str, TestDataset]) -> None:
-    do_associate_cached(dataset)
-
-
-@pytest.mark.cached
-@med_ds
-def test_associate_cached_med(dataset: tuple[str, TestDataset]) -> None:
-    do_associate_cached(dataset)
-
-
-@pytest.mark.cached
-@slow_ds
-def test_associate_cached_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_associate_cached(dataset)
-
-
 @fast_ds
 def test_predict_fast(dataset: tuple[str, TestDataset]) -> None:
     do_predict(dataset)

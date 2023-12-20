@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Any
+from typing import Any, Optional, Union
 
 import numpy as np
 from pandas import DataFrame, Series
@@ -34,6 +34,7 @@ class PreparedData:
         X_cont: DataFrame,
         X_cat: DataFrame,
         y: Series,
+        labels: Optional[dict[int, str]],
         inspection: InspectionResults,
         is_classification: bool,
         info: dict[str, Any],
@@ -48,6 +49,7 @@ class PreparedData:
         self.X_cat: DataFrame = X_cat
         self.y: Series = y
         self.target = self.y.name
+        self.labels = labels
 
     def validate(
         self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series
@@ -85,14 +87,15 @@ def prepare_target(
     target: str,
     is_classification: bool,
     _warn: bool = True,
-) -> tuple[DataFrame, Series]:
+) -> tuple[DataFrame, Series, Optional[dict[int, str]]]:
     y = df[target]
     df = df.drop(columns=target)
     if is_classification:
-        df, y = encode_target(df, y, _warn=_warn)
+        df, y, labels = encode_target(df, y, _warn=_warn)
     else:
+        labels = None
         df, y = clean_regression_target(df, y)
-    return df, y
+    return df, y, labels
 
 
 def prepare_data(
@@ -130,9 +133,10 @@ def prepare_data(
     info = timer(inspect_target)(df, target, is_classification=is_classification)
     df, n_targ_drop = timer(drop_target_nans)(df, target)
     if is_classification:
-        df, y = timer(encode_target)(df, df[target])
+        df, y, labels = timer(encode_target)(df, df[target])
     else:
         df, y = timer(clean_regression_target)(df, df[target])
+        labels = None
 
     df = timer(drop_unusable)(df, results, _warn=_warn)
     df, X_cont, n_ind_added = handle_continuous_nans(
@@ -148,6 +152,7 @@ def prepare_data(
         X_cont=X_cont,
         X_cat=X_cat,
         y=y,
+        labels=labels,
         info={
             "n_samples_dropped_via_target_NaNs": n_targ_drop,
             "n_cont_indicator_added": n_ind_added,

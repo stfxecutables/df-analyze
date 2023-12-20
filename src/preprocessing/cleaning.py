@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from shutil import get_terminal_size
+from typing import Union
 from warnings import warn
 
 import numpy as np
@@ -221,13 +222,15 @@ def handle_continuous_nans(
     return X, X_cont, 0
 
 
-def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[DataFrame, Series]:
+def encode_target(
+    df: DataFrame, target: Series, _warn: bool = False
+) -> tuple[DataFrame, Series, dict[int, str]]:
     unqs, cnts = np.unique(unify_nans(target).astype(str), return_counts=True)
     if len(unqs) <= 1:
         raise ValueError(f"Target variable {target.name} is constant.")
     idx = cnts <= N_TARG_LEVEL_MIN
     n_cls = len(unqs)
-    if np.sum(idx) > 0:
+    if np.sum(idx).item() > 0:
         if _warn:
             cleaning_inform(
                 "The target variable has a number of class labels "
@@ -238,7 +241,7 @@ def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[D
                 "statistically meaningful (i.e. the uncertainty on those "
                 "metrics or estimates will be exceedingly large). We thus "
                 "remove all samples that belong to these labels, bringing the "
-                f"total number of classes down to {n_cls - np.sum(idx)} "
+                f"total number of classes down to {n_cls - np.sum(idx).item()}"
             )
         idx_drop = ~target.isin(unqs[idx])
         df = df.copy().loc[idx_drop].reset_index(drop=True)
@@ -251,8 +254,11 @@ def encode_target(df: DataFrame, target: Series, _warn: bool = False) -> tuple[D
     df = df.copy().loc[idx_drop].reset_index(drop=True)
     target = target[idx_drop].reset_index(drop=True)
 
-    encoded = np.array(LabelEncoder().fit_transform(target))
-    return df, Series(encoded, name=target.name)
+    enc = LabelEncoder()
+    encoded = np.array(enc.fit_transform(target))
+    classes = enc.classes_.tolist()
+    ints = np.asarray(enc.transform(classes)).tolist()
+    return df, Series(encoded, name=target.name), {i: cls for i, cls in zip(ints, classes)}
 
 
 def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:

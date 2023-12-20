@@ -5,6 +5,8 @@ from math import isnan
 from typing import Any
 from warnings import warn
 
+import numpy as np
+
 
 class NanHandling(Enum):
     Drop = "drop"
@@ -20,7 +22,52 @@ class WrapperSelection(Enum):
 
 class FilterSelection(Enum):
     Relief = "relief"
-    Univariate = "univariate"
+    Association = "assoc"
+    Prediction = "pred"
+
+
+class EmbeddedSelection(Enum):
+    LightGBM = "lgbm"
+    LASSO = "lasso"
+
+
+class RegScore(Enum):
+    MAE = "MAE"
+    MSqE = "MSqE"
+    MdAE = "MdAE"
+    R2 = "R2"
+    VarExp = "Var exp"
+
+    # MAPE = "MAPE"
+    def minimum(self) -> float:
+        return {
+            RegScore.MAE: 0.0,
+            RegScore.MSqE: 0.0,
+            RegScore.MdAE: 0.0,
+            RegScore.R2: -np.inf,
+            RegScore.VarExp: 0.0,
+        }[self]
+
+    def higher_is_better(self) -> bool:
+        return self in [RegScore.R2, RegScore.VarExp]
+
+
+class ClsScore(Enum):
+    Accuracy = "acc"
+    AUROC = "auroc"
+    Sensitivity = "sens"
+    Specificity = "spec"
+
+    def higher_is_better(self) -> bool:
+        return True
+
+    def minimum(self) -> float:
+        return {
+            ClsScore.Accuracy: 0.0,
+            ClsScore.AUROC: 0.5,
+            ClsScore.Sensitivity: 0.0,
+            ClsScore.Specificity: 0.0,
+        }[self]
 
 
 class EstimatorKind(Enum):

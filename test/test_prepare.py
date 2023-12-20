@@ -8,7 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-
 import numpy as np
 import pandas as pd
 import pytest
@@ -29,13 +28,7 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
 
     try:
-        prepared = ds.prepared(load_cached=False)
-        #     df=df,
-        #     target="target",
-        #     results=results,
-        #     is_classification=ds.is_classification,
-        #     _warn=False,
-        # )
+        prepared = ds.prepared(load_cached=False, force=True)
         X = prepared.X
         y = prepared.y
         check_X_y(X, y, y_numeric=True)
@@ -57,7 +50,7 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
             raise RuntimeError("Returned X_cat and X_cont overlap")
 
     except ValueError as e:
-        if dsname in ["credit-approval_reduced", "credit-approval_reproduced"]:
+        if dsname in ["credit-approval_reproduced"]:
             message = str(e)
             assert "is constant" in message
         else:
@@ -73,9 +66,8 @@ def do_prep_cached(dataset: tuple[str, TestDataset]) -> None:
         ds.inspect(load_cached=True)
         ds.prepared(load_cached=True)
     except ValueError as e:
-        if dsname == "credit-approval_reduced":
+        if dsname == "credit-approval_reproduced":
             message = str(e)
-            assert "Target" in message
             assert "is constant" in message
         else:
             raise e
