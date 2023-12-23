@@ -20,6 +20,12 @@ from src._constants import (
     FEATURE_CLEANINGS,
     FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
+    N_FILTER_CAT_DEFAULT,
+    N_FILTER_CONT_DEFAULT,
+    N_FILTER_TOTAL_DEFAULT,
+    P_FILTER_CAT_DEFAULT,
+    P_FILTER_CONT_DEFAULT,
+    P_FILTER_TOTAL_DEFAULT,
     REGRESSORS,
     SENTINEL,
 )
@@ -31,7 +37,7 @@ from src._types import (
     Regressor,
     ValMethod,
 )
-from src.cli.parsing import cv_size, resolved_path, separator
+from src.cli.parsing import cv_size, int_or_percent_parser, resolved_path, separator
 from src.cli.text import (
     CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
@@ -46,7 +52,10 @@ from src.cli.text import (
     HTUNEVAL_HELP_STR,
     MC_REPEATS_HELP,
     MODE_HELP_STR,
+    N_FEAT_CAT_FILTER_HELP,
+    N_FEAT_CONT_FILTER_HELP,
     N_FEAT_HELP,
+    N_FEAT_TOTAL_FILTER_HELP,
     NAN_HELP,
     ORDINAL_HELP_STR,
     OUTDIR_HELP,
@@ -124,6 +133,9 @@ class SelectionOptions(Debug):
     regressors: Tuple[Regressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
     n_feat: int
+    n_filter_cont: Union[int, float]
+    n_filter_cat: Union[int, float]
+    n_filter_total: Union[int, float]
 
 
 class ProgramOptions(Debug):
@@ -150,6 +162,9 @@ class ProgramOptions(Debug):
         feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
         n_feat: int,
+        n_filter_cont: Union[int, float],
+        n_filter_cat: Union[int, float],
+        n_filter_total: Union[int, float],
         mode: EstimationMode,
         classifiers: Tuple[Classifier, ...],
         regressors: Tuple[Regressor, ...],
@@ -179,6 +194,9 @@ class ProgramOptions(Debug):
         self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
         self.n_feat: int = n_feat
+        self.n_filter_cont: Union[int, float] = n_filter_cont
+        self.n_filter_cat: Union[int, float] = n_filter_cat
+        self.n_filter_total: Union[int, float] = n_filter_total
         self.mode: EstimationMode = mode
         self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
@@ -217,6 +235,9 @@ class ProgramOptions(Debug):
             regressors=self.regressors,
             feat_select=self.feat_select,
             n_feat=self.n_feat,
+            n_filter_cont=self.n_filter_cont,
+            n_filter_cat=self.n_filter_cat,
+            n_filter_total=self.n_filter_total,
         )
 
         # errors
@@ -445,6 +466,24 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         help=N_FEAT_HELP,
     )
     parser.add_argument(
+        "--n-filter-cont",
+        type=int_or_percent_parser(default=P_FILTER_CONT_DEFAULT),
+        default=P_FILTER_CONT_DEFAULT,
+        help=N_FEAT_CONT_FILTER_HELP,
+    )
+    parser.add_argument(
+        "--n-filter-cat",
+        type=int_or_percent_parser(default=P_FILTER_CAT_DEFAULT),
+        default=P_FILTER_CAT_DEFAULT,
+        help=N_FEAT_CAT_FILTER_HELP,
+    )
+    parser.add_argument(
+        "--n-filter-total",
+        type=int_or_percent_parser(default=P_FILTER_TOTAL_DEFAULT),
+        default=P_FILTER_TOTAL_DEFAULT,
+        help=N_FEAT_TOTAL_FILTER_HELP,
+    )
+    parser.add_argument(
         "--htune",
         action="store_true",
         help=HTUNE_HELP,
@@ -529,6 +568,9 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         feat_clean=cli_args.feat_clean,
         feat_select=cli_args.feat_select,
         n_feat=cli_args.n_feat,
+        n_filter_cont=cli_args.n_filter_cont,
+        n_filter_cat=cli_args.n_filter_cat,
+        n_filter_total=cli_args.n_filter_total,
         mode=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,

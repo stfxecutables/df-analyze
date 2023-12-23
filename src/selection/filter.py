@@ -16,7 +16,9 @@ from typing import (
 )
 from warnings import warn
 
-from pandas import DataFrame
+import pandas as pd
+from pandas import DataFrame, Series
+from sklearn.preprocessing import MinMaxScaler
 
 from src.analysis.univariate.associate import (
     AssocResults,
@@ -99,6 +101,18 @@ def n_cat_select_default(
     )
 
 
+def n_total_select_default(
+    prepared: PreparedData, requested: Optional[Union[int, float]] = None
+) -> int:
+    return _default_from_X(
+        pd.concat([prepared.X_cat, prepared.X_cont], axis=1),
+        default_p=0.25,
+        default_min=8,
+        default_max=50,
+        requested=requested,
+    )
+
+
 def filter_by_univariate_associations(
     prepared: PreparedData,
     associations: AssocResults,
@@ -106,6 +120,7 @@ def filter_by_univariate_associations(
     cat_metric: Optional[CatAssociation] = None,
     n_cont: Optional[Union[int, float]] = None,
     n_cat: Optional[Union[int, float]] = None,
+    n_total: Optional[Union[int, float]] = None,
     significant_only: bool = False,
 ) -> list[str]:
     is_cls = prepared.is_classification
@@ -137,10 +152,51 @@ def filter_by_univariate_associations(
             idx_keep = cat_stats[ps] > 0.05
             cat_stats = cat_stats.loc[idx_keep]
 
+    use_total = n_total is not None
+
+    if all(n is not None for n in [n_cat, n_cont, n_total]):
+        warn(
+            "Cannot specify all of `n_cat`, `n_cont`, and `n_total`. Will "
+            "ignore count specified for `n_total`."
+        )
+        use_total = False
     if n_cat is None:
         n_cat = n_cat_select_default(prepared, n_cat)
     if n_cont is None:
         n_cont = n_cont_select_default(prepared, n_cont)
+    if n_total is None:
+        n_total = n_total_select_default(prepared, n_total)
+
+    if cont_stats is not None:
+        cont_stats = (
+            cont_stats.abs()
+            .sort_values(  # type: ignore
+                by=cont_metric.value, ascending=not cont_metric.higher_is_better()
+            )
+            .loc[:, cont_metric.value]
+        )
+    if cat_stats is not None:
+        cat_stats = (
+            cat_stats.abs()
+            .sort_values(  # type: ignore
+                by=cat_metric.value, ascending=not cat_metric.higher_is_better()
+            )
+            .loc[:, cat_metric.value]
+        )
+
+    if use_total:
+        # normalize stats to max value
+        # this doesn't really make sense due to differing scales of metrics...
+        # what if we replace values by ranks instead? Still no, because then
+        # if we have, say, 5 categoricals that are all useless, we always use
+        # all of them...
+        cont_scaled = MinMaxScaler().fit_transform(cont_stats)  # type: ignore
+        cat_scaled = MinMaxScaler().fit_transform(cat_stats)  # type: ignore
+        cont_stats = Series(index=cont_stats.index, data=cont_scaled)
+        cat_stats = Series(index=cat_stats.index, data=cat_scaled)
+
+        all_stats = pd.concat([cont_stats, cat_stats])
+        all_stats.name = "metric"
 
     cont_cols = []
     if cont_stats is not None:

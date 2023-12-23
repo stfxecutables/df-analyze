@@ -170,7 +170,27 @@ N_FEAT_HELP = """
 Number of features to select using method specified by --feat-select. NOTE:
 specifying values greater than e.g. 10-50 with --feat-select=step-up and slower
 algorithms can easily result in compute times of many hours.
+"""
 
+N_FEAT_NOTE = (
+    "Note only two of two of the three options:`--n-filter-total`, "
+    "`--n-filter-cont`, and  `--n-filter-cat` may be specified at once, "
+    "otherwise the `--n-filter-total` argument will be ignored."
+)
+
+N_FEAT_CONT_FILTER_HELP = f"""
+Number or percentage (as a value in [0, 1]) of continuous features to select
+via filter-based feature selection. {N_FEAT_NOTE}
+"""
+
+N_FEAT_CAT_FILTER_HELP = f"""
+Number or percentage (as a value in [0, 1]) of categorical features to select
+via filter-based feature selection. {N_FEAT_NOTE}
+"""
+
+N_FEAT_TOTAL_FILTER_HELP = f"""
+Number or percentage (as a value in [0, 1]) of features of any kind to select
+via filter-based feature selection. {N_FEAT_NOTE}
 """
 
 HTUNE_HELP = """
