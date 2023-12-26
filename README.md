@@ -5,6 +5,13 @@
 
 - [What it Does](#what-it-does)
   - [Analysis Pipeline](#analysis-pipeline)
+      - [**Feature Type and Cardinality Inference**](#feature-type-and-cardinality-inference)
+      - [**Data Preparation**](#data-preparation)
+      - [**Feature Selection**](#feature-selection)
+      - [**Data Splitting**](#data-splitting)
+      - [**Recursive / Wrapper Feature Selection**](#recursive--wrapper-feature-selection)
+      - [**Hyperparameter Selection**](#hyperparameter-selection)
+      - [**Final Validation**](#final-validation)
   - [Philosophy](#philosophy)
     - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
 - [Installation](#installation)
@@ -32,6 +39,7 @@
   - [To Do (highest priority first):](#to-do-highest-priority-first)
   - [May Not Implement:](#may-not-implement)
 - [Limitations](#limitations)
+  - [Data Types](#data-types)
 
 # What it Does
 
@@ -43,18 +51,37 @@ TODO
 
 TODO
 
-**Data Preparation**
+#### **Feature Type and Cardinality Inference**
+
+Features are checked, in order of priority, for useless feature or features
+that cannot be used by `df-anaylze`:
+
+1. Constancy (all values identical or identical except NaNs)
+2. Sequential datetime data
+3. Identifiers (all values unique and not continuous / floats)
+
+Then, features are identified as either (1) binary, or (2), one of:
+
+1. Ordinal
+2. Continuous
+3. Categorical
+
+based on a number of heuristics relating to the unique values and counts of
+these values, and the string representations of the features.
+
+#### **Data Preparation**
 
 1. Data Loading
    1. Type Conversions
 1. Data Cleaning
+   1. NaN unification
    1. NaN removal / interpolation
    1. OneHot Encoding
 1. Data Preprocessing
    1. Normalization
    1. Outlier removal / clipping
 
-**Feature Selection**
+#### **Feature Selection**
 
 1. Remove junk features
    1. Remove constant features
@@ -63,20 +90,20 @@ TODO
    1. Remove features with minimal univariate relation to target
    1. Keep features with largest filter
 
-**Data Splitting**
+#### **Data Splitting**
 
 1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
 
 
-**Recursive / Wrapper Feature Selection**
+#### **Recursive / Wrapper Feature Selection**
 
 1. Step-up selection using $X_\text{train}$
 
-**Hyperparameter Selection**
+#### **Hyperparameter Selection**
 
 1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
 
-**Final Validation**
+#### **Final Validation**
 
 1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
 1. Final evaluation of trained model on $X_\text{test}$
@@ -84,8 +111,10 @@ TODO
 
 ## Philosophy
 
-1. Data *preparation* is not to be optimized
-   - i.e. while one might re-run
+1. Data *preparation* is not to be optimized / tuned
+   - i.e. while one might re-run analyses with different normalization options,
+     this is not expected to have a major impact on results, and so normalization
+     options are not included in final comparison tables
 1. Proper validation of a feature selection method requires holdout data NOT to
    be used during feature selection, i.e. requires preventing [double
    dipping](https://www.nature.com/articles/nn.2303).
@@ -99,6 +128,8 @@ TODO
   1. using a model with "default" hyperparameters for the wrapper selection process
   1. tuning on all features, then using the tuned model for wrapper selection
 - neither choice above is likely to be optimal
+
+For this reason we prefer filter-based feature selection [methods]()
 
 # Installation
 
@@ -223,6 +254,40 @@ unspecified,1,0.323189,0.008068,0.472934,0
 male,2,0.570184,0.289003,1.176338,1
 ...
 ```
+
+If you have not been introduced to command-line interfaces (CLIs) before,
+this convention might seem a bit odd, but `df-analyze` primarily functions as
+a CLI program. The logic is that CLI options (e.g. `--mode`) and their
+parameters or values (e.g. `classify`) are specified one-per-line in the file
+top section / header, with spaces separating parameters (e.g. the `svm mlp
+dummy` parameters passed to the `--classifiers` option), and with at least one
+empty line separating these options and parameters from the actual tabular
+data.
+
+Thus, the following is an **INVALIDLY FORMATTED** spreadsheet:
+
+```csv
+--categoricals s x0
+--target y
+--mode classify
+--classifiers svm mlp dummy
+--nan drop
+--feat-select stepup pearson
+--n-feat 2
+--htune
+--htune-trials 50
+--outdir ./results
+s,x0,x1,x2,x3,y
+male,0,0.739547,0.312496,1.129941,0
+female,0,0.094421,0.817089,1.246469,1
+unspecified,1,0.323189,0.008068,0.472934,0
+male,2,0.570184,0.289003,1.176338,1
+...
+```
+
+because no newlines (empty lines) separate the options from the data.
+
+
 
 #### Overriding Spreadsheet Options
 
@@ -382,7 +447,7 @@ TODO.
 
 ### Univariate Prediction Metrics for each Feature-Target Pair
 
-- simple predictive models  are hyperparameter tuned (using 5-fold) over a small
+- simple linear predictive models (sklearn [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html), [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor))  are hyperparameter tuned (using 5-fold) over a small
   grid for each feature
 - a dummy regressor or classifier (e.g. predict target mean, predict largest
   class) is also always fit
@@ -429,4 +494,23 @@ TODO.
 # Limitations
 
 - single target
--
+- column names with spaces?
+
+## Data Types
+
+`df-anaylze` currently cannot handle:
+
+- time-series or sequence data where the task is *forecasting*,
+  - i.e. where the target variable is either a categorical or continuous
+    variable that represents some subsequent or future state of a sequence of
+    samples in the training data
+- unencoded text data / natural language processing (NLP) tasks
+  - e.g. data where a sample feature is a collection of words, like a
+    sentence (as this counts as sequence data)
+  - data where each sample of each feature is a single word, with implied
+    ordering among features (e.g. the data is sentences, and feature1 is
+    word1, feature2 is word2, and so on, with longer sentences getting a
+    special padding token, e.g. short sentences become "[PAD]", "[PAD]", ...,
+    "[PAD]", and long sentences are truncated)
+- unsupervised tasks (e.g. clustering, representation learning, dimension
+  reduction)

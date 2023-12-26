@@ -37,8 +37,13 @@ from src._types import (
     Regressor,
     ValMethod,
 )
+from src.analysis.univariate.associate import CatClsStats, CatRegStats, ContClsStats, ContRegStats
 from src.cli.parsing import cv_size, int_or_percent_parser, resolved_path, separator
 from src.cli.text import (
+    ASSOC_SELECT_CAT_CLS_STATS,
+    ASSOC_SELECT_CAT_REG_STATS,
+    ASSOC_SELECT_CONT_CLS_STATS,
+    ASSOC_SELECT_CONT_REG_STATS,
     CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
     DF_HELP_STR,
@@ -46,6 +51,7 @@ from src.cli.text import (
     EXPLODE_HELP,
     FEAT_CLEAN_HELP,
     FEAT_SELECT_HELP,
+    FILTER_METHOD_HELP,
     HTUNE_HELP,
     HTUNE_TRIALS_HELP,
     HTUNE_VALSIZE_HELP,
@@ -69,7 +75,7 @@ from src.cli.text import (
     USAGE_STRING,
     VERBOSITY_HELP,
 )
-from src.enumerables import NanHandling
+from src.enumerables import FilterSelection, NanHandling, RegScore
 from src.loading import load_spreadsheet
 from src.saving import ProgramDirs, setup_io
 from src.utils import Debug
@@ -136,6 +142,10 @@ class SelectionOptions(Debug):
     n_filter_cont: Union[int, float]
     n_filter_cat: Union[int, float]
     n_filter_total: Union[int, float]
+    filter_assoc_cont_cls: ContClsStats
+    filter_assoc_cat_cls: CatClsStats
+    filter_assoc_cont_reg: ContRegStats
+    filter_assoc_cat_reg: CatRegStats
 
 
 class ProgramOptions(Debug):
@@ -165,6 +175,10 @@ class ProgramOptions(Debug):
         n_filter_cont: Union[int, float],
         n_filter_cat: Union[int, float],
         n_filter_total: Union[int, float],
+        filter_assoc_cont_cls: ContClsStats,
+        filter_assoc_cat_cls: CatClsStats,
+        filter_assoc_cont_reg: ContRegStats,
+        filter_assoc_cat_reg: CatRegStats,
         mode: EstimationMode,
         classifiers: Tuple[Classifier, ...],
         regressors: Tuple[Regressor, ...],
@@ -197,6 +211,10 @@ class ProgramOptions(Debug):
         self.n_filter_cont: Union[int, float] = n_filter_cont
         self.n_filter_cat: Union[int, float] = n_filter_cat
         self.n_filter_total: Union[int, float] = n_filter_total
+        self.filter_assoc_cont_cls: ContClsStats = filter_assoc_cont_cls
+        self.filter_assoc_cat_cls: CatClsStats = filter_assoc_cat_cls
+        self.filter_assoc_cont_reg: ContRegStats = filter_assoc_cont_reg
+        self.filter_assoc_cat_reg: CatRegStats = filter_assoc_cat_reg
         self.mode: EstimationMode = mode
         self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
@@ -238,6 +256,10 @@ class ProgramOptions(Debug):
             n_filter_cont=self.n_filter_cont,
             n_filter_cat=self.n_filter_cat,
             n_filter_total=self.n_filter_total,
+            filter_assoc_cont_cls=self.filter_assoc_cont_cls,
+            filter_assoc_cat_cls=self.filter_assoc_cat_cls,
+            filter_assoc_cont_reg=self.filter_assoc_cont_reg,
+            filter_assoc_cat_reg=self.filter_assoc_cat_reg,
         )
 
         # errors
@@ -484,6 +506,40 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         help=N_FEAT_TOTAL_FILTER_HELP,
     )
     parser.add_argument(
+        "--filter-method",
+        type=FilterSelection,
+        default=FilterSelection.Relief,
+        help=FILTER_METHOD_HELP,
+    )
+    parser.add_argument(
+        "--filter-assoc-cont-classify",
+        choices=[*ContClsStats],
+        type=ContClsStats,
+        default=ContClsStats.default(),
+        help=ASSOC_SELECT_CONT_CLS_STATS,
+    )
+    parser.add_argument(
+        "--filter-assoc-cat-classify",
+        choices=[*CatClsStats],
+        type=CatClsStats,
+        default=CatClsStats.default(),
+        help=ASSOC_SELECT_CAT_CLS_STATS,
+    )
+    parser.add_argument(
+        "--filter-assoc-cont-regress",
+        choices=[*ContRegStats],
+        type=ContRegStats,
+        default=ContRegStats.default(),
+        help=ASSOC_SELECT_CONT_REG_STATS,
+    )
+    parser.add_argument(
+        "--filter-assoc-cat-regress",
+        choices=[*CatRegStats],
+        type=CatRegStats,
+        default=CatRegStats.default(),
+        help=ASSOC_SELECT_CAT_REG_STATS,
+    )
+    parser.add_argument(
         "--htune",
         action="store_true",
         help=HTUNE_HELP,
@@ -571,6 +627,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         n_filter_cont=cli_args.n_filter_cont,
         n_filter_cat=cli_args.n_filter_cat,
         n_filter_total=cli_args.n_filter_total,
+        filter_assoc_cont_cls=cli_args.filter_assoc_cont_classify,
+        filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
+        filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,
+        filter_assoc_cat_reg=cli_args.filter_assoc_cat_regress,
         mode=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
