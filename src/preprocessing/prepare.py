@@ -17,6 +17,7 @@ from src.preprocessing.cleaning import (
     encode_categoricals,
     encode_target,
     handle_continuous_nans,
+    normalize_continuous,
 )
 from src.preprocessing.inspection.inspection import (
     InspectionResults,
@@ -142,6 +143,7 @@ def prepare_data(
     df, X_cont, n_ind_added = handle_continuous_nans(
         df=df, target=target, results=results, nans=NanHandling.Median
     )
+    X_cont = normalize_continuous(X_cont, robust=True)
 
     df = timer(deflate_categoricals)(df, results, _warn=_warn)
     df, X_cat = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)

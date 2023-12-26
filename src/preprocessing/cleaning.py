@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from shutil import get_terminal_size
-from typing import Union
+from typing import Optional, Union
 from warnings import warn
 
 import numpy as np
@@ -47,7 +47,7 @@ def cleaning_inform(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
+def normalize(df: DataFrame, target: Optional[str], robust: bool = True) -> DataFrame:
     """
     Clip data to within twice of its "robust range" (range of 90% of the data),
     and then min-max normalize.
@@ -101,7 +101,7 @@ def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
 
 
     """
-    if target in df.columns:
+    if (target in df.columns) and (target is not None):
         X = df.drop(columns=target)
     else:
         X = df
@@ -123,9 +123,15 @@ def normalize(df: DataFrame, target: str, robust: bool = True) -> DataFrame:
         X = np.clip(X, a_min=rmins, a_max=rmaxs)
 
     X_norm = DataFrame(data=MinMaxScaler().fit_transform(X), columns=cols)
-    if target in df:
+    if (target in df.columns) and (target is not None):
         X_norm = pd.concat([X, df[target]], axis=1)
     return X_norm
+
+
+def normalize_continuous(X_cont: DataFrame, robust: bool = True) -> DataFrame:
+    if X_cont.empty:
+        return X_cont
+    return normalize(df=X_cont, target=None, robust=robust)
 
 
 def drop_target_nans(

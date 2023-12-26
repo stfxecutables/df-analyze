@@ -7,10 +7,7 @@
   - [Analysis Pipeline](#analysis-pipeline)
       - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
       - [Data Preparation](#data-preparation)
-      - [Feature Selection](#feature-selection)
-      - [DataSplitting](#datasplitting)
-      - [Recursive / Wrapper Feature Selection](#recursive--wrapper-feature-selection)
-      - [Hyperparameter Selection](#hyperparameter-selection)
+      - [Feature Selection and Hyperparameter Tuning](#feature-selection-and-hyperparameter-tuning)
       - [Final Validation](#final-validation)
   - [Philosophy](#philosophy)
     - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
@@ -97,26 +94,15 @@ these values, and the string representations of the features.
    2. Continuous targets are robustly min-max normalized (to middle 95% of values)
 
 
-#### Feature Selection
+#### Feature Selection and Hyperparameter Tuning
 
 1. Remove junk features
-   1. Remove constant features
    1. Remove highly-correlated features
 1. Use filter methods
    1. Remove features with minimal univariate relation to target
-   1. Keep features with largest filter
-
-#### DataSplitting
-
+   1. Keep features with largest filter metrics
 1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
-
-
-#### Recursive / Wrapper Feature Selection
-
 1. Step-up selection using $X_\text{train}$
-
-#### Hyperparameter Selection
-
 1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
 
 #### Final Validation
