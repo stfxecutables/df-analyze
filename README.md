@@ -5,13 +5,13 @@
 
 - [What it Does](#what-it-does)
   - [Analysis Pipeline](#analysis-pipeline)
-      - [**Feature Type and Cardinality Inference**](#feature-type-and-cardinality-inference)
-      - [**Data Preparation**](#data-preparation)
-      - [**Feature Selection**](#feature-selection)
-      - [**Data Splitting**](#data-splitting)
-      - [**Recursive / Wrapper Feature Selection**](#recursive--wrapper-feature-selection)
-      - [**Hyperparameter Selection**](#hyperparameter-selection)
-      - [**Final Validation**](#final-validation)
+      - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
+      - [Data Preparation](#data-preparation)
+      - [Feature Selection](#feature-selection)
+      - [DataSplitting](#datasplitting)
+      - [Recursive / Wrapper Feature Selection](#recursive--wrapper-feature-selection)
+      - [Hyperparameter Selection](#hyperparameter-selection)
+      - [Final Validation](#final-validation)
   - [Philosophy](#philosophy)
     - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
 - [Installation](#installation)
@@ -49,9 +49,14 @@ TODO
 
 ## Analysis Pipeline
 
-TODO
+The overall data preparation and analysis process comprises $n$ steps:
 
-#### **Feature Type and Cardinality Inference**
+1. Feature Type and Cardinalty Inference
+2. Data Preparation and Preprocessing
+3. Feature Selection (optional)
+4.
+
+#### Feature Type and Cardinality Inference
 
 Features are checked, in order of priority, for useless feature or features
 that cannot be used by `df-anaylze`:
@@ -69,19 +74,30 @@ Then, features are identified as either (1) binary, or (2), one of:
 based on a number of heuristics relating to the unique values and counts of
 these values, and the string representations of the features.
 
-#### **Data Preparation**
+#### Data Preparation
+
 
 1. Data Loading
    1. Type Conversions
+   1. NaN unification (detecting less common NaN representations)
 1. Data Cleaning
-   1. NaN unification
-   1. NaN removal / interpolation
-   1. OneHot Encoding
-1. Data Preprocessing
-   1. Normalization
-   1. Outlier removal / clipping
+   1. Remove samples with NaN in target variable
+   1. Remove junk features (constant, timeseries, identifiers)
+   1. NaNs: remove or add indicators and interpolate
+   1. Categorical deflation (replace undersampled classes / levels with NaN)
+1. Feature Encoding
+   1. Binary categorical encoding
+      1. represented as single [0, 1] feature if no NaNs
+      1. single NaN indicator feature added if feature is binary plus NaNs
+   1. One-hot encoding of categoricals (NaN = one additional class / level)
+   1. Ordinals treated as continuous
+   1. Robust normalization of continuous features
+2. Target Encoding
+   1. Categorical targets are deflated and label encoded to values in $[0, n]$
+   2. Continuous targets are robustly min-max normalized (to middle 95% of values)
 
-#### **Feature Selection**
+
+#### Feature Selection
 
 1. Remove junk features
    1. Remove constant features
@@ -90,20 +106,20 @@ these values, and the string representations of the features.
    1. Remove features with minimal univariate relation to target
    1. Keep features with largest filter
 
-#### **Data Splitting**
+#### DataSplitting
 
 1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
 
 
-#### **Recursive / Wrapper Feature Selection**
+#### Recursive / Wrapper Feature Selection
 
 1. Step-up selection using $X_\text{train}$
 
-#### **Hyperparameter Selection**
+#### Hyperparameter Selection
 
 1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
 
-#### **Final Validation**
+#### Final Validation
 
 1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
 1. Final evaluation of trained model on $X_\text{test}$
