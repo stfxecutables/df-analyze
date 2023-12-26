@@ -28,7 +28,7 @@ from src.models.lgbm import (
     LightGBMRFClassifier,
     LightGBMRFRegressor,
 )
-from src.models.linear import ElasticNetRegressor, LRClassifier
+from src.models.linear import ElasticNetRegressor, LRClassifier, SGDClassifier, SGDRegressor
 from src.models.svm import SVMClassifier, SVMRegressor
 
 
@@ -130,6 +130,36 @@ class TestLinear:
 
     def test_lin_reg_tune(self, capsys: CaptureFixture) -> None:
         model = ElasticNetRegressor()
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
+
+
+@pytest.mark.fast
+class TestSGDLinear:
+    def test_sgd_cls(self) -> None:
+        model = SGDClassifier()
+        check_basics(model, "classify")
+
+    def test_sgd_reg(self) -> None:
+        model = SGDRegressor()
+        check_basics(model, "regress")
+
+    def test_sgd_cls_tune(self, capsys: CaptureFixture) -> None:
+        logging.captureWarnings(capture=True)
+        logger = logging.getLogger("py.warnings")
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
+        logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
+        try:
+            model = SGDClassifier()
+            check_optuna_tune(model, "classify")
+        except Exception as e:
+            raise e
+        finally:
+            logging.captureWarnings(capture=False)
+
+    def test_sgd_reg_tune(self, capsys: CaptureFixture) -> None:
+        model = SGDRegressor()
         # with capsys.disabled():
         check_optuna_tune(model, "regress")
 

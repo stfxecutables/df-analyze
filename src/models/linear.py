@@ -12,6 +12,8 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 from sklearn.linear_model import ElasticNet, LogisticRegression
+from sklearn.linear_model import SGDClassifier as SklearnSGDClassifier
+from sklearn.linear_model import SGDRegressor as SklearnSGDRegressor
 
 from src.models.base import DfAnalyzeModel
 
@@ -50,4 +52,43 @@ class LRClassifier(DfAnalyzeModel):
         return dict(
             l1_ratio=trial.suggest_float("l1_ratio", 0.01, 1.0),
             C=trial.suggest_float("C", 1e-10, 1e2, log=True),
+        )
+
+
+class SGDClassifier(DfAnalyzeModel):
+    def __init__(self, model_args: Mapping | None = None) -> None:
+        super().__init__(model_args)
+        self.is_classifier = True
+        self.model_cls = SklearnSGDClassifier
+        self.default_args = dict(learning_rate="adaptive", penalty="l2", eta0=3e-4)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
+
+    def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+        return dict(
+            loss=trial.suggest_categorical("loss", ["log_loss", "modified_huber"]),
+            eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
+            early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
+        )
+
+
+class SGDRegressor(DfAnalyzeModel):
+    def __init__(self, model_args: Mapping | None = None) -> None:
+        super().__init__(model_args)
+        self.is_classifier = False
+        self.model_cls = SklearnSGDRegressor
+        self.default_args = dict(eta0=3e-4)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
+
+    def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+        return dict(
+            loss=trial.suggest_categorical(
+                "loss", ["squared_error", "huber", "epsilon_insensitive"]
+            ),
+            eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
+            penalty=trial.suggest_categorical("penalty", ["l1", "l2"]),
+            early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
         )
