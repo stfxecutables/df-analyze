@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
 TESTDATA = DATADIR / "testing"
+TEST_RESULTS = TESTDATA / "__TEST_RESULTS__"
 
 # Testing
 SIMPLE_XLSX = DATADIR / "spreadsheet.xlsx"

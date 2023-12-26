@@ -99,6 +99,22 @@ class PredResults:
             preds.idx_subsample = np.load(npy_file, allow_pickle=False, fix_imports=False)
         return preds
 
+    def to_markdown(self, path: Path) -> None:
+        sorter = "acc" if self.is_classification else "Var exp"
+        if self.conts is not None:
+            conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4f")
+            cont_table = f"# Continuous predictions\n\n{conts}\n\n"
+        else:
+            cont_table = ""
+        if self.cats is not None:
+            cats = self.cats.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4f")
+            cats_table = f"# Categorical prediction:\n\n{cats}"
+        else:
+            cats_table = ""
+
+        tables = cont_table + cats_table
+        path.write_text(tables)
+
 
 def continuous_feature_target_preds(
     continuous: DataFrame,

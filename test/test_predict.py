@@ -19,6 +19,7 @@ import numpy as np
 import pytest
 from pandas import DataFrame, Series
 
+from src._constants import TEST_RESULTS
 from src.analysis.univariate.predict.predict import (
     PredResults,
 )
@@ -100,6 +101,10 @@ def do_predict_cached(
 
     try:
         preds = ds.predictions(load_cached=True)
+        outdir = TEST_RESULTS / dsname
+        outdir.mkdir(exist_ok=True, parents=True)
+        outfile = outdir / "predict_tables.md"
+        preds.to_markdown(outfile)
         print_preds(dsname, preds.conts, preds.cats, ds.is_classification)
         return preds.conts, preds.cats
     except ValueError as e:
