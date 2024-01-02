@@ -38,6 +38,7 @@ from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
 from src.analysis.metrics import auroc, cohens_d, cramer_v
+from src.enumerables import RandEnum
 from src.preprocessing.prepare import PreparedData
 
 
@@ -64,7 +65,7 @@ class CatAssociation(Association):
     pass
 
 
-class ContClsStats(ContAssociation, Enum):
+class ContClsStats(ContAssociation, RandEnum, Enum):
     TTest = "t"
     MannWhitneyU = "U"
     BrunnerMunzelW = "W"
@@ -110,7 +111,7 @@ class ContClsStats(ContAssociation, Enum):
         }[self]
 
 
-class CatClsStats(CatAssociation, Enum):
+class CatClsStats(CatAssociation, RandEnum, Enum):
     MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
     KruskalWallaceH = "H"
     CramerV = "V"  # Cramer's V
@@ -148,7 +149,7 @@ class CatClsStats(CatAssociation, Enum):
         }[self]
 
 
-class ContRegStats(ContAssociation, Enum):
+class ContRegStats(ContAssociation, RandEnum, Enum):
     PearsonR = "pearson_r"
     SpearmanR = "spearman_r"
     MutualInfo = "mut_info"
@@ -185,7 +186,7 @@ class ContRegStats(ContAssociation, Enum):
         }[self]
 
 
-class CatRegStats(CatAssociation, Enum):
+class CatRegStats(CatAssociation, RandEnum, Enum):
     MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
     H = "H"  # Kruskal-Wallace H
 
@@ -266,6 +267,38 @@ class AssocResults:
         self.is_classification = is_classification
         self.files = AssocFiles()
 
+    def to_markdown(self, path: Path) -> None:
+        if self.conts is not None:
+            conts = self.conts.sort_values(by="mut_info", ascending=False)
+            conts = conts.map(lambda x: x if abs(x) > 1e-10 else 0)
+            cols = conts.columns.to_list()
+            cols.remove("mut_info")
+            cols = ["mut_info"] + cols
+            conts_table = conts.loc[:, cols].to_markdown(floatfmt="<0.03g")
+        else:
+            conts_table = ""
+        if self.cats is not None:
+            cats = self.cats.sort_values(by="mut_info", ascending=False)
+            cats = cats.map(lambda x: x if abs(x) > 1e-10 else 0)
+            cols = cats.columns.to_list()
+            cols.remove("mut_info")
+            cols = ["mut_info"] + cols
+            cats_table = cats.loc[:, cols].to_markdown(floatfmt="<0.03g")
+        else:
+            cats_table = ""
+
+        conts_table = conts_table.replace("nan", "   ")
+        cats_table = cats_table.replace("nan", "   ")
+
+        conts_table = (
+            f"# Continuous associations\n\n{conts_table}\n\n" if self.conts is not None else ""
+        )
+        cats_table = f"# Categorical associations\n\n{cats_table}" if self.cats is not None else ""
+        tables = conts_table + cats_table
+        if tables.replace("\n", "") != "":
+            tables = f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
+            path.write_text(tables)
+
     def save(self, cachedir: Path) -> None:
         conts = DataFrame() if self.conts is None else self.conts
         cats = DataFrame() if self.cats is None else self.cats
@@ -332,7 +365,7 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
 
     return DataFrame(
         data=data,
-        index=[f"{x.name}_{y.name}.{level}"],
+        index=[f"{x.name}__{y.name}.{level}"],
         columns=stats,
     )
 

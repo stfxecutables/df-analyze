@@ -1,37 +1,92 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, EnumMeta
 from math import isnan
-from typing import Any
+from random import choice, randint
+from typing import Any, Generic, Type, TypeVar
 from warnings import warn
 
 import numpy as np
 
+T = TypeVar("T", bound="RandEnum")
 
-class NanHandling(Enum):
+
+class RandEnum(Generic[T]):
+    @classmethod
+    def random(cls: Type[T]) -> T:
+        if not isinstance(cls, EnumMeta):
+            raise ValueError("Undefined")
+        return choice([*cls])  # type: ignore
+
+    @classmethod
+    def random_n(cls: Type[T]) -> tuple[T, ...]:
+        n = randint(1, len(cls) - 1)  # type: ignore
+        if not isinstance(cls, EnumMeta):
+            raise ValueError("Undefined")
+        return tuple(np.random.choice([*cls], size=n, replace=False).tolist())  # type: ignore
+
+
+class DfAnalyzeClassifier(RandEnum, Enum):
+    KNN = "knn"
+    LGBM = "lgbm"
+    LR = "lr"
+    SGD = "sgd"
+    MLP = "mlp"
+    SVM = "svm"
+
+
+class DfAnalyzeRegressor(RandEnum, Enum):
+    KNN = "knn"
+    LGBM = "lgbm"
+    ElasticNet = "elastic"
+    SGD = "sgd"
+    MLP = "mlp"
+    SVM = "svm"
+
+
+class NanHandling(RandEnum, Enum):
     Drop = "drop"
     Mean = "mean"
     Median = "median"
     Impute = "impute"
 
 
-class WrapperSelection(Enum):
+class EstimationMode(RandEnum, Enum):
+    Classify = "classify"
+    Regress = "regress"
+
+
+class FeatureCleaning(RandEnum, Enum):
+    Constant = "constant"
+    Correlated = "correlated"
+    LowInfo = "lowinfo"
+
+
+class FeatureSelection(RandEnum, Enum):
+    Minimal = "minimal"
+    StepDown = "step-down"
+    StepUp = "step-up"
+    PCA = "pca"
+    kPCA = "kpca"
+
+
+class WrapperSelection(RandEnum, Enum):
     StepUp = "step-up"
     StepDown = "step-down"
 
 
-class FilterSelection(Enum):
+class FilterSelection(RandEnum, Enum):
     Relief = "relief"
     Association = "assoc"
     Prediction = "pred"
 
 
-class EmbeddedSelection(Enum):
+class EmbeddedSelection(RandEnum, Enum):
     LightGBM = "lgbm"
     LASSO = "lasso"
 
 
-class RegScore(Enum):
+class RegScore(RandEnum, Enum):
     MAE = "MAE"
     MSqE = "MSqE"
     MdAE = "MdAE"
@@ -52,7 +107,7 @@ class RegScore(Enum):
         return self in [RegScore.R2, RegScore.VarExp]
 
 
-class ClsScore(Enum):
+class ClsScore(Enum, RandEnum):
     Accuracy = "acc"
     AUROC = "auroc"
     Sensitivity = "sens"
@@ -70,7 +125,7 @@ class ClsScore(Enum):
         }[self]
 
 
-class EstimatorKind(Enum):
+class EstimatorKind(Enum, RandEnum):
     Linear = "lin"
     SVM = "svm"
     KNN = "knn"

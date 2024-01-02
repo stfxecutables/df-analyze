@@ -102,18 +102,38 @@ class PredResults:
     def to_markdown(self, path: Path) -> None:
         sorter = "acc" if self.is_classification else "Var exp"
         if self.conts is not None:
-            conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4f")
+            conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4g")
             cont_table = f"# Continuous predictions\n\n{conts}\n\n"
         else:
             cont_table = ""
         if self.cats is not None:
-            cats = self.cats.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4f")
+            cats = self.cats.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4g")
             cats_table = f"# Categorical prediction:\n\n{cats}"
         else:
             cats_table = ""
 
+        cont_legend = (
+            "\n\n"
+            "MAE: Mean Absolute Error\n"
+            "MSqE: Mean Squared Error\n"
+            "MdAe: Median Absolute Error\n"
+            "R2: R-squared (coefficient of determination)\n"
+            "Var exp: Percent Variance Explained\n"
+        )
+
+        cat_legend = (
+            "\n\n"
+            "acc: accuracy\n"
+            "auroc: area under the receiving operater characteristic curve\n"
+            "sens: sensitivity\n"
+            "spec: specificity\n"
+        )
+        legend = cat_legend if self.is_classification else cont_legend
         tables = cont_table + cats_table
-        path.write_text(tables)
+
+        if tables.replace("\n", "") != "":
+            tables = tables + legend
+            path.write_text(tables)
 
 
 def continuous_feature_target_preds(

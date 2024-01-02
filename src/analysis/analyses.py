@@ -151,7 +151,7 @@ def classifier_analysis(
     if isinstance(test_val, float):  # set aside data for final test
         if test_val <= 0 or test_val >= 1:
             raise ValueError("`--test-val` must be in (0, 1)")
-        X_train, X_test, y_train, y_test = train_val_splits(df, options.mode, test_val)
+        X_train, X_test, y_train, y_test = train_val_splits(df, options.is_classification, test_val)
     else:
         X_train = df.drop(columns=options.target)
         X_test = None
@@ -227,7 +227,7 @@ def full_estimator_analysis(
     X_train = StandardScaler().fit_transform(X_raw)
     y_train = df[targname].to_numpy()
     hypertune_estimator = hypertune_regressor
-    if options.mode == "classify":
+    if options.is_classification:
         y_train = y_train.astype(int)
         hypertune_estimator = hypertune_classifier
     htuned = hypertune_estimator(

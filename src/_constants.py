@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,9 +17,6 @@ MUSHROOM_TYPES = TESTDATA / "classification/mushrooms/types.csv"
 ELDER_DATA = TESTDATA / "classification/elder/measurements.csv"
 ELDER_TYPES = TESTDATA / "classification/elder/types.csv"
 
-DEFAULT_OUTDIR = Path.home().resolve() / "df-analyze-outputs"
-if not os.access(DEFAULT_OUTDIR, os.W_OK):
-    DEFAULT_OUTDIR = Path.cwd().resolve() / "df-analyze-outputs"
 
 DATAFILE = DATADIR / "MCICFreeSurfer.mat"
 DATA_JSON = DATAFILE.parent / "mcic.json"

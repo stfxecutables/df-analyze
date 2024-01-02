@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 import pytest
 
+from src._constants import TEST_RESULTS
 from src.analysis.univariate.associate import AssocResults
 from src.testing.datasets import (
     FAST_INSPECTION,
@@ -45,7 +46,12 @@ def do_associate_cached(dataset: tuple[str, TestDataset]) -> Optional[AssocResul
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:  # const targets
         return
-    return ds.associations(load_cached=True)
+    assocs = ds.associations(load_cached=True)
+    outdir = TEST_RESULTS / dsname
+    outdir.mkdir(exist_ok=True, parents=True)
+    outfile = outdir / "assoc_tables.md"
+    assocs.to_markdown(outfile)
+    return assocs
 
 
 @fast_ds

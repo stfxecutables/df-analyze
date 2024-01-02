@@ -281,7 +281,7 @@ def kernel_pca_reduce(df: DataFrame, target: str, n_features: int = 10) -> DataF
 def select_stepwise_features(
     df: DataFrame,
     target: str,
-    mode: Literal["classify", "regress"],
+    is_classification: bool,
     estimator: Estimator,
     n_features: int,
     direction: Literal["forward", "backward"] = "forward",
@@ -290,18 +290,18 @@ def select_stepwise_features(
     DataFrame so that subsequent runs do not need to do this again."""
 
     # outfile = DATADIR / f"mcic_{direction}-select{n_features}__{classifier}.json"
-    get_model = get_classifier_constructor if mode == "classify" else get_regressor_constructor
+    get_model = get_classifier_constructor if is_classification else get_regressor_constructor
     selector = SequentialFeatureSelector(
         estimator=get_model(estimator)(),
         n_features_to_select=n_features,
         direction=direction,
-        scoring="accuracy" if mode == "classify" else "neg_mean_absolute_error",
+        scoring="accuracy" if is_classification else "neg_mean_absolute_error",
         cv=5,
         n_jobs=-1,
     )
     X_raw = df.drop(columns=target)
     y = df[target].to_numpy()
-    if mode == "classify":
+    if is_classification:
         y = y.astype(int)
     X_arr = StandardScaler().fit_transform(X_raw)
     X = DataFrame(data=X_arr, columns=X_raw.columns, index=X_raw.index)
@@ -367,7 +367,7 @@ def select_features(
         column_idx = select_stepwise_features(
             df,
             target,
-            mode=options.mode,
+            mode=options.is_classification,
             estimator=classifier,
             n_features=n_feat,
             direction="backward",
@@ -378,7 +378,7 @@ def select_features(
         column_idx = select_stepwise_features(
             df,
             target,
-            mode=options.mode,
+            mode=options.is_classification,
             estimator=classifier,
             n_features=n_feat,
             direction="forward",

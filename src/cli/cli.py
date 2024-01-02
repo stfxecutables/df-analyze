@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 File for defining all options passed to `df-analyze.py`.
 """
@@ -7,12 +9,15 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from random import choice, randint, uniform
 from typing import (
     Optional,
     Tuple,
     Union,
 )
 from warnings import warn
+
+import jsonpickle
 
 from src._constants import (
     CLASSIFIERS,
@@ -28,12 +33,10 @@ from src._constants import (
     P_FILTER_TOTAL_DEFAULT,
     REGRESSORS,
     SENTINEL,
+    TEST_RESULTS,
 )
 from src._types import (
     Classifier,
-    EstimationMode,
-    FeatureCleaning,
-    FeatureSelection,
     Regressor,
     ValMethod,
 )
@@ -75,9 +78,20 @@ from src.cli.text import (
     USAGE_STRING,
     VERBOSITY_HELP,
 )
-from src.enumerables import FilterSelection, NanHandling, RegScore
+from src.enumerables import (
+    DfAnalyzeClassifier,
+    DfAnalyzeRegressor,
+    EstimationMode,
+    FeatureCleaning,
+    FeatureSelection,
+    FilterSelection,
+    NanHandling,
+    RegScore,
+)
 from src.loading import load_spreadsheet
+from src.models.base import DfAnalyzeModel
 from src.saving import ProgramDirs, setup_io
+from src.testing.datasets import TestDataset
 from src.utils import Debug
 
 Size = Union[float, int]
@@ -134,7 +148,7 @@ class SelectionOptions(Debug):
     """
 
     cleaning_options: CleaningOptions
-    mode: EstimationMode
+    is_classification: bool
     classifiers: Tuple[Classifier, ...]
     regressors: Tuple[Regressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
@@ -179,7 +193,7 @@ class ProgramOptions(Debug):
         filter_assoc_cat_cls: CatClsStats,
         filter_assoc_cont_reg: ContRegStats,
         filter_assoc_cat_reg: CatRegStats,
-        mode: EstimationMode,
+        is_classification: bool,
         classifiers: Tuple[Classifier, ...],
         regressors: Tuple[Regressor, ...],
         htune: bool,
@@ -215,7 +229,7 @@ class ProgramOptions(Debug):
         self.filter_assoc_cat_cls: CatClsStats = filter_assoc_cat_cls
         self.filter_assoc_cont_reg: ContRegStats = filter_assoc_cont_reg
         self.filter_assoc_cat_reg: CatRegStats = filter_assoc_cat_reg
-        self.mode: EstimationMode = mode
+        self.is_classification: bool = is_classification
         self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
         self.htune: bool = htune
@@ -225,8 +239,9 @@ class ProgramOptions(Debug):
         self.test_val: ValMethod = test_val
         self.test_val_sizes: Tuple[Size, ...]
         self.mc_repeats: int = mc_repeats
-        self.outdir: Path = self.ensure_outdir(self.datapath, outdir)
-        self.program_dirs: ProgramDirs = setup_io(self.outdir)
+        # TODO: fix below
+        self.outdir: Optional[Path] = self.get_outdir(outdir, self.datapath)
+        self.program_dirs: ProgramDirs = ProgramDirs(self.outdir)
         self.is_spreadsheet: bool = is_spreadsheet
         self.separator: str = separator
         self.verbosity: Verbosity = verbosity
@@ -248,7 +263,7 @@ class ProgramOptions(Debug):
         )
         self.selection_options = SelectionOptions(
             cleaning_options=self.cleaning_options,
-            mode=self.mode,
+            is_classification=self.is_classification,
             classifiers=self.classifiers,
             regressors=self.regressors,
             feat_select=self.feat_select,
@@ -263,7 +278,7 @@ class ProgramOptions(Debug):
         )
 
         # errors
-        if self.mode == "regress":
+        if not self.is_classification:
             if ("d" in self.feat_select) or ("auc" in self.feat_select):
                 args = " ".join(self.feat_select)
                 raise ValueError(
@@ -272,6 +287,68 @@ class ProgramOptions(Debug):
                     f"`--feat-select` CLI option. [Got arguments: {args}]"
                 )
         self.spam_warnings()
+
+    @staticmethod
+    def _random(ds: TestDataset) -> ProgramOptions:
+        n_feats = ds.shape[1]
+        feat_clean = FeatureCleaning.random_n()
+        feat_select = FeatureSelection.random_n()
+        n_feat = n_feats
+        n_filter_total = uniform(0.5, 0.95)
+        n_filter_cont = uniform(0.1, 0.25)
+        n_filter_cat = n_filter_total - n_filter_cont
+        filter_assoc_cont_cls = ContClsStats.random()
+        filter_assoc_cat_cls = CatClsStats.random()
+        filter_assoc_cont_reg = ContRegStats.random()
+        filter_assoc_cat_reg = CatRegStats.random()
+        is_classification = ds.is_classification
+        classifiers = DfAnalyzeClassifier.random_n()
+        regressors = DfAnalyzeRegressor.random_n()
+        htune: bool = choice([True, False])
+        htune_val: ValMethod = "kfold"
+        htune_val_size: Size = 5
+        htune_trials: int = randint(20, 100)
+        test_val: ValMethod = "kfold"
+        test_val_sizes: Tuple[Size, ...] = (0.2,)
+        mc_repeats: int = 0
+        outdir: Path = (TEST_RESULTS / "cli_testing") / ds.dsname
+        is_spreadsheet: bool = False
+        separator: str = ","
+        verbosity: Verbosity = Verbosity.ERROR
+        no_warn_explosion: bool = False
+        return ProgramOptions(
+            datapath=ds.datapath,
+            target="target",
+            categoricals=ds.categoricals,
+            ordinals=[],
+            drops=[],
+            nan_handling=NanHandling.random(),
+            feat_clean=feat_clean,
+            feat_select=feat_select,
+            n_feat=n_feat,
+            n_filter_cat=n_filter_cat,
+            n_filter_cont=n_filter_cont,
+            n_filter_total=n_filter_total,
+            filter_assoc_cont_cls=filter_assoc_cont_cls,
+            filter_assoc_cat_cls=filter_assoc_cat_cls,
+            filter_assoc_cont_reg=filter_assoc_cont_reg,
+            filter_assoc_cat_reg=filter_assoc_cat_reg,
+            is_classification=is_classification,
+            classifiers=classifiers,
+            regressors=regressors,
+            htune=htune,
+            htune_val=htune_val,
+            htune_val_size=htune_val_size,
+            htune_trials=htune_trials,
+            test_val=test_val,
+            test_val_sizes=test_val_sizes,
+            mc_repeats=mc_repeats,
+            outdir=outdir,
+            is_spreadsheet=is_spreadsheet,
+            separator=separator,
+            verbosity=verbosity,
+            no_warn_explosion=no_warn_explosion,
+        )
 
     def spam_warnings(self) -> None:
         if self.verbosity is Verbosity.ERROR:
@@ -317,19 +394,16 @@ class ProgramOptions(Debug):
         return Path(datapath).resolve()
 
     @staticmethod
-    def ensure_outdir(datapath: Path, outdir: Optional[Path]) -> Path:
+    def get_outdir(outdir: Optional[Path], datapath: Path) -> Optional[Path]:
         if outdir is None:
-            out = f"df-analyze-results__{datapath.stem}"
-            outdir = datapath.parent / out
-        if outdir.exists():
-            if not outdir.is_dir():
-                raise FileExistsError(
-                    f"The specified output directory {outdir}"
-                    "already exists and is not a directory."
-                )
-        else:
-            os.makedirs(outdir, exist_ok=True)
+            return None
+        name = datapath.stem
+        outdir = outdir / name
+        os.makedirs(outdir, exist_ok=True)
         return outdir
+
+    def to_json(self, path: Path) -> None:
+        path.write_text(str(jsonpickle.encode(self)))
 
 
 def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
@@ -631,7 +705,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
         filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,
         filter_assoc_cat_reg=cli_args.filter_assoc_cat_regress,
-        mode=cli_args.mode,
+        is_classification=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
         htune=cli_args.htune,

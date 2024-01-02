@@ -7,6 +7,7 @@
   - [Analysis Pipeline](#analysis-pipeline)
       - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
       - [Data Preparation](#data-preparation)
+      - [Univariate Feature Analyses](#univariate-feature-analyses)
       - [Feature Selection and Hyperparameter Tuning](#feature-selection-and-hyperparameter-tuning)
       - [Final Validation](#final-validation)
   - [Philosophy](#philosophy)
@@ -49,9 +50,11 @@ TODO
 The overall data preparation and analysis process comprises $n$ steps:
 
 1. Feature Type and Cardinalty Inference
-2. Data Preparation and Preprocessing
-3. Feature Selection (optional)
-4.
+1. Data Preparation and Preprocessing
+1. Univariate Feature Analyses
+1. Feature Selection (optional)
+1. Hyperparameter tuning
+1. Final validation and analyses
 
 #### Feature Type and Cardinality Inference
 
@@ -93,6 +96,22 @@ these values, and the string representations of the features.
    1. Categorical targets are deflated and label encoded to values in $[0, n]$
    2. Continuous targets are robustly min-max normalized (to middle 95% of values)
 
+
+#### Univariate Feature Analyses
+
+1. Univariate associations
+2. Univariate predictive performances
+   1. classification task / categorical target
+      - tune
+        [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
+        (equivalent to linear SVM and/or Logistic Regression)
+      - report 5-fold mean accuracy, AUROC, sensitivity and specificity
+   2. regression task / continuous target
+      - tune
+        [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor)
+        (equivalent to regularized linear regression)
+      - report 5-fold mean MAE, MSqE, $R^2$, percent explained variance, and
+        median absolute error
 
 #### Feature Selection and Hyperparameter Tuning
 

@@ -92,7 +92,7 @@ class HtuneResult:
 
 
 def train_val_splits(
-    df: DataFrame, mode: EstimationMode, val_size: float = VAL_SIZE
+    df: DataFrame, is_classification: bool, val_size: float = VAL_SIZE
 ) -> Tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
     """Wrapper around `sklearn.model_selection.train_test_split` to return splits as `DataFrame`s
     instead of numpy arrays.
@@ -119,7 +119,7 @@ def train_val_splits(
     X_val = val.drop(columns="target")
     y_train = train.target
     y_val = val.target
-    if mode == "classify":
+    if is_classification:
         y_train = y_train.astype(int)
         y_val = y_val.astype(int)
     return X_train, X_val, y_train, y_val

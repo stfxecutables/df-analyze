@@ -14,7 +14,7 @@ from tqdm import tqdm
 from src._types import Estimator, FeatureSelection
 from src.analysis.analyses import full_estimator_analysis
 from src.cli.cli import ProgramOptions, get_options
-from src.saving import FileType, try_save
+from src.saving import FileType, ProgramDirs, try_save
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -190,7 +190,9 @@ def main() -> None:
         log_options(options)
         print(options)
 
-    estimators = options.classifiers if options.mode == "classify" else options.regressors
+    estimators = (
+        options.classifiers if options.is_classification == "classify" else options.regressors
+    )
     feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 

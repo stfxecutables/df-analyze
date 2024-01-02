@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import os
 import traceback
 from dataclasses import dataclass
 from enum import Enum
+from hashlib import sha256
 from pathlib import Path
+from tempfile import gettempprefix, mkdtemp
 from time import ctime
 from typing import (
+    Any,
     Optional,
     Tuple,
 )
+from warnings import warn
 
 from pandas import DataFrame
 
@@ -30,36 +35,120 @@ class FileType(Enum):
 class ProgramDirs(Debug):
     """Container for various output and caching directories"""
 
-    joblib_cache: Path
-    univariate: Path
-    feature_selection: Path
-    interim_results: Path
-    final_results: Path
+    root: Optional[Path] = None
+    joblib_cache: Optional[Path] = None
+    inspection: Optional[Path] = None
+    features: Optional[Path] = None
+    associations: Optional[Path] = None
+    predictions: Optional[Path] = None
+    selection: Optional[Path] = None
+    tuning: Optional[Path] = None
+    results: Optional[Path] = None
+    needs_clean: bool = False
+
+    @staticmethod
+    def new(root: Optional[Path]) -> ProgramDirs:
+        root, needs_clean = ProgramDirs.configure_root(root)
+
+        if root is None:
+            return ProgramDirs()
+
+        new = ProgramDirs(
+            root=root,
+            joblib_cache=root / "__JOBLIB_CACHE__",
+            inspection=root / "inspection",
+            features=root / "features",
+            associations=root / "features/associations",
+            predictions=root / "features/predictions",
+            selection=root / "selection",
+            tuning=root / "tuning",
+            results=root / "results",
+            needs_clean=needs_clean,
+        )
+        for path in new.__dict__:
+            if isinstance(path, Path):
+                if "JOBLIB" in str(path):  # joblib handles creation
+                    continue
+                try:
+                    path.mkdir(exist_ok=True, parents=True)
+                except Exception:
+                    warn(
+                        "Got error creating output directories:\n"
+                        f"{traceback.format_exc()}.\n"
+                        "Defaulting to in-memory results."
+                    )
+                    return ProgramDirs(root=None)
+        return new
+
+    @staticmethod
+    def configure_root(root: Optional[Path] = None) -> tuple[Optional[Path], bool]:
+        try:
+            if (root is not None) and (not os.access(root, os.W_OK)):
+                raise PermissionError(
+                    f"Provided outdir: {root} is not writeable. Provide a "
+                    "different directory or pass `None` to allow `df-analyze` "
+                    "to configure this automatically."
+                )
+
+            needs_clean = False
+            outdir = root or Path.home().resolve() / "df-analyze-outputs"
+
+            if not os.access(outdir, os.W_OK):
+                new = Path.cwd().resolve() / "df-analyze-outputs"
+                warn(f"Do not have write permissions for {outdir}. Trying: {new}.")
+                outdir = new
+            else:
+                outdir.mkdir(exist_ok=True, parents=True)
+                return outdir, needs_clean
+
+            if not os.access(outdir, os.W_OK):
+                try:
+                    raw = mkdtemp(prefix="df_analyze_tmp")
+                    needs_clean = True
+                    new = Path(raw)
+                    warn(
+                        f"Did not have write permissions for {outdir}. Created a "
+                        f"temporary directory at {new} instead."
+                    )
+                    outdir = new
+                    outdir.mkdir(exist_ok=True, parents=True)
+                    return outdir, needs_clean
+                except FileExistsError:
+                    warn(
+                        f"Found existing temporary data. Likely this exists "
+                        f"at {Path(gettempprefix()).resolve()} and must be "
+                        "deleted. Holding results in memory instead. "
+                    )
+                    return None, needs_clean
+                except Exception as e:
+                    warn(
+                        "Could not create temporary directory. Falling back to "
+                        f"storing results in memory. Error details:\n{e}"
+                        f"{traceback.format_exc()}"
+                    )
+                    return None, needs_clean
+
+            else:
+                outdir.mkdir(exist_ok=True, parents=True)
+                return outdir, needs_clean
+        except Exception as e:
+            warn(
+                "Could not create temporary directory. Falling back to "
+                f"storing results in memory. Error details:\n{e}"
+                f"{traceback.format_exc()}"
+            )
+            return None, False
 
 
-def setup_io(outdir: Path, add_timestamp: bool = False) -> ProgramDirs:
-    out = outdir
-    if add_timestamp:
-        timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-        out = out / f"{timestamp}"
+def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:
+    ignores = [] if ignores is None else ignores
+    to_hash = {**args}
+    for ignore in ignores:
+        to_hash.pop(ignore)
 
-    dirs = ProgramDirs(
-        joblib_cache=out / JOBLIB,
-        univariate=out / "univariate",
-        feature_selection=out / "selected_features",
-        interim_results=out / "interim_results",
-        final_results=out / "final_results",
-    )
-    directory: Path
-    for directory in dirs.__dict__.values():
-        if directory.name in [JOBLIB, "selected_features"]:
-            continue  # joblib will handle creation
-        if not directory.exists():
-            json = directory / "json"
-            csv = directory / "csv"
-            json.mkdir(parents=True, exist_ok=True)
-            csv.mkdir(parents=True, exist_ok=True)
-    return dirs
+    # quick and dirty hashing for caching  https://stackoverflow.com/a/1151705
+    hsh = sha256(str(tuple(sorted(to_hash.items()))).encode()).hexdigest()
+    return hsh
 
 
 def try_save(
