@@ -21,7 +21,6 @@ import jsonpickle
 
 from src._constants import (
     CLASSIFIERS,
-    DEFAULT_OUTDIR,
     FEATURE_CLEANINGS,
     FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
@@ -90,7 +89,7 @@ from src.enumerables import (
 )
 from src.loading import load_spreadsheet
 from src.models.base import DfAnalyzeModel
-from src.saving import ProgramDirs, setup_io
+from src.saving import ProgramDirs, get_hash
 from src.testing.datasets import TestDataset
 from src.utils import Debug
 
@@ -289,7 +288,7 @@ class ProgramOptions(Debug):
         self.spam_warnings()
 
     @staticmethod
-    def _random(ds: TestDataset) -> ProgramOptions:
+    def random(ds: TestDataset) -> ProgramOptions:
         n_feats = ds.shape[1]
         feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
@@ -404,6 +403,9 @@ class ProgramOptions(Debug):
 
     def to_json(self, path: Path) -> None:
         path.write_text(str(jsonpickle.encode(self)))
+
+    def hash(self) -> str:
+        return get_hash(self.__dict__, ignores=["cleaning_options", "selection_options"])
 
 
 def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
@@ -661,7 +663,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         "--outdir",
         type=resolved_path,
         required=False,
-        default=DEFAULT_OUTDIR,
+        default=None,
         help=OUTDIR_HELP,
     )
     parser.add_argument(

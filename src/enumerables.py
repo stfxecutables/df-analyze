@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum, EnumMeta
 from math import isnan
 from random import choice, randint
-from typing import Any, Generic, Type, TypeVar
+from typing import Any, Generic, Type, TypeVar, no_type_check
 from warnings import warn
 
 import numpy as np
@@ -24,6 +24,16 @@ class RandEnum(Generic[T]):
         if not isinstance(cls, EnumMeta):
             raise ValueError("Undefined")
         return tuple(np.random.choice([*cls], size=n, replace=False).tolist())  # type: ignore
+
+    @no_type_check
+    def __lt__(self: T, other: Type[T]) -> bool:
+        cls = self.__class__
+        if not isinstance(other, cls):
+            raise ValueError(f"Can only compare {cls} to other objects of type {cls}")
+        return self.name < other.name
+
+    def __gt__(self, other):
+        return not (self < other)
 
 
 class DfAnalyzeClassifier(RandEnum, Enum):
@@ -107,7 +117,7 @@ class RegScore(RandEnum, Enum):
         return self in [RegScore.R2, RegScore.VarExp]
 
 
-class ClsScore(Enum, RandEnum):
+class ClsScore(RandEnum, Enum):
     Accuracy = "acc"
     AUROC = "auroc"
     Sensitivity = "sens"
@@ -125,7 +135,7 @@ class ClsScore(Enum, RandEnum):
         }[self]
 
 
-class EstimatorKind(Enum, RandEnum):
+class EstimatorKind(RandEnum, Enum):
     Linear = "lin"
     SVM = "svm"
     KNN = "knn"

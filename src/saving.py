@@ -4,7 +4,7 @@ import os
 import traceback
 from dataclasses import dataclass
 from enum import Enum
-from hashlib import sha256
+from hashlib import md5
 from pathlib import Path
 from tempfile import gettempprefix, mkdtemp
 from time import ctime
@@ -147,7 +147,9 @@ def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:
         to_hash.pop(ignore)
 
     # quick and dirty hashing for caching  https://stackoverflow.com/a/1151705
-    hsh = sha256(str(tuple(sorted(to_hash.items()))).encode()).hexdigest()
+    # we are not really worried about collisions with the tiny amount of
+    # comparisons / different combinations we have here
+    hsh = md5(str(tuple(sorted(to_hash.items()))).encode()).hexdigest()
     return hsh
 
 

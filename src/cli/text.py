@@ -1,6 +1,7 @@
+from pathlib import Path
+
 from src._constants import (
     CLASSIFIERS,
-    DEFAULT_OUTDIR,
     REGRESSORS,
 )
 
@@ -360,9 +361,10 @@ The meaning of this argument depends on the choice of `--test-val`:
 """
 
 OUTDIR_HELP = f"""
-Specifies location of all results, as well as cache files for slow computations
-(e.g. stepwise feature selection). If unspecified, will default to
-{DEFAULT_OUTDIR}
+Specifies location of all results, as well as cache files for slow
+computations (e.g. stepwise feature selection). If unspecified, will attempt
+to default to a number of common locations ({Path.home().resolve()}, the
+current working directory {Path.cwd().resolve()}, or a temporary directory).
 
 """
 
