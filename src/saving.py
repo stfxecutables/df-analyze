@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from hashlib import md5
 from pathlib import Path
+from shutil import rmtree
 from tempfile import gettempprefix, mkdtemp
 from time import ctime
 from typing import (
@@ -15,6 +16,7 @@ from typing import (
 )
 from warnings import warn
 
+import jsonpickle
 from pandas import DataFrame
 
 from src._types import FeatureCleaning, FeatureSelection
@@ -36,6 +38,7 @@ class ProgramDirs(Debug):
     """Container for various output and caching directories"""
 
     root: Optional[Path] = None
+    options: Optional[Path] = None
     joblib_cache: Optional[Path] = None
     inspection: Optional[Path] = None
     features: Optional[Path] = None
@@ -55,6 +58,7 @@ class ProgramDirs(Debug):
 
         new = ProgramDirs(
             root=root,
+            options=root / "options.json",
             joblib_cache=root / "__JOBLIB_CACHE__",
             inspection=root / "inspection",
             features=root / "features",
@@ -65,9 +69,11 @@ class ProgramDirs(Debug):
             results=root / "results",
             needs_clean=needs_clean,
         )
-        for path in new.__dict__:
+        for attr, path in new.__dict__.items():
             if isinstance(path, Path):
                 if "JOBLIB" in str(path):  # joblib handles creation
+                    continue
+                if attr == "options":
                     continue
                 try:
                     path.mkdir(exist_ok=True, parents=True)
@@ -138,6 +144,17 @@ class ProgramDirs(Debug):
                 f"{traceback.format_exc()}"
             )
             return None, False
+
+    def cleanup(self) -> None:
+        if self.root is None:
+            return
+        try:
+            rmtree(self.root)
+        except Exception:
+            warn(
+                f"Error during cleanup. Some files may remain at {self.root}. "
+                f"Details:\n{traceback.format_exc()}"
+            )
 
 
 def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:

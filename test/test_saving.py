@@ -12,9 +12,11 @@ import os
 import sys
 from argparse import ArgumentParser, Namespace
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from pathlib import Path
+from shutil import rmtree
+from tempfile import TemporaryDirectory
 from typing import (
     Any,
     Callable,
@@ -39,7 +41,7 @@ from pandas import DataFrame, Series
 from typing_extensions import Literal
 
 from src.cli.cli import ProgramOptions
-from src.saving import get_hash
+from src.saving import ProgramDirs, get_hash
 from src.testing.datasets import TestDataset, all_ds, fast_ds, med_ds, slow_ds
 
 
@@ -65,3 +67,49 @@ def test_hashing(dataset: Tuple[str, TestDataset]) -> None:
         assert hsh1 != hsh2
         assert hsh1 == hsh11
         assert hsh2 == hsh22
+
+
+def are_equal(obj1: Any, obj2: Any) -> bool:
+    if is_dataclass(obj1) and is_dataclass(obj2):
+        if obj1.__dict__.keys() != obj2.__dict__.keys():
+            return False
+
+        for key in obj1.__dict__.keys():
+            attr1 = obj1.__dict__[key]
+            attr2 = obj2.__dict__[key]
+            eq = are_equal(attr1, attr2)
+            if not eq:
+                return False
+        return True
+    else:
+        return obj1 == obj2
+
+
+@all_ds
+def test_json(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    tempdir = TemporaryDirectory()
+    try:
+        for _ in range(10):
+            opts = ProgramOptions.random(ds)
+            if opts.outdir is not None:
+                rmtree(opts.outdir)
+            root = Path(tempdir.name)
+            opts.program_dirs = ProgramDirs.new(root=root)
+            opts.to_json()
+            assert root.exists()
+            assert opts.program_dirs.options is not None
+            assert opts.program_dirs.options.exists()
+            opts2 = ProgramOptions.from_json(opts.program_dirs.root)
+            for attr in opts.__dict__:
+                attr1 = getattr(opts, attr)
+                attr2 = getattr(opts2, attr)
+                if not are_equal(attr1, attr2):
+                    raise ValueError(
+                        f"Saved attribute {attr}: {attr2} does not equal initial "
+                        f"value of: {attr1}"
+                    )
+    except Exception as e:
+        raise e
+    finally:
+        tempdir.cleanup()

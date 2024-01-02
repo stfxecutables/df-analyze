@@ -14,6 +14,7 @@ from typing import (
     Optional,
     Tuple,
     Union,
+    cast,
 )
 from warnings import warn
 
@@ -401,11 +402,20 @@ class ProgramOptions(Debug):
         os.makedirs(outdir, exist_ok=True)
         return outdir
 
-    def to_json(self, path: Path) -> None:
-        path.write_text(str(jsonpickle.encode(self)))
-
     def hash(self) -> str:
         return get_hash(self.__dict__, ignores=["cleaning_options", "selection_options"])
+
+    def to_json(self) -> None:
+        path = self.program_dirs.options
+        if path is None:
+            return
+        path.write_text(str(jsonpickle.encode(self)))
+
+    @staticmethod
+    def from_json(root: Path) -> ProgramOptions:
+        options = root / "options.json"
+        obj = jsonpickle.decode(options.read_text())
+        return cast(ProgramOptions, obj)
 
 
 def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
