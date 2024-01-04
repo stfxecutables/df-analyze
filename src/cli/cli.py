@@ -243,7 +243,7 @@ class ProgramOptions(Debug):
         self.mc_repeats: int = mc_repeats
         # TODO: fix below
         self.outdir: Optional[Path] = self.get_outdir(outdir, self.datapath)
-        self.program_dirs: ProgramDirs = ProgramDirs(self.outdir)
+        self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir)
         self.is_spreadsheet: bool = is_spreadsheet
         self.separator: str = separator
         self.verbosity: Verbosity = verbosity

@@ -195,27 +195,22 @@ def main() -> None:
     if options.verbosity.value > 0:
         log_options(options)
 
-    joblib_cache = options.program_dirs.joblib_cache
-    is_classification = options.is_classification
+    is_cls = options.is_classification
     prog_dirs = options.program_dirs
-
+    target = options.target
+    categoricals = options.categoricals
+    ordinals = options.ordinals
+    # joblib_cache = options.program_dirs.joblib_cache
     # if joblib_cache is not None:
     #     memory = Memory(location=joblib_cache)
 
     df = options.load_df()
-    inspection = inspect_data(
-        df=df,
-        target=options.target,
-        categoricals=options.categoricals,
-        ordinals=options.ordinals,
-        _warn=True,
-    )
-    prepared = prepare_data(
-        df=df,
-        target=options.target,
-        results=inspection,
-        is_classification=is_classification,
-    )
+
+    inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
+    prog_dirs.save_inspect_reports(inspection)
+    prog_dirs.save_inspect_tables(inspection)
+
+    prepared = prepare_data(df, target, inspection, is_cls)
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
 
@@ -223,11 +218,11 @@ def main() -> None:
     prog_dirs.save_univariate_assocs(associations)
     prog_dirs.save_assoc_report(associations.to_markdown())
 
-    predictions = univariate_predictions(prepared, is_classification)
+    predictions = univariate_predictions(prepared, is_cls)
     prog_dirs.save_univariate_preds(predictions)
     prog_dirs.save_pred_report(predictions.to_markdown())
 
-    estimators = options.classifiers if is_classification else options.regressors
+    estimators = options.classifiers if is_cls else options.regressors
     feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 

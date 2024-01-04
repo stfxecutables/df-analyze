@@ -317,7 +317,7 @@ class AssocResults:
         if self.conts is not None:
             self.conts.to_csv(root / self.files.conts_csv)
         if self.cats is not None:
-            self.cats.to_parquet(root / self.files.cats_csv)
+            self.cats.to_csv(root / self.files.cats_csv)
 
     def save_raw(self, root: Path) -> None:
         conts = DataFrame() if self.conts is None else self.conts

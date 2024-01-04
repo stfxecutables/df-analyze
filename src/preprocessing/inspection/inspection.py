@@ -705,6 +705,7 @@ def inspect_cls_target(series: Series) -> ClsTargetInfo:
     p_min = np.min(cnts) / np.sum(cnts)
     p_nan = unify_nans(series).isna().mean()
     return ClsTargetInfo(
+        name=str(series.name),
         inflation=inflation,
         unqs=unqs,
         cnts=cnts,
@@ -728,7 +729,9 @@ def inspect_reg_target(series: Series) -> RegTargetInfo:
     if float(var) <= 0:
         raise ValueError(f"Regression target {series.name} is constant.")
 
-    return RegTargetInfo(needs_logarithm=False, has_outliers=False, p_nan=p_nan)
+    return RegTargetInfo(
+        name=str(series.name), needs_logarithm=False, has_outliers=False, p_nan=p_nan
+    )
 
 
 def inspect_target(

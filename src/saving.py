@@ -22,6 +22,7 @@ from pandas import DataFrame
 from src._types import FeatureCleaning, FeatureSelection
 from src.analysis.univariate.associate import AssocResults
 from src.analysis.univariate.predict.predict import PredResults
+from src.preprocessing.inspection.inspection import InspectionResults
 from src.preprocessing.prepare import PreparedData
 from src.utils import Debug
 
@@ -231,6 +232,36 @@ class ProgramDirs(Debug):
         except Exception as e:
             warn(
                 "Got exception when attempting to save preparation report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_inspect_reports(self, inspection: InspectionResults) -> None:
+        if self.inspection is None:
+            return
+        try:
+            short = inspection.short_report()
+            full = inspection.full_report()
+            out_short = self.inspection / "short_inspection_report.md"
+            out_full = self.inspection / "full_inspection_report.md"
+            out_short.write_text(short)
+            if full is not None:
+                out_full.write_text(full)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save inspection reports. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_inspect_tables(self, inspection: InspectionResults) -> None:
+        if self.inspection is None:
+            return
+        try:
+            df = inspection.basic_df()
+            out = self.inspection / "inferred_types.csv"
+            df.to_csv(out)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save inspection table(s). "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 

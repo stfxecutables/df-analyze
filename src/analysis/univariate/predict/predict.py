@@ -82,7 +82,7 @@ class PredResults:
         if self.conts is not None:
             self.conts.to_csv(root / self.files.conts_csv)
         if self.cats is not None:
-            self.cats.to_parquet(root / self.files.cats_csv)
+            self.cats.to_csv(root / self.files.cats_csv)
 
     @staticmethod
     def is_saved(cachedir: Path) -> bool:

@@ -469,6 +469,7 @@ class InspectionResults:
 
 @dataclass
 class TargetInfo:
+    name: str
     needs_logarithm: bool
     has_outliers: bool
     is_classification: bool
@@ -476,6 +477,7 @@ class TargetInfo:
 
 @dataclass
 class RegTargetInfo:
+    name: str
     needs_logarithm: bool
     has_outliers: bool
     p_nan: float
@@ -483,6 +485,7 @@ class RegTargetInfo:
 
 @dataclass
 class ClsTargetInfo:
+    name: str
     inflation: InflationInfo
     unqs: ndarray
     cnts: ndarray

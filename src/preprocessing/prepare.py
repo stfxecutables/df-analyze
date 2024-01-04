@@ -26,7 +26,9 @@ from src.preprocessing.cleaning import (
     normalize_continuous,
 )
 from src.preprocessing.inspection.inspection import (
+    ClsTargetInfo,
     InspectionResults,
+    RegTargetInfo,
     convert_categoricals,
     inspect_target,
     unify_nans,
@@ -51,8 +53,38 @@ class PreparationInfo:
     final_shape: Tuple[int, int]
     n_samples_dropped_via_target_NaNs: int
     n_cont_indicator_added: int
-    target: str
+    target_info: Union[RegTargetInfo, ClsTargetInfo]
     runtimes: dict[str, float]
+
+    def to_markdown(self) -> str:
+        sections = []
+        og = self.original_shape
+        fs = self.final_shape
+        task = "Classification" if self.is_classification else "Regression"
+        orig_shape = f"{og[0]} samples × {og[1]} features"
+        final_shape = f"{fs[0]} samples × {fs[1]} features"
+        n_drop = self.n_samples_dropped_via_target_NaNs
+        n_ind = self.n_cont_indicator_added
+        funcs, times = zip(*self.runtimes.items())
+
+        sections.append("# Data Preparation Summary\n\n")
+        sections.append(f"Task:                   {task}\n")
+        sections.append(f"Data original shape:    {orig_shape}\n")
+        sections.append(f"Data final shape:       {final_shape}\n")
+        sections.append(f"Target feature:         {self.target_info.name}\n")
+        sections.append("\n")
+        sections.append(f"Samples dropped due to NaN target: {n_drop}\n")
+        sections.append(f"Indicator variables added for continuous NaNs: {n_ind}\n\n")
+        sections.append("# Processing Times\n\n")
+        sections.append(
+            DataFrame(
+                data=(np.array(times) * 1000).round(),
+                columns=["runtime (ms)"],
+                index=Series(name="computation", data=funcs),
+            ).to_markdown()
+        )
+
+        return "".join(sections)
 
     def to_json(self, path: Path) -> None:
         path.write_text(str(jsonpickle.encode(self)))
@@ -117,8 +149,7 @@ class PreparedData:
         return X, X_cont, X_cat, y
 
     def to_markdown(self) -> Optional[str]:
-        # TODO
-        ...
+        return self.info.to_markdown()
 
     def save_raw(self, root: Path) -> None:
         try:
@@ -240,9 +271,9 @@ def prepare_data(
             final_shape=X.shape,
             n_samples_dropped_via_target_NaNs=n_targ_drop,
             n_cont_indicator_added=n_ind_added,
-            target=info,
+            target_info=info,
             runtimes=times,
+            is_classification=is_classification,
         ),
         inspection=results,
-        is_classification=is_classification,
     )
