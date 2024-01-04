@@ -11,6 +11,7 @@ sys.path.append(str(ROOT))  # isort: skip
 import os
 import sys
 from argparse import ArgumentParser, Namespace
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -52,6 +53,7 @@ from src.utils import Debug
 def do_main(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     options = ProgramOptions.random(ds)
+    options.to_json()
 
     is_cls = options.is_classification
     prog_dirs = options.program_dirs
@@ -76,6 +78,35 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     predictions = univariate_predictions(prepared, is_cls)
     prog_dirs.save_univariate_preds(predictions)
     prog_dirs.save_pred_report(predictions.to_markdown())
+
+    # select features via filter methods first
+    # NOTE: No report to save for below, since it is obvious based on the
+    # outputs, just output a simple .csv file selected.csv with the selected
+    # feature names
+    filtered = filter_select_features(associations, predictions, options)
+    prog_dirs.save_filter_selected_features(filtered)
+
+    # TODO: have function below dispatch to embedded or wrapper method(s)
+    # depending on user feature selection arguments.
+    # TODO: make embedded and wrapper selection mutually exclusive. Only two
+    # phases of feature selection: filter selection, and model-based
+    # selection, where model-based selection means either embedded or wrapper
+    # (stepup, stepdown) methods.
+    selected = model_select_features(
+        prepared, filtered, options.feat_select, options.classifiers, options.regressors
+    )
+    prog_dirs.save_model_selected_features(selected)
+
+    results = evaluate_models(options, prepared, selected)
+    prog_dirs.save_final_reports(results)
+    prog_dirs.save_final_tables(results)
+    prog_dirs.save_final_plots(results)
+
+    """
+    if options.embedded_select:
+        selected
+
+    """
 
 
 @fast_ds

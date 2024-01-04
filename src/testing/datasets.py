@@ -249,6 +249,7 @@ def fake_data(
 __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
 
 TEST_DATASETS: dict[str, TestDataset] = dict(sorted(__UNSORTED, key=lambda p: p[1].load().shape[0]))
+TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
 
 INSPECTION_TIMES = {
     "KDD98": 68.49440933300002,
