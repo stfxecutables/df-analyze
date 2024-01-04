@@ -47,7 +47,8 @@ TODO
 
 ## Analysis Pipeline
 
-The overall data preparation and analysis process comprises $n$ steps:
+The overall data preparation and analysis process comprises six steps (some
+optional):
 
 1. Feature Type and Cardinalty Inference
 1. Data Preparation and Preprocessing

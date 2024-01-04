@@ -41,6 +41,7 @@ from pandas import DataFrame, Series
 from typing_extensions import Literal
 
 from src.cli.cli import ProgramOptions
+from src.preprocessing.inspection.inspection import InspectionResults
 from src.saving import ProgramDirs, get_hash
 from src.testing.datasets import TestDataset, all_ds, fast_ds, med_ds, slow_ds
 
@@ -113,3 +114,22 @@ def test_json(dataset: Tuple[str, TestDataset]) -> None:
         raise e
     finally:
         tempdir.cleanup()
+
+
+@all_ds
+def test_inspection_json(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    tempdir = TemporaryDirectory()
+    inspections = ds.inspect(load_cached=True, force=False)
+    outdir = Path(tempdir.name)
+    outfile = outdir / "inspections.json"
+    inspections.to_json(outfile)
+    loaded = InspectionResults.from_json(outfile)
+    assert isinstance(loaded, InspectionResults)
+    for attr in inspections.__dict__:
+        attr1 = getattr(inspections, attr)
+        attr2 = getattr(loaded, attr)
+        if not are_equal(attr1, attr2):
+            raise ValueError(
+                f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
+            )

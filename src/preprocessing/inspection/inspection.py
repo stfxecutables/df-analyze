@@ -3,15 +3,19 @@ from __future__ import annotations
 import sys
 import traceback
 from shutil import get_terminal_size
-from typing import Optional, Union, overload
+from typing import TYPE_CHECKING, Optional, Union, overload
 
 import numpy as np
-from joblib import Parallel, delayed
+from joblib import Memory, Parallel, delayed
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
 
 from src._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
+
+if TYPE_CHECKING:
+    from src.cli.cli import ProgramOptions
+
 from src.preprocessing.inspection.containers import (
     ClsTargetInfo,
     ColumnDescriptions,
@@ -671,6 +675,21 @@ def inspect_data(
         user_cats=arg_cats,
         user_ords=arg_ords,
     )
+
+
+def inspect_data_cached(
+    options: ProgramOptions,
+    memory: Memory,
+) -> InspectionResults:
+    if options.program_dirs.root is None:  # can't write files, no cache
+        return inspect_data(
+            df=options.load_df(),
+            target=options.target,
+            categoricals=options.categoricals,
+            ordinals=options.ordinals,
+            _warn=True,
+        )
+    raise NotImplementedError()
 
 
 def inspect_cls_target(series: Series) -> ClsTargetInfo:

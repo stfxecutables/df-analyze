@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import traceback
+from dataclasses import dataclass
 from functools import partial
-from typing import Any, Optional, Union
+from pathlib import Path
+from typing import Any, Optional, Tuple, Union, cast
+from warnings import warn
 
+import jsonpickle
 import numpy as np
+import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 
@@ -28,6 +34,34 @@ from src.preprocessing.inspection.inspection import (
 from src.timing import timed
 
 
+@dataclass
+class PrepFiles:
+    X_raw: str = "X.parquet"
+    X_cont_raw: str = "X_cont.parquet"
+    X_cat_raw: str = "X_cat.parquet"
+    y_raw: str = "y.parquet"
+    labels: str = "labels.parquet"
+    info: str = "info.json"
+
+
+@dataclass
+class PreparationInfo:
+    is_classification: bool
+    original_shape: Tuple[int, int]
+    final_shape: Tuple[int, int]
+    n_samples_dropped_via_target_NaNs: int
+    n_cont_indicator_added: int
+    target: str
+    runtimes: dict[str, float]
+
+    def to_json(self, path: Path) -> None:
+        path.write_text(str(jsonpickle.encode(self)))
+
+    @staticmethod
+    def from_json(path: Path) -> PreparationInfo:
+        return cast(PreparationInfo, jsonpickle.decode(path.read_text()))
+
+
 class PreparedData:
     def __init__(
         self,
@@ -37,12 +71,12 @@ class PreparedData:
         y: Series,
         labels: Optional[dict[int, str]],
         inspection: InspectionResults,
-        is_classification: bool,
-        info: dict[str, Any],
+        info: PreparationInfo,
     ) -> None:
-        self.is_classification: bool = is_classification
+        self.is_classification: bool = info.is_classification
         self.inspection: InspectionResults = inspection
-        self.info: dict[str, Any] = info
+        self.info: PreparationInfo = info
+        self.files: PrepFiles = PrepFiles()
 
         X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
         self.X: DataFrame = X
@@ -81,6 +115,50 @@ class PreparedData:
         X_cat.index = X.index.copy(deep=True)
         y.index = X.index.copy(deep=True)
         return X, X_cont, X_cat, y
+
+    def to_markdown(self) -> Optional[str]:
+        # TODO
+        ...
+
+    def save_raw(self, root: Path) -> None:
+        try:
+            self.X.to_parquet(root / self.files.X_raw)
+            self.X_cont.to_parquet(root / self.files.X_cont_raw)
+            self.X_cat.to_parquet(root / self.files.X_cat_raw)
+            self.y.to_frame().to_parquet(root / self.files.y_raw)
+            if self.labels is not None:
+                DataFrame(self.labels).to_parquet(root / self.files.labels)
+            self.info.to_json(root / self.files.info)
+        except Exception as e:
+            warn(
+                f"Exception while saving {self.__class__.__name__} to {root}."
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    @staticmethod
+    def from_saved(root: Path, inspection: InspectionResults) -> PreparedData:
+        files = PrepFiles()
+        X = pd.read_parquet(root / files.X_raw)
+        X_cont = pd.read_parquet(root / files.X_cont_raw)
+        X_cat = pd.read_parquet(root / files.X_cat_raw)
+        y_raw = pd.read_parquet(root / files.y_raw)
+        y = Series(name=y_raw.columns[0], data=y_raw.values.ravel(), index=y_raw.index)
+        labelpath = root / files.labels
+        labels: Optional[dict[int, str]]
+        if labelpath.exists():
+            labels = pd.read_parquet(labelpath).to_dict()  # type: ignore
+        else:
+            labels = None
+        info = PreparationInfo.from_json(root / files.info)
+        return PreparedData(
+            X=X,
+            X_cont=X_cont,
+            X_cat=X_cat,
+            y=y,
+            labels=labels,
+            inspection=inspection,
+            info=info,
+        )
 
 
 def prepare_target(
@@ -129,6 +207,8 @@ def prepare_data(
     """
     times: dict[str, float] = {}
     timer = partial(timed, times=times)
+    orig_shape = (df.shape[0], df.shape[1] - 1)
+
     df = timer(unify_nans)(df)
     df = timer(convert_categoricals)(df, target)
     info = timer(inspect_target)(df, target, is_classification=is_classification)
@@ -155,12 +235,14 @@ def prepare_data(
         X_cat=X_cat,
         y=y,
         labels=labels,
-        info={
-            "n_samples_dropped_via_target_NaNs": n_targ_drop,
-            "n_cont_indicator_added": n_ind_added,
-            "target": info,
-            "runtimes": times,
-        },
+        info=PreparationInfo(
+            original_shape=orig_shape,
+            final_shape=X.shape,
+            n_samples_dropped_via_target_NaNs=n_targ_drop,
+            n_cont_indicator_added=n_ind_added,
+            target=info,
+            runtimes=times,
+        ),
         inspection=results,
         is_classification=is_classification,
     )

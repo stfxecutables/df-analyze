@@ -273,6 +273,11 @@ class Inference:
     def __bool__(self) -> bool:
         return bool(self.kind)
 
+    def __eq__(self, other: Inference) -> bool:
+        if not isinstance(other, Inference):
+            return False
+        return self.kind == other.kind and self.reason == other.reason
+
 
 def has_cat_name(series: Series) -> tuple[bool, str]:
     for pattern in CAT_WORDS:

@@ -19,6 +19,8 @@ from typing import (
 from warnings import warn
 
 import jsonpickle
+import pandas as pd
+from pandas import DataFrame
 
 from src._constants import (
     CLASSIFIERS,
@@ -416,6 +418,18 @@ class ProgramOptions(Debug):
         options = root / "options.json"
         obj = jsonpickle.decode(options.read_text())
         return cast(ProgramOptions, obj)
+
+    def load_df(self) -> DataFrame:
+        if self.is_spreadsheet:
+            return load_spreadsheet(self.datapath)[0]
+        path = self.datapath
+        if path.name.endswith("parquet"):
+            return pd.read_parquet(path)
+        if path.name.endswith("csv"):
+            return pd.read_csv(path, sep=self.separator)
+        if path.name.endswith("json"):
+            return pd.read_json(path)
+        raise ValueError(f"Unrecognized filetype: '{path.suffix}'")
 
 
 def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:

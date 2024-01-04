@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import (
     Optional,
     cast,
+    overload,
 )
-from warnings import WarningMessage
+from warnings import WarningMessage, warn
 
 import numpy as np
 import pandas as pd
@@ -39,8 +40,10 @@ from src.preprocessing.prepare import PreparedData
 
 @dataclass
 class PredFiles:
-    conts = "cont.parquet"
-    cats = "cat.parquet"
+    conts_raw = "continuous_features.parquet"
+    cats_raw = "categorical_features.parquet"
+    conts_csv = "continuous_features.csv"
+    cats_csv = "categorical_features.csv"
     idx = "subsample.npy"
 
 
@@ -62,32 +65,38 @@ class PredResults:
         self.idx_subsample = idx
         self.files = PredFiles()
 
-    def save(self, cachedir: Path) -> None:
+    def save_raw(self, root: Path) -> None:
         if self.conts is not None:
-            self.conts.to_parquet(cachedir / self.files.conts)
+            self.conts.to_parquet(root / self.files.conts_raw)
         else:
-            DataFrame().to_parquet(cachedir / self.files.conts)
+            DataFrame().to_parquet(root / self.files.conts_raw)
         if self.cats is not None:
-            self.cats.to_parquet(cachedir / self.files.cats)
+            self.cats.to_parquet(root / self.files.cats_raw)
         else:
-            DataFrame().to_parquet(cachedir / self.files.conts)
+            DataFrame().to_parquet(root / self.files.conts_raw)
         if self.idx_subsample is not None:
             with open(self.files.idx, "wb") as handle:
                 np.save(handle, self.idx_subsample, allow_pickle=False, fix_imports=False)
 
+    def save_tables(self, root: Path) -> None:
+        if self.conts is not None:
+            self.conts.to_csv(root / self.files.conts_csv)
+        if self.cats is not None:
+            self.cats.to_parquet(root / self.files.cats_csv)
+
     @staticmethod
     def is_saved(cachedir: Path) -> bool:
         files = PredFiles()
-        conts = cachedir / files.conts
-        cats = cachedir / files.cats
+        conts = cachedir / files.conts_raw
+        cats = cachedir / files.cats_raw
         return conts.exists() and cats.exists()
 
     @staticmethod
     def load(cachedir: Path, is_classification: bool) -> PredResults:
         preds = PredResults(conts=None, cats=None, is_classification=is_classification)
         try:
-            conts = pd.read_parquet(cachedir / preds.files.conts)
-            cats = pd.read_parquet(cachedir / preds.files.cats)
+            conts = pd.read_parquet(cachedir / preds.files.conts_raw)
+            cats = pd.read_parquet(cachedir / preds.files.cats_raw)
         except FileNotFoundError:
             raise FileNotFoundError(f"Missing cached predictions at {cachedir}")
 
@@ -99,41 +108,53 @@ class PredResults:
             preds.idx_subsample = np.load(npy_file, allow_pickle=False, fix_imports=False)
         return preds
 
-    def to_markdown(self, path: Path) -> None:
-        sorter = "acc" if self.is_classification else "Var exp"
-        if self.conts is not None:
-            conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4g")
-            cont_table = f"# Continuous predictions\n\n{conts}\n\n"
-        else:
-            cont_table = ""
-        if self.cats is not None:
-            cats = self.cats.sort_values(by=sorter, ascending=False).to_markdown(floatfmt="0.4g")
-            cats_table = f"# Categorical prediction:\n\n{cats}"
-        else:
-            cats_table = ""
+    def to_markdown(self, path: Optional[Path] = None) -> Optional[str]:
+        try:
+            sorter = "acc" if self.is_classification else "Var exp"
+            if self.conts is not None:
+                conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(
+                    floatfmt="0.4g"
+                )
+                cont_table = f"# Continuous predictions\n\n{conts}\n\n"
+            else:
+                cont_table = ""
+            if self.cats is not None:
+                cats = self.cats.sort_values(by=sorter, ascending=False).to_markdown(
+                    floatfmt="0.4g"
+                )
+                cats_table = f"# Categorical prediction:\n\n{cats}"
+            else:
+                cats_table = ""
 
-        cont_legend = (
-            "\n\n"
-            "MAE: Mean Absolute Error\n"
-            "MSqE: Mean Squared Error\n"
-            "MdAe: Median Absolute Error\n"
-            "R2: R-squared (coefficient of determination)\n"
-            "Var exp: Percent Variance Explained\n"
-        )
+            cont_legend = (
+                "\n\n"
+                "MAE: Mean Absolute Error\n"
+                "MSqE: Mean Squared Error\n"
+                "MdAe: Median Absolute Error\n"
+                "R2: R-squared (coefficient of determination)\n"
+                "Var exp: Percent Variance Explained\n"
+            )
 
-        cat_legend = (
-            "\n\n"
-            "acc: accuracy\n"
-            "auroc: area under the receiving operater characteristic curve\n"
-            "sens: sensitivity\n"
-            "spec: specificity\n"
-        )
-        legend = cat_legend if self.is_classification else cont_legend
-        tables = cont_table + cats_table
+            cat_legend = (
+                "\n\n"
+                "acc: accuracy\n"
+                "auroc: area under the receiving operater characteristic curve\n"
+                "sens: sensitivity\n"
+                "spec: specificity\n"
+            )
+            legend = cat_legend if self.is_classification else cont_legend
+            tables = cont_table + cats_table
 
-        if tables.replace("\n", "") != "":
-            tables = tables + legend
-            path.write_text(tables)
+            if tables.replace("\n", "") != "":
+                tables = tables + legend
+                if path is not None:
+                    path.write_text(tables)
+                return tables
+        except Exception as e:
+            warn(
+                "Got exception when attempting to make predictions report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
 
 
 def continuous_feature_target_preds(

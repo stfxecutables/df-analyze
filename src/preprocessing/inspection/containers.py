@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import re
 import sys
+import traceback
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from shutil import get_terminal_size
-from typing import Optional
+from typing import Optional, cast
+from warnings import warn
 
+import jsonpickle
 import numpy as np
 import pandas as pd
 from numpy import ndarray
@@ -182,6 +186,15 @@ class InspectionInfo:
         return f"{cname}({fmt})"
 
     __repr__ = __str__
+
+    def __eq__(self, other: InspectionInfo) -> bool:
+        if not isinstance(other, InspectionInfo):
+            return False
+        return (
+            self.kind == other.kind
+            and self.infos == other.infos
+            and sorted(self.cols) == sorted(other.cols)
+        )
 
     @staticmethod
     def merge(*infos: InspectionInfo) -> InspectionInfo:
@@ -439,6 +452,19 @@ class InspectionResults:
         df = df[~idx].sort_index().sort_values(by=["user", "inferred"])
 
         return pd.concat([df, coerced], axis=0, ignore_index=False)
+
+    def to_json(self, path: Path) -> None:
+        try:
+            path.write_text(str(jsonpickle.encode(self)))
+        except Exception as e:
+            warn(
+                f"Got exception when saving inspection results to .json. Details:\n"
+                f"{e}\n{traceback.format_exc()}"
+            )
+
+    @staticmethod
+    def from_json(path: Path) -> InspectionResults:
+        return cast(InspectionResults, jsonpickle.decode(path.read_text()))
 
 
 @dataclass

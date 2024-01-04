@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import sys
+import traceback
 import warnings
 from dataclasses import dataclass
 from enum import Enum
@@ -18,6 +19,7 @@ from typing import (
     Optional,
     Union,
 )
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -251,8 +253,10 @@ CAT_FEATURE_CAT_TARGET_STATS = ["cramer_v", "H", "mut_info"]
 
 @dataclass
 class AssocFiles:
-    conts = "cont.parquet"
-    cats = "cat.parquet"
+    conts_raw = "continuous_features.parquet"
+    cats_raw = "categorical_features.parquet"
+    conts_csv = "continuous_features.csv"
+    cats_csv = "categorical_features.csv"
 
 
 class AssocResults:
@@ -267,58 +271,74 @@ class AssocResults:
         self.is_classification = is_classification
         self.files = AssocFiles()
 
-    def to_markdown(self, path: Path) -> None:
+    def to_markdown(self, path: Optional[Path] = None) -> Optional[str]:
+        try:
+            if self.conts is not None:
+                conts = self.conts.sort_values(by="mut_info", ascending=False)
+                conts = conts.map(lambda x: x if abs(x) > 1e-10 else 0)
+                cols = conts.columns.to_list()
+                cols.remove("mut_info")
+                cols = ["mut_info"] + cols
+                conts_table = conts.loc[:, cols].to_markdown(floatfmt="<0.03g")
+            else:
+                conts_table = ""
+            if self.cats is not None:
+                cats = self.cats.sort_values(by="mut_info", ascending=False)
+                cats = cats.map(lambda x: x if abs(x) > 1e-10 else 0)
+                cols = cats.columns.to_list()
+                cols.remove("mut_info")
+                cols = ["mut_info"] + cols
+                cats_table = cats.loc[:, cols].to_markdown(floatfmt="<0.03g")
+            else:
+                cats_table = ""
+
+            conts_table = conts_table.replace("nan", "   ")
+            cats_table = cats_table.replace("nan", "   ")
+
+            conts_table = (
+                f"# Continuous associations\n\n{conts_table}\n\n" if self.conts is not None else ""
+            )
+            cats_table = (
+                f"# Categorical associations\n\n{cats_table}" if self.cats is not None else ""
+            )
+            tables = conts_table + cats_table
+            if tables.replace("\n", "") != "":
+                tables = f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
+                if path is not None:
+                    path.write_text(tables)
+                return tables
+        except Exception as e:
+            warn(
+                "Got exception when attempting to make associations report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_tables(self, root: Path) -> None:
         if self.conts is not None:
-            conts = self.conts.sort_values(by="mut_info", ascending=False)
-            conts = conts.map(lambda x: x if abs(x) > 1e-10 else 0)
-            cols = conts.columns.to_list()
-            cols.remove("mut_info")
-            cols = ["mut_info"] + cols
-            conts_table = conts.loc[:, cols].to_markdown(floatfmt="<0.03g")
-        else:
-            conts_table = ""
+            self.conts.to_csv(root / self.files.conts_csv)
         if self.cats is not None:
-            cats = self.cats.sort_values(by="mut_info", ascending=False)
-            cats = cats.map(lambda x: x if abs(x) > 1e-10 else 0)
-            cols = cats.columns.to_list()
-            cols.remove("mut_info")
-            cols = ["mut_info"] + cols
-            cats_table = cats.loc[:, cols].to_markdown(floatfmt="<0.03g")
-        else:
-            cats_table = ""
+            self.cats.to_parquet(root / self.files.cats_csv)
 
-        conts_table = conts_table.replace("nan", "   ")
-        cats_table = cats_table.replace("nan", "   ")
-
-        conts_table = (
-            f"# Continuous associations\n\n{conts_table}\n\n" if self.conts is not None else ""
-        )
-        cats_table = f"# Categorical associations\n\n{cats_table}" if self.cats is not None else ""
-        tables = conts_table + cats_table
-        if tables.replace("\n", "") != "":
-            tables = f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
-            path.write_text(tables)
-
-    def save(self, cachedir: Path) -> None:
+    def save_raw(self, root: Path) -> None:
         conts = DataFrame() if self.conts is None else self.conts
         cats = DataFrame() if self.cats is None else self.cats
 
-        conts.to_parquet(cachedir / self.files.conts)
-        cats.to_parquet(cachedir / self.files.cats)
+        conts.to_parquet(root / self.files.conts_raw)
+        cats.to_parquet(root / self.files.cats_raw)
 
     @staticmethod
     def is_saved(cachedir: Path) -> bool:
         files = AssocFiles()
-        conts = cachedir / files.conts
-        cats = cachedir / files.cats
+        conts = cachedir / files.conts_raw
+        cats = cachedir / files.cats_raw
         return conts.exists() and cats.exists()
 
     @staticmethod
     def load(cachedir: Path, is_classification: bool) -> AssocResults:
         preds = AssocResults(conts=None, cats=None, is_classification=is_classification)
         try:
-            conts = pd.read_parquet(cachedir / preds.files.conts)
-            cats = pd.read_parquet(cachedir / preds.files.cats)
+            conts = pd.read_parquet(cachedir / preds.files.conts_raw)
+            cats = pd.read_parquet(cachedir / preds.files.cats_raw)
         except FileNotFoundError:
             raise FileNotFoundError(f"Missing cached associations at {cachedir}")
 

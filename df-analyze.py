@@ -7,13 +7,19 @@ from time import ctime
 from typing import List, Optional, TypeVar, Union
 
 import pandas as pd
+from joblib import Memory
 from pandas import DataFrame
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
 from src._types import Estimator, FeatureSelection
 from src.analysis.analyses import full_estimator_analysis
+from src.analysis.univariate.associate import target_associations
+from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions, get_options
+from src.loading import load_spreadsheet
+from src.preprocessing.inspection.inspection import inspect_data
+from src.preprocessing.prepare import prepare_data
 from src.saving import FileType, ProgramDirs, try_save
 from src.utils import Debug
 
@@ -188,11 +194,40 @@ def main() -> None:
     options = get_options()
     if options.verbosity.value > 0:
         log_options(options)
-        print(options)
 
-    estimators = (
-        options.classifiers if options.is_classification == "classify" else options.regressors
+    joblib_cache = options.program_dirs.joblib_cache
+    is_classification = options.is_classification
+    prog_dirs = options.program_dirs
+
+    # if joblib_cache is not None:
+    #     memory = Memory(location=joblib_cache)
+
+    df = options.load_df()
+    inspection = inspect_data(
+        df=df,
+        target=options.target,
+        categoricals=options.categoricals,
+        ordinals=options.ordinals,
+        _warn=True,
     )
+    prepared = prepare_data(
+        df=df,
+        target=options.target,
+        results=inspection,
+        is_classification=is_classification,
+    )
+    prog_dirs.save_prepared_raw(prepared)
+    prog_dirs.save_prep_report(prepared.to_markdown())
+
+    associations = target_associations(prepared)
+    prog_dirs.save_univariate_assocs(associations)
+    prog_dirs.save_assoc_report(associations.to_markdown())
+
+    predictions = univariate_predictions(prepared, is_classification)
+    prog_dirs.save_univariate_preds(predictions)
+    prog_dirs.save_pred_report(predictions.to_markdown())
+
+    estimators = options.classifiers if is_classification else options.regressors
     feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 

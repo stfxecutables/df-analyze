@@ -130,11 +130,11 @@ class TestDataset:
         assocs = target_associations(prep)
 
         if force:
-            assocs.save(self.assoc_cachedir)
+            assocs.save_raw(self.assoc_cachedir)
             return assocs
 
         if not AssocResults.is_saved(self.assoc_cachedir):
-            assocs.save(self.assoc_cachedir)
+            assocs.save_raw(self.assoc_cachedir)
 
         return assocs
 
@@ -146,11 +146,11 @@ class TestDataset:
         preds = univariate_predictions(prep, self.is_classification)
 
         if force:
-            preds.save(self.preds_cachedir)
+            preds.save_raw(self.preds_cachedir)
             return preds
 
         if not preds.is_saved(self.preds_cachedir):
-            preds.save(self.preds_cachedir)
+            preds.save_raw(self.preds_cachedir)
 
         return preds
 

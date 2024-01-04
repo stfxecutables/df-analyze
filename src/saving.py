@@ -20,6 +20,9 @@ import jsonpickle
 from pandas import DataFrame
 
 from src._types import FeatureCleaning, FeatureSelection
+from src.analysis.univariate.associate import AssocResults
+from src.analysis.univariate.predict.predict import PredResults
+from src.preprocessing.prepare import PreparedData
 from src.utils import Debug
 
 JOBLIB = "__JOBLIB_CACHE__"
@@ -41,6 +44,7 @@ class ProgramDirs(Debug):
     options: Optional[Path] = None
     joblib_cache: Optional[Path] = None
     inspection: Optional[Path] = None
+    prepared: Optional[Path] = None
     features: Optional[Path] = None
     associations: Optional[Path] = None
     predictions: Optional[Path] = None
@@ -61,6 +65,7 @@ class ProgramDirs(Debug):
             options=root / "options.json",
             joblib_cache=root / "__JOBLIB_CACHE__",
             inspection=root / "inspection",
+            prepared=root / "prepared",
             features=root / "features",
             associations=root / "features/associations",
             predictions=root / "features/predictions",
@@ -144,6 +149,90 @@ class ProgramDirs(Debug):
                 f"{traceback.format_exc()}"
             )
             return None, False
+
+    def save_pred_report(self, report: Optional[str]) -> None:
+        if (self.predictions is None) or (report is None):
+            return
+        out = self.predictions / "predictions_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save predictions report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_assoc_report(self, report: Optional[str]) -> None:
+        if (self.associations is None) or (report is None):
+            return
+        out = self.associations / "associations_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save associations report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_univariate_preds(self, preds: PredResults) -> None:
+        if self.predictions is None:
+            return
+        try:
+            preds.save_raw(self.predictions)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save raw predictions. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+        try:
+            preds.save_tables(self.predictions)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save prediction csv tables. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_univariate_assocs(self, assocs: AssocResults) -> None:
+        if self.associations is None:
+            return
+        try:
+            assocs.save_raw(self.associations)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save raw associations. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+        try:
+            assocs.save_tables(self.associations)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save association csv tables. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_prepared_raw(self, prepared: PreparedData) -> None:
+        if self.prepared is None:
+            return
+        try:
+            prepared.save_raw(self.prepared)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to prepared data. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_prep_report(self, report: Optional[str]) -> None:
+        if (self.prepared is None) or (report is None):
+            return
+
+        out = self.prepared / "preparation_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save preparation report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
 
     def cleanup(self) -> None:
         if self.root is None:
