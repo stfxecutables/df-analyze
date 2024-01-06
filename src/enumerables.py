@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum, EnumMeta
 from math import isnan
 from random import choice, randint
-from typing import Any, Generic, Type, TypeVar, no_type_check
+from typing import Any, Generic, Optional, Type, TypeVar, no_type_check
 from warnings import warn
 
 import numpy as np
@@ -24,6 +24,12 @@ class RandEnum(Generic[T]):
         if not isinstance(cls, EnumMeta):
             raise ValueError("Undefined")
         return tuple(np.random.choice([*cls], size=n, replace=False).tolist())  # type: ignore
+
+    @classmethod
+    def random_none(cls: Type[T]) -> Optional[T]:
+        if not isinstance(cls, EnumMeta):
+            raise ValueError("Undefined")
+        return choice([*cls, None])  # type: ignore
 
     @no_type_check
     def __lt__(self: T, other: Type[T]) -> bool:
@@ -54,6 +60,11 @@ class DfAnalyzeRegressor(RandEnum, Enum):
     SVM = "svm"
 
 
+class DfAnayzeEmbedSelector(RandEnum, Enum):
+    LGBM = "lgbm"
+    Linear = "linear"
+
+
 class NanHandling(RandEnum, Enum):
     Drop = "drop"
     Mean = "mean"
@@ -67,22 +78,37 @@ class EstimationMode(RandEnum, Enum):
 
 
 class FeatureCleaning(RandEnum, Enum):
-    Constant = "constant"
     Correlated = "correlated"
     LowInfo = "lowinfo"
 
 
 class FeatureSelection(RandEnum, Enum):
-    Minimal = "minimal"
-    StepDown = "step-down"
-    StepUp = "step-up"
-    PCA = "pca"
-    kPCA = "kpca"
+    Filter = "filter"
+    Embedded = "embed"
+    Wrapper = "wrap"
+
+
+class ModelFeatureSelection(RandEnum, Enum):
+    Embedded = "embed"
+    Wrapper = "wrap"
+    NoSelection = "none"
 
 
 class WrapperSelection(RandEnum, Enum):
     StepUp = "step-up"
     StepDown = "step-down"
+    # Genetic = "genetic"
+    # ParticleSwarm = "swarm"
+
+
+class WrapperSelectionModel(RandEnum, Enum):
+    Linear = "linear"
+    LGBM = "lgbm"
+
+
+class DimensionReduction(RandEnum, Enum):
+    PCA = "pca"
+    kPCA = "kpca"
 
 
 class FilterSelection(RandEnum, Enum):

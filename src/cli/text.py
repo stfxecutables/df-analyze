@@ -141,6 +141,66 @@ you should have held-out test data that never gets passed to `df-analyze`.
 
 """
 
+MODEL_SELECT_HELP = """
+Methods of model-based feature selection methods to use. Available options are:
+
+  embed:      Select using an embedded method, i.e. a method where the model
+              produces values for each feature that can be interpreted as
+              feature importances. Which model is used is determined by
+              `--embed-model`.
+
+  wrap:       Select using a wrapper method, i.e. a method which uses ("wraps")
+              a specific model, and then optimizes the feature set via some
+              alternation of model evaluations and feature-space search /
+              navigation strategy.
+
+  none:       Do not select features using any model.
+"""
+
+WRAP_SELECT_HELP = """
+Wrapper-based feature selection method, i.e. method/optimizer to use to
+search feature-set space during wrapper-based feature selection. Currently
+only (recursive) step-down and step-up methods are supported, but future
+versions may support random subset search, LIPO
+(http://blog.dlib.net/2017/12/a-global-optimization-algorithm-worth.html,
+https://arxiv.org/abs/1703.02628) and evolutionary algorithms such as
+particle-swarm optimization and genetic algorithms (since feature selection
+is just a black-box optimization problem where the search space is a set of
+feature sets).
+
+Model to use in wrapper-based feature selection. Available options are:
+
+  stepup:     Start with the empty feature set, and greedily add the feature
+              that most improves prediction of the target variable. Also called
+              forward feature selection.
+
+  stepdown:   Start with the full feature set, and remove the feature
+              that most improves (or least decreases) prediction of the target
+              variable. Also called backward / recursive feature slection or
+              elimination.
+"""
+
+WRAP_SELECT_MODEL_HELP = """
+Model to use during wrapper-based feature selection. Available options are:
+
+  linear:     For classification tasks, logistic regression, and for regression
+              tasks, linear regression.
+
+  lgbm:       Use a LightGBM gradient-boosted decision tree model.
+"""
+
+EMBED_SELECT_MODEL_HELP = """
+Model to use for embedded feature selection. Supported models are:
+
+  linear      Tuned SGDRegressor or SGDClassifier, in both cases with L1
+              regularization.
+
+  lgbm:       LightGBM regressor or classifier, depending on task.
+"""
+
+SELECT_TUNE_ROUNDS_HELP = """
+"""
+
 FEAT_CLEAN_HELP = """
 If specified, which feature cleaning methods to use prior to feature selection.
 Makes use of the featuretools library (featuretools.com). Options are:
@@ -149,6 +209,11 @@ Makes use of the featuretools library (featuretools.com). Options are:
   constant:   remove constant (zero-variance) features. Default.
   lowinfo:    remove "low information" features via featuretools.
 
+"""
+
+SELECT_TUNE_ROUNDS_HELP = """
+If not the default of zero, the number of tuning rounds to do before evaluating
+each feature set during wrapper-based feature selection.
 """
 
 NAN_HELP = """

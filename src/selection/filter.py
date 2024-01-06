@@ -30,6 +30,7 @@ from src.analysis.univariate.associate import (
     ContRegStats,
 )
 from src.analysis.univariate.predict.predict import PredResults
+from src.cli.cli import ProgramOptions
 from src.enumerables import ClsScore, RegScore
 from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORERS
 from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORERS
@@ -114,7 +115,6 @@ def n_total_select_default(
 
 
 def filter_by_univariate_associations(
-    prepared: PreparedData,
     associations: AssocResults,
     cont_metric: Optional[ContAssociation] = None,
     cat_metric: Optional[CatAssociation] = None,
@@ -123,7 +123,7 @@ def filter_by_univariate_associations(
     n_total: Optional[Union[int, float]] = None,
     significant_only: bool = False,
 ) -> list[str]:
-    is_cls = prepared.is_classification
+    is_cls = associations.is_classification
     if is_cls:
         if not isinstance(cont_metric, ContClsStats):
             cont_metric = ContClsStats.default()
@@ -226,7 +226,6 @@ def dummy_adjust(df: DataFrame) -> DataFrame:
 
 
 def filter_by_univariate_predictions(
-    prepared: PreparedData,
     predictions: PredResults,
     cont_metric: RegScore = RegScore.MAE,
     cat_metric: ClsScore = ClsScore.Accuracy,
@@ -258,3 +257,17 @@ def filter_by_univariate_predictions(
 
         idx_keep = cat_stats[ps] > 0.05
         cat_stats = cat_stats.loc[idx_keep]
+
+
+class FilterSelected:
+    features: list[str]
+    selected: list[str]
+    scores: list[float]
+
+
+def filter_select_features(
+    associations: AssocResults,
+    predictions: PredResults,
+    options: ProgramOptions,
+) -> FilterSelected:
+    ...

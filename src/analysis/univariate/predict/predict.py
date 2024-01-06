@@ -293,129 +293,15 @@ def feature_target_predictions(
     return df_cont, df_cat, errs, all_warns
 
 
-def viable_subsample(
-    df: DataFrame,
-    target: Series,
-    n_sub: int = 2000,
-    rng: Optional[Generator] = None,
-) -> ndarray:
-    rng = rng or np.random.default_rng()
-    unqs, cnts = np.unique(target, return_counts=True)
-    n_min = N_CAT_LEVEL_MIN
-    idx_count = cnts < n_min
-    idx_final = np.arange(len(target))
-    drop_vals = unqs[idx_count]
-    unqs = unqs[~idx_count]
-    idx_keep = ~target.isin(drop_vals)
-    X: ndarray
-    y: ndarray
-    idx_final = idx_final[idx_keep]
-    X = df.copy(deep=True).values[idx_keep]
-    y = target.copy(deep=True).values[idx_keep]
-    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Keep fail"
-
-    # shuffle once to allow getting random first n of each class later
-    idx_shuffle = rng.permutation(len(y))
-    idx_final = idx_final[idx_shuffle]
-    X = X[idx_shuffle]
-    y = y[idx_shuffle]
-    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Shuffle fail"
-    #
-    idx = np.argsort(y)
-    idx_final = idx_final[idx]
-    X = X[idx]
-    y = y[idx]
-    assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Argsort fail"
-    # this gives e.g. stops[i]:stops[i+1] are class i
-    stops = np.searchsorted(y, unqs)
-    cls_idxs = []
-    for i in range(len(stops) - 1):
-        start, stop = stops[i], stops[i + 1]
-        shuf = rng.permutation(stop - start)
-        cls_idxs.append(np.arange(start, stop)[shuf][:n_min])
-    shuf = rng.permutation(len(y) - stops[-1])
-    cls_idxs.append(np.arange(stops[-1], len(y))[shuf][:n_min])
-
-    idx_required = np.concatenate(cls_idxs).ravel()
-    idx_final_req = idx_final[idx_required]
-    y_req = y[idx_required]
-    assert np.bincount(y_req).min() >= N_CAT_LEVEL_MIN, "collect fail"
-
-    n_remain = n_sub - len(y_req)
-    if n_remain <= 0:
-        return idx_final_req
-
-    idx_remain = np.ones_like(y, dtype=bool)
-    idx_remain[idx_required] = False
-    idx_final_rem = idx_final[idx_remain]
-    X_remain = X[idx_remain]
-    n_remain = min(n_remain, len(y))
-    if n_remain >= len(y):
-        idx_full = np.concatenate([idx_final_req, idx_final_rem])
-        assert np.bincount(target[idx_full]).min() >= N_CAT_LEVEL_MIN, "remain fail"
-        return idx_full
-    else:
-        ent = rng.bit_generator.seed_seq.entropy  # type: ignore
-        smax = 2**32 - 1
-        while ent > smax:
-            ent //= 2
-
-        ss = ShuffleSplit(
-            n_splits=1,
-            train_size=n_remain,
-            random_state=ent,
-        )
-        idx = next(ss.split(X_remain))[0]
-        idx_final_strat = idx_final_rem[idx]
-        idx_full = np.concatenate([idx_final_req, idx_final_strat])
-        assert np.bincount(target[idx_full]).min() >= N_CAT_LEVEL_MIN, "concat fail"
-        return idx_full
-
-
-def get_representative_subsample(
-    prepared: PreparedData,
-    is_classification: bool,
-    rng: Optional[Generator] = None,
-) -> tuple[DataFrame, DataFrame, DataFrame, Series, ndarray]:
-    X, X_cont, X_cat = prepared.X, prepared.X_cont, prepared.X_cat
-    y = prepared.y
-    rng = rng or np.random.default_rng()
-
-    if len(X) <= UNIVARIATE_PRED_MAX_N_SAMPLES:
-        return X, X_cont, X_cat, y, np.arange(len(y), dtype=np.int64)
-
-    if is_classification:
-        strat = y
-        idx = viable_subsample(df=X, target=y, n_sub=UNIVARIATE_PRED_MAX_N_SAMPLES, rng=rng)
-        X = X.iloc[idx]
-        X_cont = X_cont.iloc[idx]
-        X_cat = X_cat.iloc[idx]
-        y = y.iloc[idx]
-    else:
-        kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
-        strat = kb.fit_transform(prepared.y.to_numpy().reshape(-1, 1))
-        n_train = UNIVARIATE_PRED_MAX_N_SAMPLES
-        ss = StratifiedShuffleSplit(n_splits=1, train_size=n_train)
-        idx = next(ss.split(strat, strat))[0]
-        X = cast(DataFrame, prepared.X.iloc[idx, :].copy(deep=True))
-        y = prepared.y.loc[idx].copy(deep=True)
-        X_cat = prepared.X_cat.loc[idx, :].copy(deep=True)
-        X_cont = prepared.X_cont.loc[idx, :].copy(deep=True)
-
-    return X, X_cont, X_cat, y, idx
-
-
 def univariate_predictions(
     prepared: PreparedData,
     is_classification: bool,
 ) -> PredResults:
-    X, X_cont, X_cat, y, idx = get_representative_subsample(
-        prepared=prepared, is_classification=is_classification
-    )
+    sub, idx = prepared.representative_subsample()
     df_cont, df_cat, errs, warns = feature_target_predictions(
-        categoricals=X_cat,
-        continuous=X_cont,
-        target=y,
+        categoricals=sub.X_cat,
+        continuous=sub.X_cont,
+        target=sub.y,
         is_classification=is_classification,
     )
     return PredResults(

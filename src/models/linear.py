@@ -92,3 +92,46 @@ class SGDRegressor(DfAnalyzeModel):
             penalty=trial.suggest_categorical("penalty", ["l1", "l2"]),
             early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
         )
+
+
+class SGDClassifierSelector(DfAnalyzeModel):
+    def __init__(self, model_args: Mapping | None = None) -> None:
+        super().__init__(model_args)
+        self.is_classifier = True
+        self.model_cls = SklearnSGDClassifier
+        self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
+
+    def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+        return dict(
+            loss=trial.suggest_categorical("loss", ["hinge", "squared_hinge"]),
+            eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
+            alpha=trial.suggest_float("alpha", 1e-6, 1.0, log=True),
+            early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
+            average=trial.suggest_int("average", 0, 20),
+        )
+
+
+class SGDRegressorSelector(DfAnalyzeModel):
+    def __init__(self, model_args: Mapping | None = None) -> None:
+        super().__init__(model_args)
+        self.is_classifier = False
+        self.model_cls = SklearnSGDRegressor
+        self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
+
+    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        return self.model_cls, full_args
+
+    def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+        return dict(
+            loss=trial.suggest_categorical(
+                "loss",
+                ["squared_error", "huber", "epsilon_insensitive", "squared_epsilon_insensitive"],
+            ),
+            eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
+            alpha=trial.suggest_float("alpha", 1e-6, 1.0, log=True),
+            early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
+            average=trial.suggest_int("average", 0, 20),
+        )

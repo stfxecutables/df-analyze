@@ -25,7 +25,6 @@ from pandas import DataFrame
 from src._constants import (
     CLASSIFIERS,
     FEATURE_CLEANINGS,
-    FEATURE_SELECTIONS,
     HTUNE_VAL_METHODS,
     N_FILTER_CAT_DEFAULT,
     N_FILTER_CONT_DEFAULT,
@@ -63,6 +62,7 @@ from src.cli.text import (
     HTUNEVAL_HELP_STR,
     MC_REPEATS_HELP,
     MODE_HELP_STR,
+    MODEL_SELECT_HELP,
     N_FEAT_CAT_FILTER_HELP,
     N_FEAT_CONT_FILTER_HELP,
     N_FEAT_HELP,
@@ -79,16 +79,22 @@ from src.cli.text import (
     USAGE_EXAMPLES,
     USAGE_STRING,
     VERBOSITY_HELP,
+    WRAP_SELECT_HELP,
+    WRAP_SELECT_MODEL_HELP,
 )
 from src.enumerables import (
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
+    DfAnayzeEmbedSelector,
     EstimationMode,
     FeatureCleaning,
     FeatureSelection,
     FilterSelection,
+    ModelFeatureSelection,
     NanHandling,
     RegScore,
+    WrapperSelection,
+    WrapperSelectionModel,
 )
 from src.loading import load_spreadsheet
 from src.models.base import DfAnalyzeModel
@@ -130,7 +136,7 @@ class CleaningOptions(Debug):
     categoricals: list[str]
     ordinals: list[str]
     drops: list[str]
-    feat_clean: Tuple[FeatureCleaning, ...]
+    # feat_clean: Tuple[FeatureCleaning, ...]
     nan_handling: NanHandling
 
 
@@ -154,6 +160,9 @@ class SelectionOptions(Debug):
     classifiers: Tuple[Classifier, ...]
     regressors: Tuple[Regressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
+    model_select: Optional[DfAnalyzeModel]
+    embed_select: Optional[DfAnayzeEmbedSelector]
+    wrapper_select: Optional[WrapperSelection]
     n_feat: int
     n_filter_cont: Union[int, float]
     n_filter_cat: Union[int, float]
@@ -185,8 +194,11 @@ class ProgramOptions(Debug):
         ordinals: list[str],
         drops: list[str],
         nan_handling: NanHandling,
-        feat_clean: Tuple[FeatureCleaning, ...],
+        # feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
+        model_select: Optional[DfAnalyzeModel],
+        embed_select: Optional[DfAnayzeEmbedSelector],
+        wrapper_select: Optional[WrapperSelection],
         n_feat: int,
         n_filter_cont: Union[int, float],
         n_filter_cat: Union[int, float],
@@ -221,8 +233,11 @@ class ProgramOptions(Debug):
         self.ordinals: list[str] = ordinals
         self.drops: list[str] = drops
         self.nan_handling: NanHandling = nan_handling
-        self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
+        # self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
+        self.model_select: Optional[DfAnalyzeModel] = model_select
+        self.embed_select: Optional[DfAnayzeEmbedSelector] = embed_select
+        self.wrapper_select: Optional[WrapperSelection] = wrapper_select
         self.n_feat: int = n_feat
         self.n_filter_cont: Union[int, float] = n_filter_cont
         self.n_filter_cat: Union[int, float] = n_filter_cat
@@ -260,7 +275,7 @@ class ProgramOptions(Debug):
             categoricals=self.categoricals,
             ordinals=self.ordinals,
             drops=self.drops,
-            feat_clean=self.feat_clean,
+            # feat_clean=self.feat_clean,
             nan_handling=self.nan_handling,
         )
         self.selection_options = SelectionOptions(
@@ -269,6 +284,9 @@ class ProgramOptions(Debug):
             classifiers=self.classifiers,
             regressors=self.regressors,
             feat_select=self.feat_select,
+            model_select=self.model_select,
+            embed_select=self.embed_select,
+            wrapper_select=self.wrapper_select,
             n_feat=self.n_feat,
             n_filter_cont=self.n_filter_cont,
             n_filter_cat=self.n_filter_cat,
@@ -293,8 +311,11 @@ class ProgramOptions(Debug):
     @staticmethod
     def random(ds: TestDataset) -> ProgramOptions:
         n_feats = ds.shape[1]
-        feat_clean = FeatureCleaning.random_n()
+        # feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
+        wrap_select = WrapperSelection.random()
+        model_select = ModelFeatureSelection.random()
+        embed_select = DfAnayzeEmbedSelector.random_none()
         n_feat = n_feats
         n_filter_total = uniform(0.5, 0.95)
         n_filter_cont = uniform(0.1, 0.25)
@@ -325,8 +346,11 @@ class ProgramOptions(Debug):
             ordinals=[],
             drops=[],
             nan_handling=NanHandling.random(),
-            feat_clean=feat_clean,
+            # feat_clean=feat_clean,
             feat_select=feat_select,
+            wrapper_select=wrap_select,
+            model_select=model_select,
+            embed_select=embed_select,
             n_feat=n_feat,
             n_filter_cat=n_filter_cat,
             n_filter_cont=n_filter_cont,
@@ -561,22 +585,65 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     parser.add_argument(
         "--feat-select",
         nargs="+",
-        type=str,
-        choices=FEATURE_SELECTIONS,
-        default=["pca"],
+        type=FeatureSelection,  # applied to each spaced element in arg
+        choices=[f.value for f in FeatureSelection],
+        default=(FeatureSelection.Filter,),
         help=FEAT_SELECT_HELP,
     )
     parser.add_argument(
-        "--feat-clean",
+        "--model-select",
         nargs="+",
-        type=str,
-        choices=FEATURE_CLEANINGS,
-        default=["constant"],
-        help=FEAT_CLEAN_HELP,
+        type=ModelFeatureSelection,  # applied to each spaced element in arg
+        choices=[m.value for m in ModelFeatureSelection],
+        default=(ModelFeatureSelection.Embedded,),
+        help=MODEL_SELECT_HELP,
     )
     parser.add_argument(
+        "--embed-select",
+        nargs="+",
+        type=lambda x: None if "none" in x.lower() else DfAnayzeEmbedSelector(x),
+        choices=[m.value for m in DfAnayzeEmbedSelector] + ["none"],
+        default=(DfAnayzeEmbedSelector.LGBM,),
+        help=MODEL_SELECT_HELP,
+    )
+    parser.add_argument(
+        "--wrapper-select",
+        type=WrapperSelection,
+        choices=[w.value for w in WrapperSelection],
+        default=WrapperSelection.StepUp,
+        help=WRAP_SELECT_HELP,
+    )
+    parser.add_argument(
+        "--wrapper-model",
+        type=WrapperSelectionModel,
+        choices=[w.value for w in WrapperSelectionModel],
+        default=(WrapperSelectionModel.Linear,),
+        help=WRAP_SELECT_MODEL_HELP,
+    )
+    parser.add_argument(  # TODO UNIMPLEMENTED!
+        "--embed-model",
+        type=DfAnayzeEmbedSelector,
+        choices=[s.value for s in DfAnayzeEmbedSelector],
+        default=(DfAnayzeEmbedSelector.LGBM,),
+        help=EMBED_SELECT_MODEL_HELP,
+    )
+    parser.add_argument(  # TODO UNIMPLEMENTED!
+        "--n-selection-tune-rounds",
+        type=int,
+        default=0,
+        help=SELECT_TUNE_ROUNDS_HELP,
+    )
+    # parser.add_argument(
+    #     "--feat-clean",
+    #     nargs="+",
+    #     type=str,
+    #     choices=FEATURE_CLEANINGS,
+    #     default=["constant"],
+    #     help=FEAT_CLEAN_HELP,
+    # )
+    parser.add_argument(
         "--nan",
-        choices=[*NanHandling],
+        choices=[n.value for n in NanHandling],
         default=NanHandling.Mean,
         type=NanHandling,
         help=NAN_HELP,
@@ -613,28 +680,28 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--filter-assoc-cont-classify",
-        choices=[*ContClsStats],
+        choices=[c.value for c in ContClsStats],
         type=ContClsStats,
         default=ContClsStats.default(),
         help=ASSOC_SELECT_CONT_CLS_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cat-classify",
-        choices=[*CatClsStats],
+        choices=[c.value for c in CatClsStats],
         type=CatClsStats,
         default=CatClsStats.default(),
         help=ASSOC_SELECT_CAT_CLS_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cont-regress",
-        choices=[*ContRegStats],
+        choices=[c.value for c in ContRegStats],
         type=ContRegStats,
         default=ContRegStats.default(),
         help=ASSOC_SELECT_CONT_REG_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cat-regress",
-        choices=[*CatRegStats],
+        choices=[c.value for c in CatRegStats],
         type=CatRegStats,
         default=CatRegStats.default(),
         help=ASSOC_SELECT_CAT_REG_STATS,
@@ -721,8 +788,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         ordinals=sorted(ords),
         drops=cli_args.drops,
         nan_handling=cli_args.nan,
-        feat_clean=cli_args.feat_clean,
         feat_select=cli_args.feat_select,
+        model_select=cli_args.model_select,
+        embed_select=cli_args.embed_select,
+        wrapper_select=cli_args.wrapper_select,
         n_feat=cli_args.n_feat,
         n_filter_cont=cli_args.n_filter_cont,
         n_filter_cat=cli_args.n_filter_cat,

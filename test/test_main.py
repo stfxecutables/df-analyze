@@ -62,6 +62,7 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     ordinals = options.ordinals
 
     df = options.load_df()
+    df_train, df_test = train_test_split(df)
 
     inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
@@ -70,12 +71,13 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     prepared = prepare_data(df, target, inspection, is_cls)
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
+    prep_train, prep_test = prepared.split()
 
-    associations = target_associations(prepared)
+    associations = target_associations(prep_train)
     prog_dirs.save_univariate_assocs(associations)
     prog_dirs.save_assoc_report(associations.to_markdown())
 
-    predictions = univariate_predictions(prepared, is_cls)
+    predictions = univariate_predictions(prep_train, is_cls)
     prog_dirs.save_univariate_preds(predictions)
     prog_dirs.save_pred_report(predictions.to_markdown())
 
@@ -93,11 +95,14 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     # selection, where model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
     selected = model_select_features(
-        prepared, filtered, options.feat_select, options.classifiers, options.regressors
+        prep_train, filtered, options.feat_select, options.classifiers, options.regressors
     )
     prog_dirs.save_model_selected_features(selected)
 
-    results = evaluate_models(options, prepared, selected)
+    tuned = tune_models(prep_train, selected, options)
+    prog_dirs.save_tuned(tuned)
+
+    results = evaluate_models(prep_test, selected, tuned, options)
     prog_dirs.save_final_reports(results)
     prog_dirs.save_final_tables(results)
     prog_dirs.save_final_plots(results)

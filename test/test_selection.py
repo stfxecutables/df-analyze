@@ -1,9 +1,13 @@
+from math import ceil
+
 import numpy as np
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
-from src.cli.cli import get_options
+from src.cli.cli import ProgramOptions, get_options
+from src.enumerables import DfAnayzeEmbedSelector
 from src.feature_selection import select_features
+from src.selection.embedded import embed_select_features
 from src.selection.filter import filter_by_univariate_associations, filter_by_univariate_predictions
 from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
@@ -30,6 +34,20 @@ def do_predict_select(dataset: tuple[str, TestDataset]) -> list[str]:
         predictions=predictions,
     )
     return results
+
+
+def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0]
+    options = ProgramOptions.random(ds)
+    options.embed_select = DfAnayzeEmbedSelector.Linear
+    selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
+    assert len(selected.selected) > 0
+
+    options.embed_select = DfAnayzeEmbedSelector.LGBM
+    selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
+    assert len(selected.selected) > 0
 
 
 @fast_ds
@@ -66,6 +84,12 @@ def test_predict_select_med(dataset: tuple[str, TestDataset]) -> None:
 @slow_ds
 def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
     do_predict_select(dataset)
+
+
+@fast_ds
+def test_embed_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+    # with capsys.disabled():
+    do_embed_select(dataset)
 
 
 class TestBasicSelections:

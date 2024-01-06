@@ -62,7 +62,6 @@ control). Notably, RBAs can detect pair-wise feature interactions, some RBAs
 (e.g., ReliefF, MultiSURF) can even detect higher order (>2 way) interactions
 (Urbanowicz et al., 2018a).
 """
-FEATURE_SELECTIONS = ["step-up", "step-down", "pca", "kpca", "d", "auc", "pearson", "none"]
 FEATURE_CLEANINGS = ["correlated", "constant", "lowinfo"]
 CLEANINGS_SHORT = ["corr", "const", "info"]
 HTUNE_VAL_METHODS = ["holdout", "kfold", "k-fold", "loocv", "mc", "none"]
