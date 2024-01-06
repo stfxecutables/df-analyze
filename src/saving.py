@@ -8,7 +8,6 @@ from hashlib import md5
 from pathlib import Path
 from shutil import rmtree
 from tempfile import gettempprefix, mkdtemp
-from time import ctime
 from typing import (
     Any,
     Optional,
@@ -16,7 +15,6 @@ from typing import (
 )
 from warnings import warn
 
-import jsonpickle
 from pandas import DataFrame
 
 from src._types import FeatureCleaning, FeatureSelection
@@ -24,6 +22,7 @@ from src.analysis.univariate.associate import AssocResults
 from src.analysis.univariate.predict.predict import PredResults
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.preprocessing.prepare import PreparedData
+from src.selection.models import ModelSelected
 from src.utils import Debug
 
 JOBLIB = "__JOBLIB_CACHE__"
@@ -50,6 +49,9 @@ class ProgramDirs(Debug):
     associations: Optional[Path] = None
     predictions: Optional[Path] = None
     selection: Optional[Path] = None
+    filter: Optional[Path] = None
+    embed: Optional[Path] = None
+    wrapper: Optional[Path] = None
     tuning: Optional[Path] = None
     results: Optional[Path] = None
     needs_clean: bool = False
@@ -71,6 +73,9 @@ class ProgramDirs(Debug):
             associations=root / "features/associations",
             predictions=root / "features/predictions",
             selection=root / "selection",
+            filter=root / "selection/filter",
+            embed=root / "selection/embed",
+            wrapper=root / "selection/wrapper",
             tuning=root / "tuning",
             results=root / "results",
             needs_clean=needs_clean,
@@ -150,6 +155,58 @@ class ProgramDirs(Debug):
                 f"{traceback.format_exc()}"
             )
             return None, False
+
+    def save_embed_report(self, selected: Optional[ModelSelected]) -> None:
+        if selected is None:
+            return
+        if selected.embed_selected is None:
+            return
+        if self.embed is None:
+            return
+
+        report = selected.embed_selected.to_markdown()
+        out = self.embed / "embedded_selection_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save embedded selection report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_wrap_report(self, selected: Optional[ModelSelected]) -> None:
+        if selected is None:
+            return
+        if selected.wrap_selected is None:
+            return
+        if self.wrapper is None:
+            return
+
+        report = selected.wrap_selected.to_markdown()
+        out = self.wrapper / "wrapper_selection_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save wrapper selection report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_model_selection_reports(self, selected: Optional[ModelSelected]) -> None:
+        self.save_embed_report(selected)
+        self.save_wrap_report(selected)
+
+    def save_filter_report(self, report: Optional[str]) -> None:
+        if (self.filter is None) or (report is None):
+            return
+        out = self.filter / "filter_selection_report.md"
+        try:
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save filter selection report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
 
     def save_pred_report(self, report: Optional[str]) -> None:
         if (self.predictions is None) or (report is None):

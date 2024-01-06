@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 from shutil import get_terminal_size
-from typing import Optional, Union
+from typing import Optional
 from warnings import warn
 
 import numpy as np

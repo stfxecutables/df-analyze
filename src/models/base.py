@@ -9,6 +9,8 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 from abc import ABC, abstractmethod
+from math import ceil
+from numbers import Integral, Real
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Type, Union
 
@@ -25,6 +27,7 @@ from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.model_selection import KFold, StratifiedKFold
 
 from src._constants import SEED
+from src.enumerables import WrapperSelection
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -215,8 +218,16 @@ class DfAnalyzeModel(ABC):
         return self.model.predict(X)
 
     def wrapper_select(
-        self, X_train: DataFrame, y_train: Series, n_feat: int, method: str
-    ) -> Series:
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        n_feat: Optional[Union[float, int]] = None,
+        method: WrapperSelection = WrapperSelection.StepUp,
+    ) -> Optional[tuple[list[str], dict[str, float]]]:
+        n_select = get_n_select(X_train, n_feat=n_feat)
+        if n_select is None:
+            return None
+
         raise NotImplementedError()
 
     def predict_proba(self, X: DataFrame) -> ndarray:
@@ -227,3 +238,28 @@ class DfAnalyzeModel(ABC):
             raise RuntimeError("Need to tune estimator before calling `.predict_proba()`")
 
         return self.tuned_model.predict_proba(X)
+
+
+def get_n_select(X_train: DataFrame, n_feat: Optional[Union[float, int]] = None) -> Optional[int]:
+    n_features = X_train.shape[1]
+    msg = (
+        "`n_feat` must be either None, an integer in [1, n_features - 1] "
+        f"(i.e. an integer in [1, {n_features - 1}] for the current data) "
+        "representing the number of features, or a float in (0, 1] "
+        f"representing a percentage of features to select. Got: {n_feat}"
+    )
+    if n_feat is None:
+        n_select = min(20, n_features - 1)
+    elif isinstance(n_feat, Integral):
+        if not 0 < n_feat < n_features:
+            raise ValueError(msg)
+        n_select = n_feat
+    elif isinstance(n_feat, Real):
+        if not 0 < n_feat <= 1:
+            raise ValueError(msg)
+        n_select = ceil(n_features * n_feat)
+    else:
+        raise ValueError(msg)
+
+    if n_select >= n_features:  # from ceil or None case
+        return None

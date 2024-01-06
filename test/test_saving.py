@@ -8,42 +8,22 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-import os
 import sys
-from argparse import ArgumentParser, Namespace
 from copy import deepcopy
-from dataclasses import dataclass, is_dataclass
-from enum import Enum
+from dataclasses import is_dataclass
 from pathlib import Path
 from shutil import rmtree
 from tempfile import TemporaryDirectory
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
     Tuple,
-    Union,
-    cast,
-    no_type_check,
 )
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import pytest
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
 
 from src.cli.cli import ProgramOptions
 from src.preprocessing.inspection.inspection import InspectionResults
-from src.saving import ProgramDirs, get_hash
-from src.testing.datasets import TestDataset, all_ds, fast_ds, med_ds, slow_ds
+from src.saving import ProgramDirs
+from src.testing.datasets import TestDataset, all_ds
 
 
 @all_ds

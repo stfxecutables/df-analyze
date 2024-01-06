@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import (
     Optional,
-    cast,
-    overload,
 )
 from warnings import WarningMessage, warn
 
@@ -24,13 +22,10 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from numpy import ndarray
-from numpy.random import Generator
 from pandas import DataFrame, Series
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer, LabelEncoder
+from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
 
-from src._constants import N_CAT_LEVEL_MIN, UNIVARIATE_PRED_MAX_N_SAMPLES
 from src.analysis.univariate.predict.models import (
     CLS_MODELS,
     REG_MODELS,

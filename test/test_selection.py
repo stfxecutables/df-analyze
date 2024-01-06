@@ -1,11 +1,10 @@
-from math import ceil
 
 import numpy as np
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
 from src.cli.cli import ProgramOptions, get_options
-from src.enumerables import DfAnayzeEmbedSelector
+from src.enumerables import EmbedSelectionModel
 from src.feature_selection import select_features
 from src.selection.embedded import embed_select_features
 from src.selection.filter import filter_by_univariate_associations, filter_by_univariate_predictions
@@ -41,11 +40,11 @@ def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
-    options.embed_select = DfAnayzeEmbedSelector.Linear
+    options.embed_select = EmbedSelectionModel.Linear
     selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
     assert len(selected.selected) > 0
 
-    options.embed_select = DfAnayzeEmbedSelector.LGBM
+    options.embed_select = EmbedSelectionModel.LGBM
     selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
     assert len(selected.selected) > 0
 

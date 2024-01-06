@@ -24,11 +24,8 @@ from pandas import DataFrame
 
 from src._constants import (
     CLASSIFIERS,
-    FEATURE_CLEANINGS,
     HTUNE_VAL_METHODS,
-    N_FILTER_CAT_DEFAULT,
-    N_FILTER_CONT_DEFAULT,
-    N_FILTER_TOTAL_DEFAULT,
+    N_WRAPPER_DEFAULT,
     P_FILTER_CAT_DEFAULT,
     P_FILTER_CONT_DEFAULT,
     P_FILTER_TOTAL_DEFAULT,
@@ -42,7 +39,12 @@ from src._types import (
     ValMethod,
 )
 from src.analysis.univariate.associate import CatClsStats, CatRegStats, ContClsStats, ContRegStats
-from src.cli.parsing import cv_size, int_or_percent_parser, resolved_path, separator
+from src.cli.parsing import (
+    cv_size,
+    int_or_percent_parser,
+    resolved_path,
+    separator,
+)
 from src.cli.text import (
     ASSOC_SELECT_CAT_CLS_STATS,
     ASSOC_SELECT_CAT_REG_STATS,
@@ -53,7 +55,6 @@ from src.cli.text import (
     DF_HELP_STR,
     DROP_HELP_STR,
     EXPLODE_HELP,
-    FEAT_CLEAN_HELP,
     FEAT_SELECT_HELP,
     FILTER_METHOD_HELP,
     HTUNE_HELP,
@@ -65,8 +66,8 @@ from src.cli.text import (
     MODEL_SELECT_HELP,
     N_FEAT_CAT_FILTER_HELP,
     N_FEAT_CONT_FILTER_HELP,
-    N_FEAT_HELP,
     N_FEAT_TOTAL_FILTER_HELP,
+    N_FEAT_WRAPPER_HELP,
     NAN_HELP,
     ORDINAL_HELP_STR,
     OUTDIR_HELP,
@@ -85,14 +86,11 @@ from src.cli.text import (
 from src.enumerables import (
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
-    DfAnayzeEmbedSelector,
-    EstimationMode,
-    FeatureCleaning,
+    EmbedSelectionModel,
     FeatureSelection,
     FilterSelection,
     ModelFeatureSelection,
     NanHandling,
-    RegScore,
     WrapperSelection,
     WrapperSelectionModel,
 )
@@ -161,12 +159,14 @@ class SelectionOptions(Debug):
     regressors: Tuple[Regressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
     model_select: Optional[DfAnalyzeModel]
-    embed_select: Optional[DfAnayzeEmbedSelector]
+    embed_select: Optional[EmbedSelectionModel]
     wrapper_select: Optional[WrapperSelection]
+    wrapper_model: Optional[WrapperSelectionModel]
     n_feat: int
     n_filter_cont: Union[int, float]
     n_filter_cat: Union[int, float]
-    n_filter_total: Union[int, float]
+    n_feat_filter: Union[int, float]
+    n_feat_wrapper: Union[int, float, None]
     filter_assoc_cont_cls: ContClsStats
     filter_assoc_cat_cls: CatClsStats
     filter_assoc_cont_reg: ContRegStats
@@ -197,12 +197,14 @@ class ProgramOptions(Debug):
         # feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
         model_select: Optional[DfAnalyzeModel],
-        embed_select: Optional[DfAnayzeEmbedSelector],
+        embed_select: Optional[EmbedSelectionModel],
         wrapper_select: Optional[WrapperSelection],
+        wrapper_model: WrapperSelectionModel,
         n_feat: int,
         n_filter_cont: Union[int, float],
         n_filter_cat: Union[int, float],
-        n_filter_total: Union[int, float],
+        n_feat_filter: Union[int, float],
+        n_feat_wrapper: Union[int, float, None],
         filter_assoc_cont_cls: ContClsStats,
         filter_assoc_cat_cls: CatClsStats,
         filter_assoc_cont_reg: ContRegStats,
@@ -236,12 +238,14 @@ class ProgramOptions(Debug):
         # self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
         self.model_select: Optional[DfAnalyzeModel] = model_select
-        self.embed_select: Optional[DfAnayzeEmbedSelector] = embed_select
+        self.embed_select: Optional[EmbedSelectionModel] = embed_select
         self.wrapper_select: Optional[WrapperSelection] = wrapper_select
+        self.wrapper_model: WrapperSelectionModel = wrapper_model
         self.n_feat: int = n_feat
         self.n_filter_cont: Union[int, float] = n_filter_cont
         self.n_filter_cat: Union[int, float] = n_filter_cat
-        self.n_filter_total: Union[int, float] = n_filter_total
+        self.n_feat_filter: Union[int, float] = n_feat_filter
+        self.n_feat_wrapper: Union[int, float, None] = n_feat_wrapper
         self.filter_assoc_cont_cls: ContClsStats = filter_assoc_cont_cls
         self.filter_assoc_cat_cls: CatClsStats = filter_assoc_cat_cls
         self.filter_assoc_cont_reg: ContRegStats = filter_assoc_cont_reg
@@ -287,10 +291,12 @@ class ProgramOptions(Debug):
             model_select=self.model_select,
             embed_select=self.embed_select,
             wrapper_select=self.wrapper_select,
+            wrapper_model=self.wrapper_model,
             n_feat=self.n_feat,
             n_filter_cont=self.n_filter_cont,
             n_filter_cat=self.n_filter_cat,
-            n_filter_total=self.n_filter_total,
+            n_feat_filter=self.n_feat_filter,
+            n_feat_wrapper=self.n_feat_wrapper,
             filter_assoc_cont_cls=self.filter_assoc_cont_cls,
             filter_assoc_cat_cls=self.filter_assoc_cat_cls,
             filter_assoc_cont_reg=self.filter_assoc_cont_reg,
@@ -300,7 +306,7 @@ class ProgramOptions(Debug):
         # errors
         if not self.is_classification:
             if ("d" in self.feat_select) or ("auc" in self.feat_select):
-                args = " ".join(self.feat_select)
+                args = " ".join([f.value for f in self.feat_select])
                 raise ValueError(
                     "Feature selection with Cohen's d or AUC values is not supported "
                     "for regression tasks. Do not pass arguments `d` or `auc` to "
@@ -314,12 +320,14 @@ class ProgramOptions(Debug):
         # feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
         wrap_select = WrapperSelection.random()
+        wrap_model = WrapperSelectionModel.random()
         model_select = ModelFeatureSelection.random()
-        embed_select = DfAnayzeEmbedSelector.random_none()
+        embed_select = EmbedSelectionModel.random_none()
         n_feat = n_feats
-        n_filter_total = uniform(0.5, 0.95)
+        n_feat_filter = uniform(0.5, 0.95)
+        n_feat_wrapper = choice([uniform(0.2, 0.5), None])
         n_filter_cont = uniform(0.1, 0.25)
-        n_filter_cat = n_filter_total - n_filter_cont
+        n_filter_cat = n_feat_filter - n_filter_cont
         filter_assoc_cont_cls = ContClsStats.random()
         filter_assoc_cat_cls = CatClsStats.random()
         filter_assoc_cont_reg = ContRegStats.random()
@@ -348,13 +356,15 @@ class ProgramOptions(Debug):
             nan_handling=NanHandling.random(),
             # feat_clean=feat_clean,
             feat_select=feat_select,
-            wrapper_select=wrap_select,
             model_select=model_select,
             embed_select=embed_select,
+            wrapper_select=wrap_select,
+            wrapper_model=wrap_model,
             n_feat=n_feat,
             n_filter_cat=n_filter_cat,
             n_filter_cont=n_filter_cont,
-            n_filter_total=n_filter_total,
+            n_feat_filter=n_feat_filter,
+            n_feat_wrapper=n_feat_wrapper,
             filter_assoc_cont_cls=filter_assoc_cont_cls,
             filter_assoc_cat_cls=filter_assoc_cat_cls,
             filter_assoc_cont_reg=filter_assoc_cont_reg,
@@ -601,9 +611,9 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     parser.add_argument(
         "--embed-select",
         nargs="+",
-        type=lambda x: None if "none" in x.lower() else DfAnayzeEmbedSelector(x),
-        choices=[m.value for m in DfAnayzeEmbedSelector] + ["none"],
-        default=(DfAnayzeEmbedSelector.LGBM,),
+        type=lambda x: None if "none" in x.lower() else EmbedSelectionModel(x),
+        choices=[m.value for m in EmbedSelectionModel] + ["none"],
+        default=(EmbedSelectionModel.LGBM,),
         help=MODEL_SELECT_HELP,
     )
     parser.add_argument(
@@ -617,14 +627,14 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         "--wrapper-model",
         type=WrapperSelectionModel,
         choices=[w.value for w in WrapperSelectionModel],
-        default=(WrapperSelectionModel.Linear,),
+        default=WrapperSelectionModel.Linear,
         help=WRAP_SELECT_MODEL_HELP,
     )
     parser.add_argument(  # TODO UNIMPLEMENTED!
         "--embed-model",
-        type=DfAnayzeEmbedSelector,
-        choices=[s.value for s in DfAnayzeEmbedSelector],
-        default=(DfAnayzeEmbedSelector.LGBM,),
+        type=EmbedSelectionModel,
+        choices=[s.value for s in EmbedSelectionModel],
+        default=(EmbedSelectionModel.LGBM,),
         help=EMBED_SELECT_MODEL_HELP,
     )
     parser.add_argument(  # TODO UNIMPLEMENTED!
@@ -648,11 +658,23 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         type=NanHandling,
         help=NAN_HELP,
     )
+    # parser.add_argument(
+    #     "--n-feat-embed",
+    #     type=int_or_percent_or_none_parser(default=None),
+    #     default=None,
+    #     help=N_FEAT_EMBED_HELP,
+    # )
     parser.add_argument(
-        "--n-feat",
-        type=int,
-        default=10,
-        help=N_FEAT_HELP,
+        "--n-feat-filter",
+        type=int_or_percent_parser(default=P_FILTER_TOTAL_DEFAULT),
+        default=P_FILTER_TOTAL_DEFAULT,
+        help=N_FEAT_TOTAL_FILTER_HELP,
+    )
+    parser.add_argument(
+        "--n-feat-wrapper",
+        type=int_or_percent_parser(default=N_WRAPPER_DEFAULT),
+        default=N_WRAPPER_DEFAULT,
+        help=N_FEAT_WRAPPER_HELP,
     )
     parser.add_argument(
         "--n-filter-cont",
@@ -665,12 +687,6 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         type=int_or_percent_parser(default=P_FILTER_CAT_DEFAULT),
         default=P_FILTER_CAT_DEFAULT,
         help=N_FEAT_CAT_FILTER_HELP,
-    )
-    parser.add_argument(
-        "--n-filter-total",
-        type=int_or_percent_parser(default=P_FILTER_TOTAL_DEFAULT),
-        default=P_FILTER_TOTAL_DEFAULT,
-        help=N_FEAT_TOTAL_FILTER_HELP,
     )
     parser.add_argument(
         "--filter-method",
@@ -792,10 +808,12 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         model_select=cli_args.model_select,
         embed_select=cli_args.embed_select,
         wrapper_select=cli_args.wrapper_select,
+        wrapper_model=cli_args.wrapper_model,
         n_feat=cli_args.n_feat,
+        n_feat_wrapper=cli_args.n_feat_wrapper,
+        n_feat_filter=cli_args.n_feat_filter,
         n_filter_cont=cli_args.n_filter_cont,
         n_filter_cat=cli_args.n_filter_cat,
-        n_filter_total=cli_args.n_filter_total,
         filter_assoc_cont_cls=cli_args.filter_assoc_cont_classify,
         filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
         filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,

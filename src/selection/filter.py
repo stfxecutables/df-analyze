@@ -32,8 +32,6 @@ from src.analysis.univariate.associate import (
 from src.analysis.univariate.predict.predict import PredResults
 from src.cli.cli import ProgramOptions
 from src.enumerables import ClsScore, RegScore
-from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORERS
-from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORERS
 from src.preprocessing.prepare import PreparedData
 
 
@@ -227,8 +225,8 @@ def dummy_adjust(df: DataFrame) -> DataFrame:
 
 def filter_by_univariate_predictions(
     predictions: PredResults,
-    cont_metric: RegScore = RegScore.MAE,
-    cat_metric: ClsScore = ClsScore.Accuracy,
+    cont_metric: RegScore = RegScore.default(),
+    cat_metric: ClsScore = ClsScore.default(),
     n_cont: Optional[Union[int, float]] = None,
     n_cat: Optional[Union[int, float]] = None,
     significant_only: bool = False,

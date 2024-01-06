@@ -1,36 +1,61 @@
-import re
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any, Optional
+from random import randint, uniform
+from typing import Optional
 
 import numpy as np
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from sklearn.feature_selection import SelectFromModel
-from sklearn.linear_model import LassoCV
 
 from src.cli.cli import ProgramOptions
-from src.enumerables import DfAnayzeEmbedSelector
+from src.enumerables import EmbedSelectionModel
+from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
+from src.models.linear import SGDClassifierSelector, SGDRegressorSelector
 from src.preprocessing.prepare import PreparedData
 from src.selection.filter import FilterSelected
-from src.selection.models import (
-    LightGBMClassifier,
-    LightGBMRegressor,
-    SGDClassifierSelector,
-    SGDRegressorSelector,
-)
+from src.testing.datasets import TestDataset
 
 
 @dataclass
 class EmbedSelected:
-    features: list[str]
+    model: EmbedSelectionModel
     selected: list[str]
-    scores: list[float]
+    scores: dict[str, float]
+
+    def to_markdown(self) -> str:
+        fnames, scores = zip(*self.scores.items())
+        scores = DataFrame(
+            data=scores, index=Series(name="feature", data=fnames), columns=["score"]
+        )
+        text = (
+            "# Wrapper-Based Feature Selection Summary\n\n"
+            f"Wrapper model:  {self.model.name}\n"
+            "\n"
+            f"## Selected Features\n\n"
+            f"{self.selected}\n\n"
+            f"## Selection scores (Higher = More important)\n\n"
+            f"{scores.to_markdown(floatfmt='0.3e')}"
+        )
+        return text
+
+    @staticmethod
+    def random(ds: TestDataset) -> EmbedSelected:
+        model = EmbedSelectionModel.random()
+        df = ds.load()
+        x = df.drop(columns="target", errors="ignore")
+        cols = x.columns.to_list()
+        n_feat = randint(min(10, x.shape[1]), x.shape[1])
+        selected = np.random.choice(cols, size=n_feat, replace=False).tolist()
+        scores = {s: uniform(0, 1) for s in selected}
+        return EmbedSelected(model=model, selected=selected, scores=scores)
 
 
 def embed_select_features(
     prep_train: PreparedData,
     filtered: Optional[FilterSelected],
     options: ProgramOptions,
-) -> EmbedSelected:
+) -> Optional[EmbedSelected]:
     ...
     y = prep_train.y
     X = prep_train.X
@@ -38,27 +63,22 @@ def embed_select_features(
     is_cls = options.is_classification
 
     if options.embed_select is None:
-        return EmbedSelected(
-            features=X.columns.to_list(),
-            selected=filtered.features,
-            scores=[],
-        )
+        return None
 
-    if options.embed_select is DfAnayzeEmbedSelector.Linear:
+    if options.embed_select is EmbedSelectionModel.Linear:
         model = SGDClassifierSelector() if is_cls else SGDRegressorSelector()
 
     else:
         model = LightGBMClassifier() if is_cls else LightGBMRegressor()
-        # see https://github.com/microsoft/LightGBM/issues/6202#issuecomment-1820286842
-        X_train = X_train.rename(columns=lambda col: re.sub(r"[\[\]\{\},:\"]+", "", str(col)))
 
     model.htune_optuna(X_train=X_train, y_train=y, n_trials=100, n_jobs=-1)
     # `coefs` are floats if Linear, int32 if LGBM
     scores = np.ravel(
         model.tuned_model.coef_
-        if options.embed_select is DfAnayzeEmbedSelector.Linear
+        if options.embed_select is EmbedSelectionModel.Linear
         else model.tuned_model.feature_importances_
     )
+    fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
 
     selector = SelectFromModel(
         model.tuned_model,
@@ -67,6 +87,4 @@ def embed_select_features(
     idx = np.array(selector.get_support()).astype(bool)
     selected = X_train.loc[:, idx].columns.to_list()  # type: ignore
 
-    return EmbedSelected(
-        features=X_train.columns.to_list(), selected=selected, scores=scores.tolist()
-    )
+    return EmbedSelected(model=options.embed_select, selected=selected, scores=fscores)

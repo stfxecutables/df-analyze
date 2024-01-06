@@ -1,6 +1,6 @@
 from math import isnan
 from pathlib import Path
-from typing import Callable, TypeVar, Union, overload
+from typing import Callable, Optional, Union, overload
 from warnings import warn
 
 
@@ -53,36 +53,60 @@ def int_or_percent(default: float) -> Callable[[str], float]:
     ...
 
 
-def int_or_percent_parser(default: Union[int, float]) -> Callable[[str], Union[int, float]]:
+def int_or_percent_parser(
+    default: Union[int, float], _warn: bool = True
+) -> Callable[[str], Union[int, float]]:
     def parser(arg: str) -> Union[int, float]:
         message = f"Setting argument to default value: {default}"
         try:
             parsed = float(arg)
         except Exception as e:
-            warn(f"Could not convert argument `{arg}` to float: {e}. {message}")
+            if _warn:
+                warn(f"Could not convert argument `{arg}` to float: {e}. {message}")
             parsed = float(default)
         # validate
         if isnan(parsed):
-            warn(f"NaN is not a valid size. {message}")
+            if _warn:
+                warn(f"NaN is not a valid size. {message}")
             parsed = float(default)
         if parsed < 0:
-            warn(
-                "Got a float or integer less than 0 for a percent argument. "
-                f"Percentages must be in [0.0, 1.0], and integers must be "
-                f"positive or zero. {message}"
-            )
+            if _warn:
+                warn(
+                    "Got a float or integer less than 0 for a percent argument. "
+                    f"Percentages must be in [0.0, 1.0], and integers must be "
+                    f"positive or zero. {message}"
+                )
             parsed = float(default)
         if (parsed > 1) and not parsed.is_integer():
-            warn(
-                "Got a float greater than 1.0 for a percent argument. Percentages "
-                f"must be in [0.0, 1.0]. {message}"
-            )
+            if _warn:
+                warn(
+                    "Got a float greater than 1.0 for a percent argument. "
+                    f"Percentages must be in [0.0, 1.0]. {message}"
+                )
             parsed = float(default)
         if parsed > 1:
             return int(parsed)
         return parsed
 
     return parser
+
+
+def int_or_percent_or_none_parser(
+    default: Union[int, float, None]
+) -> Callable[[str], Union[int, float, None]]:
+    def inner(arg: str) -> Optional[Union[float, int]]:
+        if "none" in arg.lower():
+            return None
+        if default is None:
+            parser = int_or_percent_parser(default=-1, _warn=False)
+        else:
+            parser = int_or_percent_parser(default=default, _warn=False)
+        parsed = parser(arg)
+        if parsed < 0:
+            return None
+        return parsed
+
+    return inner
 
 
 def separator(s: str) -> str:

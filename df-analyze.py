@@ -7,7 +7,6 @@ from time import ctime
 from typing import List, Optional, TypeVar, Union
 
 import pandas as pd
-from joblib import Memory
 from pandas import DataFrame
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
@@ -17,10 +16,9 @@ from src.analysis.analyses import full_estimator_analysis
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions, get_options
-from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
-from src.saving import FileType, ProgramDirs, try_save
+from src.saving import FileType, try_save
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"

@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal, Optional, Tuple, Union, cast
+from typing import Literal, Optional, Tuple, Union, cast
 from warnings import warn
 
 import jsonpickle

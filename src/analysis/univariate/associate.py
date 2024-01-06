@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import (
     Any,
     Optional,
-    Union,
 )
 from warnings import warn
 

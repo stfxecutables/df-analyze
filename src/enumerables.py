@@ -60,7 +60,7 @@ class DfAnalyzeRegressor(RandEnum, Enum):
     SVM = "svm"
 
 
-class DfAnayzeEmbedSelector(RandEnum, Enum):
+class EmbedSelectionModel(RandEnum, Enum):
     LGBM = "lgbm"
     Linear = "linear"
 
@@ -129,7 +129,10 @@ class RegScore(RandEnum, Enum):
     R2 = "R2"
     VarExp = "Var exp"
 
-    # MAPE = "MAPE"
+    @staticmethod
+    def default() -> RegScore:
+        return RegScore.MAE
+
     def minimum(self) -> float:
         return {
             RegScore.MAE: 0.0,
@@ -148,6 +151,10 @@ class ClsScore(RandEnum, Enum):
     AUROC = "auroc"
     Sensitivity = "sens"
     Specificity = "spec"
+
+    @staticmethod
+    def default() -> ClsScore:
+        return ClsScore.Accuracy
 
     def higher_is_better(self) -> bool:
         return True

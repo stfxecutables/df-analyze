@@ -20,8 +20,6 @@ from src._constants import TEST_RESULTS
 from src.analysis.univariate.associate import AssocResults
 from src.testing.datasets import (
     FAST_INSPECTION,
-    SLOW_INSPECTION,
-    TEST_DATASETS,
     TestDataset,
     fast_ds,
     med_ds,

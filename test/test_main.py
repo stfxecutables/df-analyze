@@ -8,46 +8,17 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-import os
 import sys
-from argparse import ArgumentParser, Namespace
-from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
 
-from src._types import Estimator, FeatureSelection
-from src.analysis.analyses import full_estimator_analysis
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
-from src.cli.cli import ProgramOptions, get_options
-from src.loading import load_spreadsheet
+from src.cli.cli import ProgramOptions
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
-from src.saving import FileType, ProgramDirs, try_save
-from src.testing.datasets import TestDataset, all_ds, fast_ds, med_ds, slow_ds
-from src.utils import Debug
+from src.selection.models import model_select_features
+from src.testing.datasets import TestDataset, fast_ds
 
 
 def do_main(dataset: tuple[str, TestDataset]) -> None:
@@ -94,10 +65,8 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     # phases of feature selection: filter selection, and model-based
     # selection, where model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
-    selected = model_select_features(
-        prep_train, filtered, options.feat_select, options.classifiers, options.regressors
-    )
-    prog_dirs.save_model_selected_features(selected)
+    selected = model_select_features(prep_train, filtered, options)
+    prog_dirs.save_model_selection_reports(selected)
 
     tuned = tune_models(prep_train, selected, options)
     prog_dirs.save_tuned(tuned)
