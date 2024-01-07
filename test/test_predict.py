@@ -54,7 +54,7 @@ def min_subsample(y: Series) -> int:
 def print_preds(
     dsname: str, df_cont: Optional[DataFrame], df_cat: Optional[DataFrame], is_classification: bool
 ) -> None:
-    sorter = "acc" if is_classification else "Var exp"
+    sorter = "acc" if is_classification else "var-exp"
 
     print(f"Continuous prediction stats (5-fold, tuned) for {dsname}:")
     if df_cont is not None:

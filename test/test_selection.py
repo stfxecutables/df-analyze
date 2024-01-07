@@ -1,10 +1,10 @@
-
 import numpy as np
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
+from src.analysis.univariate.associate import CatAssociation, ContAssociation
 from src.cli.cli import ProgramOptions, get_options
-from src.enumerables import EmbedSelectionModel
+from src.enumerables import ClsScore, EmbedSelectionModel, RegScore
 from src.feature_selection import select_features
 from src.selection.embedded import embed_select_features
 from src.selection.filter import filter_by_univariate_associations, filter_by_univariate_predictions
@@ -15,24 +15,43 @@ DATA = ROOT / "data/banking/bank.json"
 
 def do_association_select(dataset: tuple[str, TestDataset]) -> list[str]:
     dsname, ds = dataset
-    prepared = ds.prepared(load_cached=True)
     assocs = ds.associations(load_cached=True)
-    results = filter_by_univariate_associations(
-        prepared=prepared,
-        associations=assocs,
-    )
-    return results
+    prepared = ds.prepared(load_cached=True)
+    for _ in range(25):
+        options = ProgramOptions.random(ds)
+        filtered = filter_by_univariate_associations(
+            prepared=prepared,
+            associations=assocs,
+            cont_metric=ContAssociation.random(),
+            cat_metric=CatAssociation.random(),
+            n_cont=options.n_filter_cont,
+            n_cat=options.n_filter_cat,
+            n_total=options.n_feat_filter,
+        )
+        print(filtered.cont_scores)
+        print(filtered.cat_scores)
+        assert len(filtered.selected) > 0
+    return filtered
 
 
 def do_predict_select(dataset: tuple[str, TestDataset]) -> list[str]:
     dsname, ds = dataset
-    prepared = ds.prepared(load_cached=True)
     predictions = ds.predictions(load_cached=True)
-    results = filter_by_univariate_predictions(
-        prepared=prepared,
-        predictions=predictions,
-    )
-    return results
+    prepared = ds.prepared(load_cached=True)
+    for _ in range(25):
+        options = ProgramOptions.random(ds)
+        filtered = filter_by_univariate_predictions(
+            prepared=prepared,
+            predictions=predictions,
+            cont_metric=RegScore.random(),
+            cat_metric=ClsScore.random(),
+            n_cont=options.n_filter_cont,
+            n_cat=options.n_filter_cat,
+        )
+        print(filtered.cont_scores)
+        print(filtered.cat_scores)
+        assert len(filtered.selected) > 0
+    return filtered
 
 
 def do_embed_select(dataset: tuple[str, TestDataset]) -> None:

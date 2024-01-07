@@ -4,6 +4,7 @@ from src._constants import (
     CLASSIFIERS,
     REGRESSORS,
 )
+from src.enumerables import ClsScore, RegScore
 
 DF_HELP_STR = """
 The dataframe to analyze.
@@ -206,7 +207,9 @@ If specified, which feature cleaning methods to use prior to feature selection.
 Makes use of the featuretools library (featuretools.com). Options are:
 
   correlated: remove highly correlated features using featuretools.
+
   constant:   remove constant (zero-variance) features. Default.
+
   lowinfo:    remove "low information" features via featuretools.
 
 """
@@ -225,11 +228,15 @@ NaN value.
   drop:      Attempt to remove all non-categorical NaN values. Note this could
              remove all data if a lot of values are missing, which will cause
              errors.
+
   mean:      Replace all NaN values with the feature mean value.
+
   median:    Replace all NaN values with the feature median value.
+
   impute:    Use scikit-learn experimental IterativeImputer to attempt to
              predictively fill NaN values based on other feature values. May
              be computationally demanding on larger datasets.
+
 """
 
 N_FEAT_HELP = """
@@ -314,6 +321,18 @@ target is regression / continuous.
 ASSOC_SELECT_CAT_REG_STATS = """
 Type of association to use for selecting categorical features when the task or
 target is regression / continuous.
+"""
+
+REG_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in RegScore])
+PRED_SELECT_REG_SCORE = f"""
+Regression score to use for filter-based selection of features. Options:\n
+{REG_OPTIONS}
+"""
+
+CLS_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in ClsScore])
+PRED_SELECT_CLS_SCORE = f"""
+Classification score to use for filter-based selection of features. Options:\n
+{CLS_OPTIONS}
 """
 
 HTUNE_HELP = """

@@ -72,12 +72,12 @@ CLASSIFIER_TEST_SCORERS = dict(
     spec=specificity_scorer,
 )
 REGRESSION_TEST_SCORERS = {
-    "MAE": mae_scorer,
-    "MSqE": mse_scorer,
-    "MdAE": mdae_scorer,
+    "mae": mae_scorer,
+    "msqe": mse_scorer,
+    "mdae": mdae_scorer,
     # "MAPE": mape_scorer,
-    "R2": r2_scorer,
-    "Var exp": expl_var_scorer,
+    "r2": r2_scorer,
+    "var-exp": expl_var_scorer,
 }
 
 
@@ -230,34 +230,34 @@ def package_regressor_cv_scores(
     result = dict(
         htuned=htuned,
         cv_method=htuned.cv_method,
-        mae=np.mean(scores["test_MAE"]),
-        msqe=np.mean(scores["test_MSqE"]),
-        mdae=np.mean(scores["test_MdAE"]),
-        mape=np.mean(scores["test_MAPE"]),
-        r2=np.mean(scores["test_R2"]),
-        var_exp=np.mean(scores["test_Var exp"]),
-        mae_sd=np.std(scores["test_MAE"], ddof=1),
-        msqe_sd=np.std(scores["test_MSqE"], ddof=1),
-        mdae_sd=np.std(scores["test_MdAE"], ddof=1),
-        mape_sd=np.std(scores["test_MAPE"], ddof=1),
-        r2_sd=np.std(scores["test_R2"], ddof=1),
-        var_exp_sd=np.std(scores["test_Var exp"], ddof=1),
+        mae=np.mean(scores["test_mae"]),
+        msqe=np.mean(scores["test_msqe"]),
+        mdae=np.mean(scores["test_mdae"]),
+        mape=np.mean(scores["test_mape"]),
+        r2=np.mean(scores["test_r2"]),
+        var_exp=np.mean(scores["test_var-exp"]),
+        mae_sd=np.std(scores["test_mae"], ddof=1),
+        msqe_sd=np.std(scores["test_msqe"], ddof=1),
+        mdae_sd=np.std(scores["test_mdae"], ddof=1),
+        mape_sd=np.std(scores["test_mape"], ddof=1),
+        r2_sd=np.std(scores["test_r2"], ddof=1),
+        var_exp_sd=np.std(scores["test_var-exp"], ddof=1),
     )
     if not log:
         return result
 
-    mae = np.mean(scores["test_MAE"])
-    msqe = np.mean(scores["test_MSqE"])
-    mdae = np.mean(scores["test_MdAE"])
-    mape = np.mean(scores["test_MAPE"])
-    r2 = np.mean(scores["test_R2"])
-    var_exp = np.mean(scores["test_Var exp"])
-    mae_sd = np.std(scores["test_MAE"], ddof=1)
-    msqe_sd = np.std(scores["test_MSqE"], ddof=1)
-    mdae_sd = np.std(scores["test_MdAE"], ddof=1)
-    mape_sd = np.std(scores["test_MAPE"], ddof=1)
-    r2_sd = np.std(scores["test_R2"], ddof=1)
-    var_exp_sd = np.std(scores["test_Var exp"], ddof=1)
+    mae = np.mean(scores["test_mae"])
+    msqe = np.mean(scores["test_msqe"])
+    mdae = np.mean(scores["test_mdae"])
+    # mape = np.mean(scores["test_mape"])
+    r2 = np.mean(scores["test_r2"])
+    var_exp = np.mean(scores["test_var-exp"])
+    mae_sd = np.std(scores["test_mae"], ddof=1)
+    msqe_sd = np.std(scores["test_msqe"], ddof=1)
+    mdae_sd = np.std(scores["test_mdae"], ddof=1)
+    mape_sd = np.std(scores["test_mape"], ddof=1)
+    r2_sd = np.std(scores["test_r2"], ddof=1)
+    var_exp_sd = np.std(scores["test_var exp"], ddof=1)
 
     desc = cv_desc(cv_method)
     # fmt: off
@@ -265,7 +265,7 @@ def package_regressor_cv_scores(
     print(f"MAE             μ = {np.round(mae, 3):0.3f} (sd = {np.round(mae_sd, 4):0.4f})")  # noqa
     print(f"MSqE:           μ = {np.round(msqe, 3):0.3f} (sd = {np.round(msqe_sd, 4):0.4f})")  # noqa
     print(f"Median Abs Err: μ = {np.round(mdae, 3):0.3f} (sd = {np.round(mdae_sd, 4):0.4f})")  # noqa
-    print(f"MAPE:           μ = {np.round(mape, 3):0.3f} (sd = {np.round(mape_sd, 4):0.4f})")  # noqa
+    # print(f"MAPE:           μ = {np.round(mape, 3):0.3f} (sd = {np.round(mape_sd, 4):0.4f})")  # noqa
     print(f"R-squared:      μ = {np.round(r2, 3):0.3f} (sd = {np.round(r2_sd, 4):0.4f})")  # noqa
     print(f"Var explained:  μ = {np.round(var_exp, 3):0.3f} (sd = {np.round(var_exp_sd, 4):0.4f})")  # noqa
     # fmt: on

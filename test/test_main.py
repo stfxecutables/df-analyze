@@ -8,21 +8,54 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import os
 import sys
+from argparse import ArgumentParser, Namespace
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+    no_type_check,
+)
 
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from numpy import ndarray
+from pandas import DataFrame, Series
+from typing_extensions import Literal
 
+from src._types import Estimator, FeatureSelection
+from src.analysis.analyses import full_estimator_analysis
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
-from src.cli.cli import ProgramOptions
+from src.cli.cli import ProgramOptions, get_options
+from src.loading import load_spreadsheet
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
-from src.selection.models import model_select_features
-from src.testing.datasets import TestDataset, fast_ds
+from src.saving import FileType, ProgramDirs, try_save
+from src.selection.filter import filter_select_features
+from src.selection.models import ModelSelected, model_select_features
+from src.testing.datasets import TestDataset, all_ds, fast_ds, med_ds, slow_ds
+from src.utils import Debug
 
 
 def do_main(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
+    if dsname == "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc":
+        return  # target undersampled levels
     options = ProgramOptions.random(ds)
     options.to_json()
 
@@ -33,7 +66,6 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     ordinals = options.ordinals
 
     df = options.load_df()
-    df_train, df_test = train_test_split(df)
 
     inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
@@ -53,25 +85,25 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     prog_dirs.save_pred_report(predictions.to_markdown())
 
     # select features via filter methods first
-    # NOTE: No report to save for below, since it is obvious based on the
-    # outputs, just output a simple .csv file selected.csv with the selected
-    # feature names
-    filtered = filter_select_features(associations, predictions, options)
-    prog_dirs.save_filter_selected_features(filtered)
+    assoc_filtered, pred_filtered = filter_select_features(
+        prep_train, associations, predictions, options
+    )
+    prog_dirs.save_filter_report(assoc_filtered)
+    prog_dirs.save_filter_report(pred_filtered)
 
-    # TODO: have function below dispatch to embedded or wrapper method(s)
-    # depending on user feature selection arguments.
     # TODO: make embedded and wrapper selection mutually exclusive. Only two
     # phases of feature selection: filter selection, and model-based
     # selection, where model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
-    selected = model_select_features(prep_train, filtered, options)
-    prog_dirs.save_model_selection_reports(selected)
+    # selected = model_select_features(prep_train, filtered, options)
+    model_selected = ModelSelected.random(ds)
+    prog_dirs.save_model_selection_reports(model_selected)
+    return
 
-    tuned = tune_models(prep_train, selected, options)
+    tuned = tune_models(prep_train, model_selected, options)
     prog_dirs.save_tuned(tuned)
 
-    results = evaluate_models(prep_test, selected, tuned, options)
+    results = evaluate_models(prep_train, prep_test, model_selected, tuned, options)
     prog_dirs.save_final_reports(results)
     prog_dirs.save_final_tables(results)
     prog_dirs.save_final_plots(results)

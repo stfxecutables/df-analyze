@@ -22,6 +22,7 @@ from src.analysis.univariate.associate import AssocResults
 from src.analysis.univariate.predict.predict import PredResults
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.preprocessing.prepare import PreparedData
+from src.selection.filter import FilterSelected
 from src.selection.models import ModelSelected
 from src.utils import Debug
 
@@ -196,16 +197,16 @@ class ProgramDirs(Debug):
         self.save_embed_report(selected)
         self.save_wrap_report(selected)
 
-    def save_filter_report(self, report: Optional[str]) -> None:
-        if (self.filter is None) or (report is None):
+    def save_filter_report(self, selected: Optional[FilterSelected]) -> None:
+        if (self.filter is None) or (selected is None):
             return
-        out = self.filter / "filter_selection_report.md"
+        out = self.filter / f"{selected.method}_selection_report.md"
         try:
-            out.write_text(report)
+            out.write_text(selected.to_markdown())
         except Exception as e:
             warn(
-                "Got exception when attempting to save filter selection report. "
-                f"Details:\n{e}\n{traceback.format_exc()}"
+                "Got exception when attempting to save filter selection report "
+                f"to {out}. Details:\n{e}\n{traceback.format_exc()}"
             )
 
     def save_pred_report(self, report: Optional[str]) -> None:

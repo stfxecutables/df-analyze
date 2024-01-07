@@ -123,11 +123,11 @@ class EmbeddedSelection(RandEnum, Enum):
 
 
 class RegScore(RandEnum, Enum):
-    MAE = "MAE"
-    MSqE = "MSqE"
-    MdAE = "MdAE"
-    R2 = "R2"
-    VarExp = "Var exp"
+    MAE = "mae"
+    MSqE = "msqe"
+    MdAE = "mdae"
+    R2 = "r2"
+    VarExp = "var-exp"
 
     @staticmethod
     def default() -> RegScore:
@@ -144,6 +144,15 @@ class RegScore(RandEnum, Enum):
 
     def higher_is_better(self) -> bool:
         return self in [RegScore.R2, RegScore.VarExp]
+
+    def longname(self) -> str:
+        return {
+            RegScore.MAE: "Mean Absolute Error",
+            RegScore.MSqE: "Mean Squared Error",
+            RegScore.MdAE: "Median Absolute Error",
+            RegScore.R2: "R-Squared",
+            RegScore.VarExp: "Percent Variance Explained",
+        }[self]
 
 
 class ClsScore(RandEnum, Enum):
@@ -165,6 +174,14 @@ class ClsScore(RandEnum, Enum):
             ClsScore.AUROC: 0.5,
             ClsScore.Sensitivity: 0.0,
             ClsScore.Specificity: 0.0,
+        }[self]
+
+    def longname(self) -> str:
+        return {
+            ClsScore.Accuracy: "Accuracy",
+            ClsScore.AUROC: "Area Under the ROC Curve",
+            ClsScore.Sensitivity: "Sensitivity",
+            ClsScore.Specificity: "Specificity",
         }[self]
 
 

@@ -14,9 +14,11 @@ import warnings
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from random import choice
 from typing import (
     Any,
     Optional,
+    Type,
 )
 from warnings import warn
 
@@ -59,11 +61,25 @@ class Association:
 
 
 class ContAssociation(Association):
-    pass
+    @staticmethod
+    def random() -> ContAssociation:
+        return choice(
+            [
+                ContClsStats.random(),
+                ContRegStats.random(),
+            ]
+        )
 
 
 class CatAssociation(Association):
-    pass
+    @staticmethod
+    def random() -> CatAssociation:
+        return choice(
+            [
+                CatClsStats.random(),
+                CatRegStats.random(),
+            ]
+        )
 
 
 class ContClsStats(ContAssociation, RandEnum, Enum):
@@ -111,11 +127,26 @@ class ContClsStats(ContAssociation, RandEnum, Enum):
             ContClsStats.Correlation: "corr_p",
         }[self]
 
+    def longname(self) -> str:
+        return {
+            ContClsStats.TTest: "T-Test",
+            ContClsStats.MannWhitneyU: "Mann-Whitney U",
+            ContClsStats.BrunnerMunzelW: "Brunner-Munzel W",
+            ContClsStats.Correlation: "Pearson Correlation",
+            ContClsStats.CohensD: "Cohen's d",
+            ContClsStats.AUROC: "Area Under the ROC Curve",
+            ContClsStats.MutualInfo: "Mutual Information",
+        }[self]
+
+    @classmethod
+    def random(cls: Type[ContClsStats]) -> ContClsStats:
+        return choice([*cls])  # type: ignore
+
 
 class CatClsStats(CatAssociation, RandEnum, Enum):
     MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
     KruskalWallaceH = "H"
-    CramerV = "V"  # Cramer's V
+    CramerV = "cramer_v"  # Cramer's V
 
     @staticmethod
     def default() -> CatClsStats:
@@ -148,6 +179,17 @@ class CatClsStats(CatAssociation, RandEnum, Enum):
             CatClsStats.KruskalWallaceH: "H_p",
             CatClsStats.CramerV: None,
         }[self]
+
+    def longname(self) -> str:
+        return {
+            CatClsStats.MutualInfo: "Mutual Information",
+            CatClsStats.KruskalWallaceH: "Kruskal-Wallace H",
+            CatClsStats.CramerV: "Cramer's V",
+        }[self]
+
+    @classmethod
+    def random(cls: Type[CatClsStats]) -> CatClsStats:
+        return choice([*cls])  # type: ignore
 
 
 class ContRegStats(ContAssociation, RandEnum, Enum):
@@ -186,6 +228,18 @@ class ContRegStats(ContAssociation, RandEnum, Enum):
             ContRegStats.F: "F_p",
         }[self]
 
+    def longname(self) -> str:
+        return {
+            ContRegStats.PearsonR: "Pearson's Correlation",
+            ContRegStats.SpearmanR: "Spearman's Correlation",
+            ContRegStats.MutualInfo: "Mutual Information",
+            ContRegStats.F: "F-test",
+        }[self]
+
+    @classmethod
+    def random(cls: Type[ContRegStats]) -> ContRegStats:
+        return choice([*cls])  # type: ignore
+
 
 class CatRegStats(CatAssociation, RandEnum, Enum):
     MutualInfo = "mut_info"  # sklearn.feature_selection.mutual_info_regression
@@ -214,6 +268,16 @@ class CatRegStats(CatAssociation, RandEnum, Enum):
             CatRegStats.MutualInfo: None,
             CatRegStats.H: "H_p",
         }[self]
+
+    def longname(self) -> str:
+        return {
+            CatRegStats.MutualInfo: "Mutual Information",
+            CatRegStats.H: "Kruskal-Wallace H",
+        }[self]
+
+    @classmethod
+    def random(cls: Type[CatRegStats]) -> CatRegStats:
+        return choice([*cls])  # type: ignore
 
 
 CONT_FEATURE_CAT_TARGET_LEVEL_STATS = [

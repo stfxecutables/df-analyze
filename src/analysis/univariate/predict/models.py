@@ -97,7 +97,7 @@ class UnivariatePredictor(ABC):
 
     @property
     def refit(self) -> str:
-        return "acc" if self.is_classifier else "MAE"
+        return "acc" if self.is_classifier else "mae"
 
     @property
     def optimizer(self) -> GridSearchCV:
@@ -121,7 +121,7 @@ class UnivariatePredictor(ABC):
         df = df[filters].rename(columns=lambda s: s.replace("mean_test_", ""))
         if self.is_classifier:
             return df.iloc[np.argmax(df["acc"])]
-        return df.iloc[np.argmin(df["MAE"])]
+        return df.iloc[np.argmin(df["mae"])]
 
 
 def logspace(start: int, stop: int) -> list[float]:

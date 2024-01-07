@@ -105,7 +105,7 @@ class PredResults:
 
     def to_markdown(self, path: Optional[Path] = None) -> Optional[str]:
         try:
-            sorter = "acc" if self.is_classification else "Var exp"
+            sorter = "acc" if self.is_classification else "var-exp"
             if self.conts is not None:
                 conts = self.conts.sort_values(by=sorter, ascending=False).to_markdown(
                     floatfmt="0.4g"
@@ -123,11 +123,11 @@ class PredResults:
 
             cont_legend = (
                 "\n\n"
-                "MAE: Mean Absolute Error\n"
-                "MSqE: Mean Squared Error\n"
-                "MdAe: Median Absolute Error\n"
-                "R2: R-squared (coefficient of determination)\n"
-                "Var exp: Percent Variance Explained\n"
+                "mae: Mean Absolute Error\n"
+                "msqe: Mean Squared Error\n"
+                "mdae: Median Absolute Error\n"
+                "r2: R-squared (coefficient of determination)\n"
+                "var-exp: Percent Variance Explained\n"
             )
 
             cat_legend = (

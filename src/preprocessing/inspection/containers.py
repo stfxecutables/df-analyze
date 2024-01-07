@@ -365,11 +365,11 @@ class InspectionResults:
         categoricals = self.final_categoricals()
         binaries     = self.final_binaries()
 
-        maybe_id_lines     = self.ids.uncertain_lines(pad)
-        certain_id_lines   = self.ids.certain_lines(pad)
-        maybe_time_lines   = self.times.uncertain_lines(pad)
-        certain_time_lines = self.times.certain_lines(pad)
-        consts_lines       = self.consts.certain_lines(pad)
+        maybe_id_lines     = self.ids.uncertain_lines(None)
+        certain_id_lines   = self.ids.certain_lines(None)
+        maybe_time_lines   = self.times.uncertain_lines(None)
+        certain_time_lines = self.times.certain_lines(None)
+        consts_lines       = self.consts.certain_lines(None)
 
         coercion_lines = InspectionInfo.lines_from_infos(coercions, None)
         cat_lines      = InspectionInfo.lines_from_infos(categoricals, None)
@@ -421,9 +421,7 @@ class InspectionResults:
             f"{inflate_info}"
             f"{numeric_header}"
             f"{ord_section}{cont_section}"
-            f"\n\nTODO\n"
             # f"{deflations}"
-            f"{shape_info}"
         )
         return re.sub(r"(:?\n){3,}", "\n\n", report)
 

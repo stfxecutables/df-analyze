@@ -357,7 +357,7 @@ class PreparedData:
             self.X_cat.to_parquet(root / self.files.X_cat_raw)
             self.y.to_frame().to_parquet(root / self.files.y_raw)
             if self.labels is not None:
-                DataFrame(self.labels).to_parquet(root / self.files.labels)
+                Series(self.labels).to_frame().to_parquet(root / self.files.labels)
             self.info.to_json(root / self.files.info)
         except Exception as e:
             warn(

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from random import randint, uniform
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from pandas import DataFrame, Series
 from sklearn.feature_selection import SelectFromModel
 
-from src.cli.cli import ProgramOptions
+if TYPE_CHECKING:
+    from src.cli.cli import ProgramOptions
 from src.enumerables import EmbedSelectionModel
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from src.models.linear import SGDClassifierSelector, SGDRegressorSelector
@@ -22,19 +23,22 @@ class EmbedSelected:
     model: EmbedSelectionModel
     selected: list[str]
     scores: dict[str, float]
+    is_classification: bool
 
     def to_markdown(self) -> str:
         fnames, scores = zip(*self.scores.items())
         scores = DataFrame(
             data=scores, index=Series(name="feature", data=fnames), columns=["score"]
         )
+        direction = "Higher" if self.is_classification else "Lower"
+        metric = "Accuracy" if self.is_classification else "MAE"
         text = (
             "# Wrapper-Based Feature Selection Summary\n\n"
             f"Wrapper model:  {self.model.name}\n"
             "\n"
             f"## Selected Features\n\n"
             f"{self.selected}\n\n"
-            f"## Selection scores (Higher = More important)\n\n"
+            f"## Selection scores ({metric}: {direction} = More important)\n\n"
             f"{scores.to_markdown(floatfmt='0.3e')}"
         )
         return text
@@ -48,7 +52,12 @@ class EmbedSelected:
         n_feat = randint(min(10, x.shape[1]), x.shape[1])
         selected = np.random.choice(cols, size=n_feat, replace=False).tolist()
         scores = {s: uniform(0, 1) for s in selected}
-        return EmbedSelected(model=model, selected=selected, scores=scores)
+        return EmbedSelected(
+            model=model,
+            selected=selected,
+            scores=scores,
+            is_classification=ds.is_classification,
+        )
 
 
 def embed_select_features(
@@ -87,4 +96,9 @@ def embed_select_features(
     idx = np.array(selector.get_support()).astype(bool)
     selected = X_train.loc[:, idx].columns.to_list()  # type: ignore
 
-    return EmbedSelected(model=options.embed_select, selected=selected, scores=fscores)
+    return EmbedSelected(
+        model=options.embed_select,
+        selected=selected,
+        scores=fscores,
+        is_classification=prep_train.is_classification,
+    )

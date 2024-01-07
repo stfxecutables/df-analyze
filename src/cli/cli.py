@@ -54,6 +54,7 @@ from src.cli.text import (
     CLS_HELP_STR,
     DF_HELP_STR,
     DROP_HELP_STR,
+    EMBED_SELECT_MODEL_HELP,
     EXPLODE_HELP,
     FEAT_SELECT_HELP,
     FILTER_METHOD_HELP,
@@ -71,7 +72,10 @@ from src.cli.text import (
     NAN_HELP,
     ORDINAL_HELP_STR,
     OUTDIR_HELP,
+    PRED_SELECT_CLS_SCORE,
+    PRED_SELECT_REG_SCORE,
     REG_HELP_STR,
+    SELECT_TUNE_ROUNDS_HELP,
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
@@ -84,6 +88,7 @@ from src.cli.text import (
     WRAP_SELECT_MODEL_HELP,
 )
 from src.enumerables import (
+    ClsScore,
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
     EmbedSelectionModel,
@@ -91,6 +96,7 @@ from src.enumerables import (
     FilterSelection,
     ModelFeatureSelection,
     NanHandling,
+    RegScore,
     WrapperSelection,
     WrapperSelectionModel,
 )
@@ -171,6 +177,8 @@ class SelectionOptions(Debug):
     filter_assoc_cat_cls: CatClsStats
     filter_assoc_cont_reg: ContRegStats
     filter_assoc_cat_reg: CatRegStats
+    filter_pred_cls_score: ClsScore
+    filter_pred_reg_score: RegScore
 
 
 class ProgramOptions(Debug):
@@ -209,6 +217,8 @@ class ProgramOptions(Debug):
         filter_assoc_cat_cls: CatClsStats,
         filter_assoc_cont_reg: ContRegStats,
         filter_assoc_cat_reg: CatRegStats,
+        filter_pred_cls_score: ClsScore,
+        filter_pred_reg_score: RegScore,
         is_classification: bool,
         classifiers: Tuple[Classifier, ...],
         regressors: Tuple[Regressor, ...],
@@ -250,6 +260,8 @@ class ProgramOptions(Debug):
         self.filter_assoc_cat_cls: CatClsStats = filter_assoc_cat_cls
         self.filter_assoc_cont_reg: ContRegStats = filter_assoc_cont_reg
         self.filter_assoc_cat_reg: CatRegStats = filter_assoc_cat_reg
+        self.filter_pred_cls_score: ClsScore = filter_pred_cls_score
+        self.filter_pred_reg_score: RegScore = filter_pred_reg_score
         self.is_classification: bool = is_classification
         self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
@@ -301,6 +313,8 @@ class ProgramOptions(Debug):
             filter_assoc_cat_cls=self.filter_assoc_cat_cls,
             filter_assoc_cont_reg=self.filter_assoc_cont_reg,
             filter_assoc_cat_reg=self.filter_assoc_cat_reg,
+            filter_pred_cls_score=self.filter_pred_cls_score,
+            filter_pred_reg_score=self.filter_pred_reg_score,
         )
 
         # errors
@@ -316,7 +330,7 @@ class ProgramOptions(Debug):
 
     @staticmethod
     def random(ds: TestDataset) -> ProgramOptions:
-        n_feats = ds.shape[1]
+        n_samples, n_feats = ds.shape
         # feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
         wrap_select = WrapperSelection.random()
@@ -332,6 +346,8 @@ class ProgramOptions(Debug):
         filter_assoc_cat_cls = CatClsStats.random()
         filter_assoc_cont_reg = ContRegStats.random()
         filter_assoc_cat_reg = CatRegStats.random()
+        filter_pred_cls_score = ClsScore.random()
+        filter_pred_reg_score = RegScore.random()
         is_classification = ds.is_classification
         classifiers = DfAnalyzeClassifier.random_n()
         regressors = DfAnalyzeRegressor.random_n()
@@ -369,6 +385,8 @@ class ProgramOptions(Debug):
             filter_assoc_cat_cls=filter_assoc_cat_cls,
             filter_assoc_cont_reg=filter_assoc_cont_reg,
             filter_assoc_cat_reg=filter_assoc_cat_reg,
+            filter_pred_cls_score=filter_pred_cls_score,
+            filter_pred_reg_score=filter_pred_reg_score,
             is_classification=is_classification,
             classifiers=classifiers,
             regressors=regressors,
@@ -723,6 +741,20 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         help=ASSOC_SELECT_CAT_REG_STATS,
     )
     parser.add_argument(
+        "--filter-pred-regress",
+        choices=[s.value for s in RegScore],
+        type=RegScore,
+        default=RegScore.default(),
+        help=PRED_SELECT_REG_SCORE,
+    )
+    parser.add_argument(
+        "--filter-pred-classify",
+        choices=[s.value for s in ClsScore],
+        type=ClsScore,
+        default=ClsScore.default(),
+        help=PRED_SELECT_CLS_SCORE,
+    )
+    parser.add_argument(
         "--htune",
         action="store_true",
         help=HTUNE_HELP,
@@ -818,6 +850,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
         filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,
         filter_assoc_cat_reg=cli_args.filter_assoc_cat_regress,
+        filter_pred_cls_score=cli_args.filter_pred_cls_score,
+        filter_pred_reg_score=cli_args.filter_pred_reg_score,
         is_classification=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
