@@ -23,7 +23,7 @@ class KNNEstimator(DfAnalyzeModel):
         super().__init__(model_args)
         self.is_classifier = False
         self.needs_calibration = False
-        self.fixed_args = dict()
+        self.fixed_args = dict(n_jobs=1)
         self.model_cls: Type[Any] = type(None)
         self.shortname = "knn"
         self.longname = "K-Neighbours Estimator"
