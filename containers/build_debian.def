@@ -66,6 +66,7 @@ Include: apt
         jsonpickle \
         typing_extensions || echo "Failed to install some python libs"
 
+    "$PYTHON" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu || echo "Failed to install some python lib"
 
 %environment
     export VENV=/app/.venv
