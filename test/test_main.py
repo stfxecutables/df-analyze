@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
 from src.selection.models import ModelSelected
 from src.testing.datasets import FAST_INSPECTION, TEST_DATASETS, TestDataset, fast_ds
+
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 
 def do_main(dataset: tuple[str, TestDataset]) -> None:
