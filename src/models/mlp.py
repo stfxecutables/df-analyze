@@ -34,6 +34,8 @@ import torch
 from numpy import ndarray
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
+from sklearn.metrics import accuracy_score as acc
+from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
@@ -353,7 +355,9 @@ class MLPEstimator(DfAnalyzeModel):
                 X_test, y_test = X[idx_test], y[idx_test]
                 estimator = self.model_cls(**full_args)
                 estimator.fit(X_tr, y_tr)
-                score = estimator.score(X_test, y_test)
+                preds = estimator.predict(X_test)
+                scorer = acc if self.is_classifier else mae
+                score = scorer(preds, y_test)
                 score = score if self.is_classifier else -score
                 scores.append(score)
                 # allows pruning

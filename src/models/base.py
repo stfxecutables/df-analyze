@@ -25,6 +25,8 @@ from optuna.samplers import GridSampler, TPESampler
 from optuna.trial import FrozenTrial
 from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
+from sklearn.metrics import accuracy_score as acc
+from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
 
 from src._constants import SEED
@@ -124,7 +126,9 @@ class DfAnalyzeModel(ABC):
                 model_cls, clean_args = self.model_cls_args(full_args)
                 estimator = model_cls(**clean_args)
                 estimator.fit(X_tr, y_tr)
-                score = estimator.score(X_test, y_test)
+                preds = estimator.predict(X_test)
+                scorer = acc if self.is_classifier else mae
+                score = scorer(preds, y_test)
                 score = score if self.is_classifier else -score
                 scores.append(score)
                 # allows pruning
