@@ -36,9 +36,9 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
             DfAnalyzeClassifier.KNN,
             DfAnalyzeClassifier.SGD,
             # DfAnalyzeClassifier.LR,
-            DfAnalyzeClassifier.MLP,
+            # DfAnalyzeClassifier.MLP,
             DfAnalyzeClassifier.LGBM,
-            DfAnalyzeClassifier.SVM,
+            # DfAnalyzeClassifier.SVM,
         )
         # options.classifiers = (DfAnalyzeClassifier.MLP,)
     else:
@@ -46,11 +46,11 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
         options.regressors = (
             DfAnalyzeRegressor.Dummy,
             DfAnalyzeRegressor.KNN,
-            # DfAnalyzeRegressor.SGD,
+            DfAnalyzeRegressor.SGD,
             DfAnalyzeRegressor.ElasticNet,
-            DfAnalyzeRegressor.MLP,
+            # DfAnalyzeRegressor.MLP,
             DfAnalyzeRegressor.LGBM,
-            DfAnalyzeRegressor.SVM,
+            # DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
     options.to_json()

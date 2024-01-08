@@ -38,7 +38,7 @@ class KNNEstimator(DfAnalyzeModel):
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
-            n_neighbors=trial.suggest_int("n_neighbors", 1, 50, 1),
+            n_neighbors=trial.suggest_int("n_neighbors", 1, 50, step=1),
             weights=trial.suggest_categorical("weights", ["uniform", "distance"]),
             metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "correlation"]),
         )
