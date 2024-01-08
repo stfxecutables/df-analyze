@@ -1,4 +1,4 @@
-```sh
+```txt
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -66,6 +66,7 @@ optional arguments:
                         number of levels or format of the data. If during data cleaning categorical
                         variables are detected that are NOT specified by the user, a warning will be
                         raised.
+
   --ordinals ORDINALS [ORDINALS ...]
 
                         A string or list of strings, e.g.
@@ -77,6 +78,7 @@ optional arguments:
                         variables are detected that are NOT specified by the user, a warning will be
                         raised. If the values of the specified variables cannot be interpreted as
                         integers, then df-analyze will exit with an error.
+
   --drops DROPS [DROPS ...]
 
                         A string or list of strings, e.g.
@@ -86,6 +88,7 @@ optional arguments:
                         that specifies which features will be removed from the data and not considered
                         for any inspection, description or univariate analysis, and which will not be
                         included in any feature selection, model tuning, or final predictive models.
+
   --mode {classify,regress}
 
                         If "classify", do classification. If "regress", do regression.
@@ -142,6 +145,7 @@ optional arguments:
                                       navigation strategy.
 
                           none:       Do not select features using any model.
+
   --embed-select {lgbm,linear,none} [{lgbm,linear,none} ...]
 
                         Methods of model-based feature selection methods to use. Available options are:
@@ -157,6 +161,7 @@ optional arguments:
                                       navigation strategy.
 
                           none:       Do not select features using any model.
+
   --wrapper-select {step-up,step-down}
 
                         Wrapper-based feature selection method, i.e. method/optimizer to use to
@@ -179,6 +184,7 @@ optional arguments:
                                       that most improves (or least decreases) prediction of the target
                                       variable. Also called backward / recursive feature slection or
                                       elimination.
+
   --wrapper-model {linear,lgbm}
 
                         Model to use during wrapper-based feature selection. Available options are:
@@ -187,6 +193,7 @@ optional arguments:
                                       tasks, linear regression.
 
                           lgbm:       Use a LightGBM gradient-boosted decision tree model.
+
   --embed-model {lgbm,linear}
 
                         Model to use for embedded feature selection. Supported models are:
@@ -195,10 +202,12 @@ optional arguments:
                                       regularization.
 
                           lgbm:       LightGBM regressor or classifier, depending on task.
+
   --n-selection-tune-rounds N_SELECTION_TUNE_ROUNDS
 
                         If not the default of zero, the number of tuning rounds to do before evaluating
                         each feature set during wrapper-based feature selection.
+
   --nan {drop,mean,median,impute}
 
                         How to handle NaN values in non-categorical features. Categorical features
@@ -223,20 +232,30 @@ optional arguments:
                         Number or percentage (as a value in [0, 1]) of total features of any kind
                         (categorical or continuous) to select via filter-based feature selection.
                         Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
+
+
+
   --n-feat-wrapper N_FEAT_WRAPPER
 
                         Number of features to select during wrapper-based feature selection. Note
                         that specifying values greater than e.g. 10-20 with slower algorithms (e.g.
                         LightGBM) and for data with a large number of features (e.g. over 50) can
                         easily result in compute times of many hours.
+
   --n-filter-cont N_FILTER_CONT
 
                         Number or percentage (as a value in [0, 1]) of continuous features to select
                         via filter-based feature selection. Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
+
+
+
   --n-filter-cat N_FILTER_CAT
 
                         Number or percentage (as a value in [0, 1]) of categorical features to select
                         via filter-based feature selection. Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
+
+
+
   --filter-method FILTER_METHOD
                         Method(s) to use for filter selection.
 
@@ -245,22 +264,27 @@ optional arguments:
                         Method 'assoc' is the fastest and is based on a measure of association between the feature and the target variable, where the measure of association is appropriate based on the cardinality (e.g. categorical vs. continuous) of the feature and target. However, because association need not imply generalizable predictive utility (and because the absence of an association does not imply an absence of predictive utility), it is possible that this method selects features that generalize poorly for prediction tasks.
 
                         Method 'pred' is based on the k-fold univariate predictive performance of each feature on the target variable, where the estimator is a lightly tuned sklearn.linear_model.SGDClassifier or sklearn.linear_model.SGDRegressor, depending on the task. Computing these univariate predictive performances is quite expensive, but because of the internal k-fold validation used, these predictive performance metrics directly asses the potential predictive utility of each feature.
+
   --filter-assoc-cont-classify {t,U,W,corr,cohen_d,AUROC,mut_info}
 
                         Type of association to use for selecting continuous features when the task or
                         target is classification / categorical.
+
   --filter-assoc-cat-classify {mut_info,H,cramer_v}
 
                         Type of association to use for selecting categorical features when the task or
                         target is classification / categorical.
+
   --filter-assoc-cont-regress {pearson_r,spearman_r,mut_info,F}
 
                         Type of association to use for selecting continuous features when the task or
                         target is regression / continuous.
+
   --filter-assoc-cat-regress {mut_info,H}
 
                         Type of association to use for selecting categorical features when the task or
                         target is regression / continuous.
+
   --filter-pred-regress {mae,msqe,mdae,r2,var-exp}
 
                         Regression score to use for filter-based selection of features. Options:
@@ -276,6 +300,7 @@ optional arguments:
                           var-exp:   Percent Variance Explained
 
 
+
   --filter-pred-classify {acc,auroc,sens,spec}
 
                         Classification score to use for filter-based selection of features. Options:
@@ -287,6 +312,7 @@ optional arguments:
                           sens:      Sensitivity
 
                           spec:      Specificity
+
 
 
   --htune
@@ -363,6 +389,7 @@ optional arguments:
                         Ignored unless using Monte-Carlo style cross validation via `--htune-val mc`.
                         Otherwise, specifies the number of random subsets of proportion
                         `--htune-val-size` on which to validate the data. Default 10.
+
   --test-val {holdout,kfold,k-fold,loocv,mc,none}
 
                         Specify which validation method to use for testing. Same behavour as for
@@ -399,6 +426,7 @@ optional arguments:
 
                                       An integer specifies the number of samples to set aside for
                                       each repeat.
+
   --outdir OUTDIR
                         Specifies location of all results, as well as cache files for slow
                         computations (e.g. stepwise feature selection). If unspecified, will attempt
@@ -416,6 +444,7 @@ optional arguments:
   --no-warn-explosion
                         If this flag is present, silence the warnings about large increases in the
                         number of features due to one-hot encoding of categoricals.
+
 
 USAGE EXAMPLE (assumes you have run `poetry shell`):
 

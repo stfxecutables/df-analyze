@@ -65,6 +65,7 @@ that specifies which features will be treated as categorical regardless of the
 number of levels or format of the data. If during data cleaning categorical
 variables are detected that are NOT specified by the user, a warning will be
 raised.
+
 """
 
 ORDINAL_HELP_STR = """
@@ -77,6 +78,7 @@ number of levels or format of the data. If during data cleaning categorical
 variables are detected that are NOT specified by the user, a warning will be
 raised. If the values of the specified variables cannot be interpreted as
 integers, then df-analyze will exit with an error.
+
 """
 
 DROP_HELP_STR = """
@@ -87,6 +89,7 @@ A string or list of strings, e.g.
 that specifies which features will be removed from the data and not considered
 for any inspection, description or univariate analysis, and which will not be
 included in any feature selection, model tuning, or final predictive models.
+
 """
 
 MODE_HELP_STR = """
@@ -156,6 +159,7 @@ Methods of model-based feature selection methods to use. Available options are:
               navigation strategy.
 
   none:       Do not select features using any model.
+
 """
 
 WRAP_SELECT_HELP = """
@@ -179,6 +183,7 @@ Model to use in wrapper-based feature selection. Available options are:
               that most improves (or least decreases) prediction of the target
               variable. Also called backward / recursive feature slection or
               elimination.
+
 """
 
 WRAP_SELECT_MODEL_HELP = """
@@ -188,6 +193,7 @@ Model to use during wrapper-based feature selection. Available options are:
               tasks, linear regression.
 
   lgbm:       Use a LightGBM gradient-boosted decision tree model.
+
 """
 
 EMBED_SELECT_MODEL_HELP = """
@@ -197,6 +203,7 @@ Model to use for embedded feature selection. Supported models are:
               regularization.
 
   lgbm:       LightGBM regressor or classifier, depending on task.
+
 """
 
 SELECT_TUNE_ROUNDS_HELP = """
@@ -217,6 +224,7 @@ Makes use of the featuretools library (featuretools.com). Options are:
 SELECT_TUNE_ROUNDS_HELP = """
 If not the default of zero, the number of tuning rounds to do before evaluating
 each feature set during wrapper-based feature selection.
+
 """
 
 NAN_HELP = """
@@ -243,6 +251,7 @@ N_FEAT_HELP = """
 Number of features to select using method specified by --feat-select. NOTE:
 specifying values greater than e.g. 10-50 with --feat-select=step-up and slower
 algorithms can easily result in compute times of many hours.
+
 """
 
 N_FEAT_WRAPPER_HELP = """
@@ -250,28 +259,32 @@ Number of features to select during wrapper-based feature selection. Note
 that specifying values greater than e.g. 10-20 with slower algorithms (e.g.
 LightGBM) and for data with a large number of features (e.g. over 50) can
 easily result in compute times of many hours.
+
 """
 
 N_FEAT_NOTE = (
     "Note only two of two of the three options:`--n-filter-total`, "
     "`--n-filter-cont`, and  `--n-filter-cat` may be specified at once, "
-    "otherwise the `--n-filter-total` argument will be ignored."
+    "otherwise the `--n-filter-total` argument will be ignored.\n\n"
 )
 
 N_FEAT_TOTAL_FILTER_HELP = f"""
 Number or percentage (as a value in [0, 1]) of total features of any kind
 (categorical or continuous) to select via filter-based feature selection.
 {N_FEAT_NOTE}
+
 """
 
 N_FEAT_CONT_FILTER_HELP = f"""
 Number or percentage (as a value in [0, 1]) of continuous features to select
 via filter-based feature selection. {N_FEAT_NOTE}
+
 """
 
 N_FEAT_CAT_FILTER_HELP = f"""
 Number or percentage (as a value in [0, 1]) of categorical features to select
 via filter-based feature selection. {N_FEAT_NOTE}
+
 """
 
 
@@ -300,39 +313,45 @@ FILTER_METHOD_HELP = (
     "sklearn.linear_model.SGDRegressor, depending on the task. Computing these "
     "univariate predictive performances is quite expensive, but because of the "
     "internal k-fold validation used, these predictive performance metrics "
-    "directly asses the potential predictive utility of each feature. "
+    "directly asses the potential predictive utility of each feature.\n\n"
 )
 
 ASSOC_SELECT_CONT_CLS_STATS = """
 Type of association to use for selecting continuous features when the task or
 target is classification / categorical.
+
 """
 
 ASSOC_SELECT_CAT_CLS_STATS = """
 Type of association to use for selecting categorical features when the task or
 target is classification / categorical.
+
 """
 
 ASSOC_SELECT_CONT_REG_STATS = """
 Type of association to use for selecting continuous features when the task or
 target is regression / continuous.
+
 """
 
 ASSOC_SELECT_CAT_REG_STATS = """
 Type of association to use for selecting categorical features when the task or
 target is regression / continuous.
+
 """
 
 REG_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in RegScore])
 PRED_SELECT_REG_SCORE = f"""
 Regression score to use for filter-based selection of features. Options:\n
 {REG_OPTIONS}
+
 """
 
 CLS_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in ClsScore])
 PRED_SELECT_CLS_SCORE = f"""
 Classification score to use for filter-based selection of features. Options:\n
 {CLS_OPTIONS}
+
 """
 
 HTUNE_HELP = """
@@ -399,6 +418,7 @@ MC_REPEATS_HELP = """
 Ignored unless using Monte-Carlo style cross validation via `--htune-val mc`.
 Otherwise, specifies the number of random subsets of proportion
 `--htune-val-size` on which to validate the data. Default 10.
+
 """
 
 HTUNE_TRIALS_HELP = """
@@ -451,6 +471,7 @@ The meaning of this argument depends on the choice of `--test-val`:
 
               An integer specifies the number of samples to set aside for
               each repeat.
+
 """
 
 OUTDIR_HELP = f"""
@@ -473,6 +494,7 @@ Controls amount of output to stdout and stderr. Options:
 EXPLODE_HELP = """
 If this flag is present, silence the warnings about large increases in the
 number of features due to one-hot encoding of categoricals.
+
 """
 
 DESC = f"""
