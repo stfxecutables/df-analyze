@@ -26,6 +26,8 @@
 
 ## Output Files
 
+## Makrkdown Reports
+
 - **`associations_report.md`**
   - summarizes the (statistical) associations between each feature and the
     target variable
@@ -84,3 +86,12 @@
 - **`wrapper_selection_report.md`**
   - summarizes which features were selected based on the wrapper selection
     method, and the wrapper model and method used
+
+
+## Tables
+
+Raw data (unrounded) used to generate the tables in each report are present
+in `.csv` files in the same folder as the Markdown (`.md`) reports.
+
+Compressed forms of each table are also often saved in `.parquet` [file
+format](https://parquet.apache.org/docs/file-format/) in each directory.
