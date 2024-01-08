@@ -25,6 +25,9 @@ class DummyRegressor(DfAnalyzeModel):
         self.fixed_args = dict()
         self.shortname = "dummy"
         self.longname = "Dummy Regressor"
+        self.grid = {
+            "strategy": ["mean", "median"],
+        }
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -43,6 +46,7 @@ class DummyClassifier(DfAnalyzeModel):
         self.fixed_args = dict()
         self.shortname = "dummy"
         self.longname = "Dummy Classifier"
+        self.grid = {"strategy": ["most_frequent", "prior", "stratified", "uniform"]}
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args

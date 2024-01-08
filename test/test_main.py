@@ -32,19 +32,25 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     if ds.is_classification:
         # options.classifiers = tuple([x for x in DfAnalyzeClassifier])
         options.classifiers = (
+            DfAnalyzeClassifier.Dummy,
             DfAnalyzeClassifier.KNN,
             DfAnalyzeClassifier.SGD,
-            DfAnalyzeClassifier.Dummy,
+            # DfAnalyzeClassifier.LR,
+            DfAnalyzeClassifier.MLP,
             DfAnalyzeClassifier.LGBM,
+            DfAnalyzeClassifier.SVM,
         )
         # options.classifiers = (DfAnalyzeClassifier.MLP,)
     else:
         options.regressors = tuple([x for x in DfAnalyzeRegressor])
         options.regressors = (
-            DfAnalyzeRegressor.KNN,
-            DfAnalyzeRegressor.SGD,
             DfAnalyzeRegressor.Dummy,
+            DfAnalyzeRegressor.KNN,
+            # DfAnalyzeRegressor.SGD,
+            DfAnalyzeRegressor.ElasticNet,
+            DfAnalyzeRegressor.MLP,
             DfAnalyzeRegressor.LGBM,
+            DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
     options.to_json()

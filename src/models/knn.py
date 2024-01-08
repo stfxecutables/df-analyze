@@ -27,6 +27,11 @@ class KNNEstimator(DfAnalyzeModel):
         self.model_cls: Type[Any] = type(None)
         self.shortname = "knn"
         self.longname = "K-Neighbours Estimator"
+        self.grid = {
+            "n_neighbors": [1, 5, 10, 25, 50],
+            "weights": ["uniform", "distance"],
+            "metric": ["cosine", "l1", "l2", "correlation"],
+        }
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, {}

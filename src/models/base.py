@@ -21,7 +21,7 @@ from numpy import ndarray
 from optuna import Study, Trial, create_study
 from optuna.logging import _get_library_root_logger
 from optuna.pruners import MedianPruner
-from optuna.samplers import TPESampler
+from optuna.samplers import GridSampler, TPESampler
 from optuna.trial import FrozenTrial
 from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
@@ -81,6 +81,7 @@ class DfAnalyzeModel(ABC):
         self.fixed_args: dict[str, Any] = {}
         self.default_args: dict[str, Any] = {}
         self.model_args: Mapping = model_args or {}
+        self.grid: Optional[dict[str, Any]] = None
 
         self.tuned_args: Optional[dict[str, Any]] = None
         self.tuned_model: Optional[Any] = None
@@ -151,17 +152,19 @@ class DfAnalyzeModel(ABC):
                 f"Model {self.__class__.__name__} has already been tuned with Optuna"
             )
 
+        grid = self.grid
         study = create_study(
-            direction="maximize",
-            sampler=TPESampler(),
+            direction="maximize",  # handled in objective
+            sampler=GridSampler(grid) if grid is not None else TPESampler(),
             pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
         )
         optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(X_train=X_train, y_train=y_train)
+        cbs = [EarlyStopping(patience=15, min_trials=50)]
         study.optimize(
             objective,
             n_trials=n_trials,
-            callbacks=[EarlyStopping(patience=15, min_trials=50)],
+            callbacks=cbs if grid is None else [],
             timeout=64_800,  # 18h * 60min/h * 60 sec/min, leave 6 hr on 24-hour job
             n_jobs=n_jobs,
             gc_after_trial=True,

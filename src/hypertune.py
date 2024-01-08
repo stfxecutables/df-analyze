@@ -199,6 +199,7 @@ def evaluate_tuned(
             else:
                 model = model_cls()
 
+            print(f"Tuning {model.longname} for selection={selection}")
             try:
                 study = model.htune_optuna(
                     X_train=X_train,
