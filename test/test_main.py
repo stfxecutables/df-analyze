@@ -129,8 +129,14 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 if __name__ == "__main__":
     for dsname, ds in FAST_INSPECTION:
-        if dsname in ["abalone", "analcatdata_marketing", "ada_prior"]:
+        if dsname in [
+            "abalone",
+            "analcatdata_marketing",
+            "ada_prior",
+            "BNG(lowbwt)",
+            "cmc",
+        ]:
             continue
-        if ds.is_classification:
+        if not ds.is_classification:
             continue
         do_main((dsname, ds))
