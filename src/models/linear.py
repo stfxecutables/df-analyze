@@ -26,6 +26,8 @@ class ElasticNetRegressor(DfAnalyzeModel):
         self.is_classifier = False
         self.model_cls = ElasticNet
         self.fixed_args = dict(max_iter=2000)
+        self.shortname = "elastic"
+        self.longname = "ElasticNet Regressor"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -44,6 +46,8 @@ class LRClassifier(DfAnalyzeModel):
         self.model_cls = LogisticRegression
         self.fixed_args = dict(max_iter=2000, penalty="elasticnet", solver="saga")
         self.default_args = dict(l1_ratio=0.5)
+        self.shortname = "lr"
+        self.longname = "Logistic Regression"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -61,6 +65,8 @@ class SGDClassifier(DfAnalyzeModel):
         self.is_classifier = True
         self.model_cls = SklearnSGDClassifier
         self.default_args = dict(learning_rate="adaptive", penalty="l2", eta0=3e-4)
+        self.shortname = "sgd"
+        self.longname = "SGD Linear Classifer"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -79,6 +85,8 @@ class SGDRegressor(DfAnalyzeModel):
         self.is_classifier = False
         self.model_cls = SklearnSGDRegressor
         self.default_args = dict(eta0=3e-4)
+        self.shortname = "sgd"
+        self.longname = "SGD Linear Regressor"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -100,6 +108,8 @@ class SGDClassifierSelector(DfAnalyzeModel):
         self.is_classifier = True
         self.model_cls = SklearnSGDClassifier
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
+        self.shortname = "sgd-select"
+        self.longname = "SGD Linear Selector"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -120,6 +130,8 @@ class SGDRegressorSelector(DfAnalyzeModel):
         self.is_classifier = False
         self.model_cls = SklearnSGDRegressor
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
+        self.shortname = "sgd-select"
+        self.longname = "SGD Linear Selector"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args

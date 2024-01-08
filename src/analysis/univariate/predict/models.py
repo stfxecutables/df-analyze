@@ -29,9 +29,9 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.svm import SVC, SVR
 
-from src.hypertune import CLASSIFIER_TEST_SCORERS as CLS_SCORING
-from src.hypertune import REGRESSION_TEST_SCORERS as REG_SCORING
 from src.nonsense import enable_spam, silence_spam
+from src.scoring import CLASSIFIER_TEST_SCORERS as CLS_SCORING
+from src.scoring import REGRESSION_TEST_SCORERS as REG_SCORING
 
 AnyModel = Union[
     LGBMClassifier,

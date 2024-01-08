@@ -24,6 +24,8 @@ class LightGBMEstimator(DfAnalyzeModel):
         self.is_classifier = False
         self.fixed_args = dict(verbosity=-1)
         self.model_cls: Type[Any] = type(None)
+        self.shortname = "lgbm"
+        self.longname = "LightGBM Estimator"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -51,6 +53,8 @@ class LightGBMRFEstimator(DfAnalyzeModel):
         self.fixed_args = dict(verbosity=-1)
         self.default_args = dict(bagging_freq=1, bagging_fraction=0.75)
         self.model_cls: Type[Any] = type(None)
+        self.shortname = "rf"
+        self.longname = "LightGBM Random Forest Estimator"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -77,6 +81,8 @@ class LightGBMClassifier(LightGBMEstimator):
         self.is_classifier = True
         self.fixed_args = dict(verbosity=-1)
         self.model_cls = LGBMClassifier
+        self.shortname = "lgbm"
+        self.longname = "LightGBM Classifier"
 
 
 class LightGBMRegressor(LightGBMEstimator):
@@ -85,6 +91,8 @@ class LightGBMRegressor(LightGBMEstimator):
         self.is_classifier = False
         self.fixed_args = dict(verbosity=-1)
         self.model_cls = LGBMRegressor
+        self.shortname = "lgbm"
+        self.longname = "LightGBM Regressor"
 
 
 class LightGBMRFClassifier(LightGBMRFEstimator):
@@ -93,6 +101,8 @@ class LightGBMRFClassifier(LightGBMRFEstimator):
         self.is_classifier = True
         self.fixed_args.update(dict(boosting_type="rf", verbosity=-1))
         self.model_cls = LGBMClassifier
+        self.shortname = "rf"
+        self.longname = "LightGBM Random Forest Classifier"
 
 
 class LightGBMRFRegressor(LightGBMRFEstimator):
@@ -101,3 +111,5 @@ class LightGBMRFRegressor(LightGBMRFEstimator):
         self.is_classifier = False
         self.fixed_args.update(dict(boosting_type="rf", verbosity=-1))
         self.model_cls = LGBMRegressor
+        self.shortname = "rf"
+        self.longname = "LightGBM Random Forest Regressor"

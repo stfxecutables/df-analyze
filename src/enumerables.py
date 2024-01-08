@@ -1,12 +1,35 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum, EnumMeta
 from math import isnan
 from random import choice, randint
-from typing import Any, Generic, Optional, Type, TypeVar, no_type_check
+from typing import TYPE_CHECKING, Any, Generic, Optional, Type, TypeVar, no_type_check
 from warnings import warn
 
 import numpy as np
+from numpy import ndarray
+from pandas import DataFrame, Series
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    explained_variance_score,
+    f1_score,
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+    median_absolute_error,
+    r2_score,
+    roc_auc_score,
+)
+
+from src.scoring import (
+    sensitivity,
+    specificity,
+)
+
+if TYPE_CHECKING:
+    from src.models.base import DfAnalyzeModel
 
 T = TypeVar("T", bound="RandEnum")
 
@@ -36,7 +59,7 @@ class RandEnum(Generic[T]):
         cls = self.__class__
         if not isinstance(other, cls):
             raise ValueError(f"Can only compare {cls} to other objects of type {cls}")
-        return self.name < other.name
+        return self.name < other.name  # type: ignore
 
     def __gt__(self, other):
         return not (self < other)
@@ -45,19 +68,136 @@ class RandEnum(Generic[T]):
 class DfAnalyzeClassifier(RandEnum, Enum):
     KNN = "knn"
     LGBM = "lgbm"
+    RF = "rf"
     LR = "lr"
     SGD = "sgd"
     MLP = "mlp"
     SVM = "svm"
+    Dummy = "dummy"
+
+    def get_model(self) -> Type[DfAnalyzeModel]:
+        from src.models.dummy import DummyClassifier
+        from src.models.knn import KNNClassifier
+        from src.models.lgbm import (
+            LightGBMClassifier,
+            LightGBMRFClassifier,
+        )
+        from src.models.linear import LRClassifier, SGDClassifier
+        from src.models.mlp import MLPEstimator
+        from src.models.svm import SVMClassifier
+
+        return {
+            DfAnalyzeClassifier.KNN: KNNClassifier,
+            DfAnalyzeClassifier.LGBM: LightGBMClassifier,
+            DfAnalyzeClassifier.RF: LightGBMRFClassifier,
+            DfAnalyzeClassifier.LR: LRClassifier,
+            DfAnalyzeClassifier.SGD: SGDClassifier,
+            DfAnalyzeClassifier.MLP: MLPEstimator,
+            DfAnalyzeClassifier.SVM: SVMClassifier,
+            DfAnalyzeClassifier.Dummy: DummyClassifier,
+        }[self]
 
 
 class DfAnalyzeRegressor(RandEnum, Enum):
     KNN = "knn"
     LGBM = "lgbm"
+    RF = "rf"
     ElasticNet = "elastic"
     SGD = "sgd"
     MLP = "mlp"
     SVM = "svm"
+    Dummy = "dummy"
+
+    def get_model(self) -> Type[DfAnalyzeModel]:
+        from src.models.dummy import DummyRegressor
+        from src.models.knn import KNNRegressor
+        from src.models.lgbm import (
+            LightGBMRegressor,
+            LightGBMRFRegressor,
+        )
+        from src.models.linear import ElasticNetRegressor, SGDRegressor
+        from src.models.mlp import MLPEstimator
+        from src.models.svm import SVMRegressor
+
+        return {
+            DfAnalyzeRegressor.KNN: KNNRegressor,
+            DfAnalyzeRegressor.LGBM: LightGBMRegressor,
+            DfAnalyzeRegressor.RF: LightGBMRFRegressor,
+            DfAnalyzeRegressor.ElasticNet: ElasticNetRegressor,
+            DfAnalyzeRegressor.SGD: SGDRegressor,
+            DfAnalyzeRegressor.MLP: MLPEstimator,
+            DfAnalyzeRegressor.SVM: SVMRegressor,
+            DfAnalyzeRegressor.Dummy: DummyRegressor,
+        }[self]
+
+
+@dataclass
+class ClassifierScorer(RandEnum, Enum):
+    Accuracy = "acc"
+    AUROC = "auroc"
+    Sensitivity = "sens"
+    Specificity = "spec"
+    F1 = "f1"
+    BalanceAccuracy = "bal-acc"
+
+    @staticmethod
+    def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
+        if y_prob.shape[1] == 2:
+            y_prob = y_prob[:, 1]
+        raws = {
+            ClassifierScorer.Accuracy.value: accuracy_score(y_true, y_pred),
+            ClassifierScorer.AUROC.value: roc_auc_score(
+                y_true, y_prob, average="macro", multi_class="ovr"
+            ),
+            ClassifierScorer.Sensitivity.value: sensitivity(y_true, y_pred),
+            ClassifierScorer.Specificity.value: specificity(y_true, y_pred),
+            ClassifierScorer.F1.value: f1_score(y_true, y_pred, average="macro"),
+            ClassifierScorer.BalanceAccuracy.value: balanced_accuracy_score(y_true, y_pred),
+        }
+        return {raw: float(value) for raw, value in raws.items()}
+
+    @staticmethod
+    def null_scores() -> dict[str, float]:
+        raws = {
+            ClassifierScorer.Accuracy.value: np.nan,
+            ClassifierScorer.AUROC.value: np.nan,
+            ClassifierScorer.Sensitivity.value: np.nan,
+            ClassifierScorer.Specificity.value: np.nan,
+            ClassifierScorer.F1.value: np.nan,
+            ClassifierScorer.BalanceAccuracy.value: np.nan,
+        }
+        return {raw: float(value) for raw, value in raws.items()}
+
+
+@dataclass
+class RegressorScorer(RandEnum, Enum):
+    MAE = "mae"
+    MSqE = "msqe"
+    MdAE = "mdae"
+    R2 = "r2"
+    VarExp = "var-exp"
+
+    @staticmethod
+    def get_scores(y_true: Series, y_pred: Series) -> dict[str, float]:
+        raws = {
+            RegressorScorer.MAE.value: mean_absolute_error(y_true, y_pred),
+            RegressorScorer.MSqE.value: mean_squared_error(y_true, y_pred),
+            RegressorScorer.MdAE.value: median_absolute_error(y_true, y_pred),
+            RegressorScorer.R2.value: r2_score(y_true, y_pred),
+            RegressorScorer.VarExp.value: explained_variance_score(y_true, y_pred),
+        }
+        return {raw: float(value) for raw, value in raws.items()}
+
+    @staticmethod
+    def null_scores() -> dict[str, float]:
+        raws = {
+            RegressorScorer.MAE.value: np.nan,
+            RegressorScorer.MSqE.value: np.nan,
+            RegressorScorer.MdAE.value: np.nan,
+            RegressorScorer.R2.value: np.nan,
+            RegressorScorer.VarExp.value: np.nan,
+        }
+        return {raw: float(value) for raw, value in raws.items()}
 
 
 class EmbedSelectionModel(RandEnum, Enum):

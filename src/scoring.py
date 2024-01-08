@@ -1,11 +1,14 @@
 import warnings
-from typing import Any, Callable
+from typing import Any, Callable, Union
 
 import numpy as np
 from numpy import ndarray
+from pandas import Series
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     explained_variance_score,
+    f1_score,
     make_scorer,
     mean_absolute_error,
     mean_absolute_percentage_error,
@@ -18,11 +21,11 @@ from sklearn.metrics import (
 )
 
 
-def sensitivity(y_true: ndarray, y_pred: ndarray) -> float:
+def sensitivity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
     return float(recall_score(y_true, y_pred, average="macro", zero_division=np.nan))  # type: ignore
 
 
-def specificity(y_true: ndarray, y_pred: ndarray) -> float:
+def specificity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
     mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
     tns = mat[:, 0, 0]
     fps = mat[:, 0, 1]
@@ -51,6 +54,8 @@ auc_scorer = make_scorer(
 )
 sensitivity_scorer = make_scorer(sensitivity)
 specificity_scorer = make_scorer(specificity)
+f1_scorer = make_scorer(f1_score, average="macro")
+bal_acc_scorer = make_scorer(balanced_accuracy_score)
 
 mae_scorer = make_scorer(mean_absolute_error)
 mse_scorer = make_scorer(mean_squared_error)
@@ -58,3 +63,20 @@ mdae_scorer = make_scorer(median_absolute_error)
 mape_scorer = make_scorer(mean_absolute_percentage_error)
 r2_scorer = make_scorer(r2_score)
 expl_var_scorer = make_scorer(explained_variance_score)
+
+CLASSIFIER_TEST_SCORERS = dict(
+    acc=accuracy_scorer,
+    auroc=auc_scorer,
+    sens=sensitivity_scorer,
+    spec=specificity_scorer,
+    f1=f1_scorer,
+    bal_acc=bal_acc_scorer,
+)
+REGRESSION_TEST_SCORERS = {
+    "mae": mae_scorer,
+    "msqe": mse_scorer,
+    "mdae": mdae_scorer,
+    # "MAPE": mape_scorer,
+    "r2": r2_scorer,
+    "var-exp": expl_var_scorer,
+}

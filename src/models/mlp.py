@@ -216,6 +216,8 @@ class MLPEstimator(DfAnalyzeModel):
             device="cpu",
             verbose=0,
         )
+        self.shortname = "mlp"
+        self.longname = "Multilayer Perceptron"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -298,9 +300,17 @@ class MLPEstimator(DfAnalyzeModel):
         Xt = self._to_torch(X)
         return self.model.predict(Xt)
 
-    def predict_proba(self, X: DataFrame) -> ndarray:
+    def tuned_predict(self, X: DataFrame) -> ndarray:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to call `model.tune()` before calling `.tuned_predict()`")
         Xt = self._to_torch(X)
-        return self.model.predict_proba(Xt)
+        return self.tuned_model.predict(Xt)
+
+    def predict_proba(self, X: DataFrame) -> ndarray:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to call `model.tune()` before calling `.predict_proba()`")
+        Xt = self._to_torch(X)
+        return self.tuned_model.predict_proba(Xt)
 
     def score(self, X: DataFrame, y: Series) -> float:
         Xt, yt = self._to_torch(X, y)
@@ -377,22 +387,22 @@ class MLPEstimator(DfAnalyzeModel):
 
         return objective
 
-    def htune_eval(
-        self,
-        X_train: DataFrame,
-        y_train: Series,
-        X_test: DataFrame,
-        y_test: Series,
-    ) -> Any:
-        # TODO: need to specify valiation method, and return confidences, etc.
-        # Actually maybe just want to call refit in here...
-        if self.tuned_args is None:
-            raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
+    # def htune_eval(
+    #     self,
+    #     X_train: DataFrame,
+    #     y_train: Series,
+    #     X_test: DataFrame,
+    #     y_test: Series,
+    # ) -> Any:
+    #     # TODO: need to specify valiation method, and return confidences, etc.
+    #     # Actually maybe just want to call refit in here...
+    #     if self.tuned_args is None:
+    #         raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
 
-        args = self._to_model_args(self.tuned_args, X_train)
-        self.refit_tuned(X_train, y_train, tuned_args=args)
-        # TODO: return Platt-scaling or probability estimates
-        return self.score(X_test, y_test)
+    #     args = self._to_model_args(self.tuned_args, X_train)
+    #     self.refit_tuned(X_train, y_train, tuned_args=args)
+    #     # TODO: return Platt-scaling or probability estimates
+    #     return self.score(X_test, y_test)
 
 
 if __name__ == "__main__":

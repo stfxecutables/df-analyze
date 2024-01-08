@@ -25,6 +25,8 @@ class SVMEstimator(DfAnalyzeModel):
         self.is_classifier = True
         self.fixed_args = dict(cache_size=1000)
         self.default_args = dict(kernel="rbf")
+        self.shortname = "svm"
+        self.longname = "Support Vector Machine"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         is_rbf = full_args["kernel"]
@@ -63,6 +65,8 @@ class SVMClassifier(SVMEstimator):
         self.is_classifier = True
         self.needs_calibration = True
         self.model_cls = SVC
+        self.shortname = "svm"
+        self.longname = "Support Vector Classifier"
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
@@ -76,3 +80,5 @@ class SVMRegressor(SVMEstimator):
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = SVR
+        self.shortname = "svm"
+        self.longname = "Support Vector Regressor"

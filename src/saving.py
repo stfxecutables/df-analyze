@@ -9,6 +9,7 @@ from pathlib import Path
 from shutil import rmtree
 from tempfile import gettempprefix, mkdtemp
 from typing import (
+    TYPE_CHECKING,
     Any,
     Optional,
     Tuple,
@@ -19,11 +20,14 @@ from pandas import DataFrame
 
 from src._types import FeatureCleaning, FeatureSelection
 from src.analysis.univariate.associate import AssocResults
-from src.analysis.univariate.predict.predict import PredResults
-from src.preprocessing.inspection.inspection import InspectionResults
-from src.preprocessing.prepare import PreparedData
-from src.selection.filter import FilterSelected
-from src.selection.models import ModelSelected
+
+if TYPE_CHECKING:
+    from src.analysis.univariate.predict.predict import PredResults
+    from src.hypertune import EvaluationResults
+    from src.preprocessing.inspection.inspection import InspectionResults
+    from src.preprocessing.prepare import PreparedData
+    from src.selection.filter import FilterSelected
+    from src.selection.models import ModelSelected
 from src.utils import Debug
 
 JOBLIB = "__JOBLIB_CACHE__"
@@ -156,6 +160,34 @@ class ProgramDirs(Debug):
                 f"{traceback.format_exc()}"
             )
             return None, False
+
+    def save_eval_report(self, results: Optional[EvaluationResults]) -> None:
+        if self.results is None:
+            return
+        if results is None:
+            return
+        out = self.results / "results_report.md"
+        try:
+            out.write_text(results.to_markdown())
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save final evaluation report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_eval_results(self, results: Optional[EvaluationResults]) -> None:
+        if self.results is None:
+            return
+        if results is None:
+            return
+        tables = self.results / "performances.csv"
+        try:
+            out.write_text(results.to_markdown())
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save final evaluation report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
 
     def save_embed_report(self, selected: Optional[ModelSelected]) -> None:
         if selected is None:

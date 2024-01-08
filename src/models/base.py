@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Optional, Type, Union
 
 import numpy as np
 import optuna
+import pandas as pd
 from numpy import ndarray
 from optuna import Study, Trial, create_study
 from optuna.logging import _get_library_root_logger
@@ -28,6 +29,10 @@ from sklearn.model_selection import KFold, StratifiedKFold
 
 from src._constants import SEED
 from src.enumerables import WrapperSelection
+from src.hypertune import (
+    ClassifierScorer,
+    RegressorScorer,
+)
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -37,7 +42,7 @@ OPT_LOGGER = _get_library_root_logger()
 class EarlyStopping:
     # TODO: return k-fold values as they come in and do early stopping on
     # trials with a bad initial fold?
-    def __init__(self, patience: int = 10, min_trials: int = 20) -> None:
+    def __init__(self, patience: int = 10, min_trials: int = 50) -> None:
         self.patience: int = patience
         self.min_trials: int = min_trials
         self.has_stopped: bool = False
@@ -80,6 +85,8 @@ class DfAnalyzeModel(ABC):
         self.tuned_args: Optional[dict[str, Any]] = None
         self.tuned_model: Optional[Any] = None
         self.is_refit = False
+        self.shortname = ""
+        self.longname = ""
 
     @abstractmethod
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[Type[Any], dict[str, Any]]:
@@ -154,13 +161,12 @@ class DfAnalyzeModel(ABC):
         study.optimize(
             objective,
             n_trials=n_trials,
-            callbacks=[EarlyStopping(patience=10, min_trials=30)],
+            callbacks=[EarlyStopping(patience=15, min_trials=50)],
             timeout=64_800,  # 18h * 60min/h * 60 sec/min, leave 6 hr on 24-hour job
             n_jobs=n_jobs,
             gc_after_trial=True,
             show_progress_bar=True,
         )
-        print("Optuna tuning completed")
         self.tuned_args = study.best_params
         self.refit_tuned(X=X_train, y=y_train, tuned_args=self.tuned_args)
 
@@ -193,14 +199,63 @@ class DfAnalyzeModel(ABC):
         y_train: Series,
         X_test: DataFrame,
         y_test: Series,
-    ) -> Any:
+    ) -> DataFrame:
+        """
+        Returns
+        -------
+        df: DataFrame
+            DataFrame with columns: [trainset, holdout, 5-fold] and index as
+            the scorers, values as the scorer metric values.
+        """
         # TODO: need to specify valiation method, and return confidences, etc.
         # Actually maybe just want to call refit in here...
         if self.tuned_model is None:
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
+        preds_test = self.tuned_predict(X_test)
+        preds_train = self.tuned_predict(X_train)
+        if self.is_classifier:
+            probs_test = self.predict_proba(X_test)
+            probs_train = self.predict_proba(X_train)
+            scorer = ClassifierScorer
+            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test, y_prob=probs_test)
+            train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train, y_prob=probs_train)
+        else:
+            scorer = RegressorScorer
+            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test)
+            train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train)
 
-        # TODO: return Platt-scaling or probability estimates
-        return self.tuned_score(X_test, y_test)
+        if self.is_classifier:
+            ss = StratifiedKFold(n_splits=5)
+        else:
+            ss = KFold(n_splits=5)
+
+        scores = []
+        for idx_train, idx_test in ss.split(y_test, y_test):
+            df_train = X_test.loc[idx_train]
+            df_test = X_test.loc[idx_test]
+            targ_train = y_test.loc[idx_train]
+            targ_test = y_test.loc[idx_test]
+            self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
+            preds_test = self.tuned_predict(X=df_test)
+            if self.is_classifier:
+                probs_test = self.predict_proba(X=df_test)
+                scorer = ClassifierScorer
+                scores.append(
+                    scorer.get_scores(y_true=targ_test, y_pred=preds_test, y_prob=probs_test)
+                )
+            else:
+                scorer = RegressorScorer
+                scores.append(scorer.get_scores(y_true=targ_test, y_pred=preds_test))
+
+        holdout = Series(holdout_scores, name="holdout")
+        train = Series(train_scores, name="trainset")
+        scores = pd.concat([Series(score) for score in scores], axis=1)
+        means = scores.mean(axis=1)
+        means.name = "5-fold"
+        df = pd.concat([train, holdout, means], axis=1)
+        df.index.name = "metric"
+        df = df.reset_index()
+        return df
 
     def score(self, X: DataFrame, y: Series) -> float:
         if self.model is None:
@@ -212,10 +267,29 @@ class DfAnalyzeModel(ABC):
             raise RuntimeError("Need to tune model before calling `.tuned_score()`")
         return self.tuned_model.score(X, y)
 
+    def tuned_scores(self, X: DataFrame, y: Series) -> Series:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
+        preds = self.tuned_predict(X)
+
+        return self.tuned_model.score(X, y)
+
+    def tuned_cv_scores(self, X: DataFrame, y: Series) -> Series:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
+        preds = self.tuned_predict(X)
+
+        return self.tuned_model.score(X, y)
+
     def predict(self, X: DataFrame) -> Series:
         if self.model is None:
             raise RuntimeError("Need to call `model.fit()` before calling `.predict()`")
         return self.model.predict(X)
+
+    def tuned_predict(self, X: DataFrame) -> Series:
+        if self.tuned_model is None:
+            raise RuntimeError("Need to call `model.tune()` before calling `.tuned_predict()`")
+        return self.tuned_model.predict(X)
 
     def wrapper_select(
         self,

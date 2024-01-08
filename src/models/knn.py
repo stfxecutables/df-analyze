@@ -25,6 +25,8 @@ class KNNEstimator(DfAnalyzeModel):
         self.needs_calibration = False
         self.fixed_args = dict()
         self.model_cls: Type[Any] = type(None)
+        self.shortname = "knn"
+        self.longname = "K-Neighbours Estimator"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, {}
@@ -95,6 +97,8 @@ class KNNClassifier(KNNEstimator):
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = KNeighborsClassifier
+        self.shortname = "knn"
+        self.longname = "K-Neighbours Classifier"
 
 
 class KNNRegressor(KNNEstimator):
@@ -102,3 +106,5 @@ class KNNRegressor(KNNEstimator):
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = KNeighborsRegressor
+        self.shortname = "knn"
+        self.longname = "K-Neighbours Regressor"

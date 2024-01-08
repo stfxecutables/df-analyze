@@ -14,7 +14,7 @@ from src._types import (
 from src.cli.cli import ProgramOptions, Verbosity
 from src.feature_selection import select_features
 from src.hypertune import (
-    HtuneResult,
+    HtuneResultLegacy,
     evaluate_hypertuned,
     hypertune_classifier,
     hypertune_regressor,
@@ -71,7 +71,7 @@ def results_df(
     df: DataFrame
         Summary dataframe.
     """
-    htuned: HtuneResult = result.pop("htuned")
+    htuned: HtuneResultLegacy = result.pop("htuned")
     cv_method = result.pop("cv_method")
     test_validation = options.test_val
     test_val = val_method_short(test_validation, test_val_size)

@@ -226,6 +226,12 @@ class PreparedData:
         self.target = self.y.name
         self.labels = labels
 
+    @property
+    def num_classes(self) -> int:
+        if not self.is_classification:
+            return 1
+        return len(np.unique(self.y))
+
     def split(self, train_size: Union[int, float] = 0.6) -> tuple[PreparedData, PreparedData]:
         y = self.y
         if self.is_classification:

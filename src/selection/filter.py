@@ -17,7 +17,6 @@ from warnings import warn
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
-from sklearn.preprocessing import MinMaxScaler
 
 from src.analysis.univariate.associate import (
     AssocResults,

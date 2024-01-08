@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
 TESTDATA = DATADIR / "testing"
 TEST_RESULTS = TESTDATA / "__TEST_RESULTS__"
+FULL_RESULTS = TESTDATA / "__FULL_RESULTS__"
 
 # Testing
 SIMPLE_XLSX = DATADIR / "spreadsheet.xlsx"

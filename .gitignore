@@ -8,6 +8,7 @@ data/testing/**/*.txt
 data/testing/**/*.parquet
 data/testing/__*_CACHE__
 data/testing/__TEST*
+data/testing/__FULL*
 
 test_results
 

@@ -1,18 +1,36 @@
+from __future__ import annotations
+
 import os
+import re
 import traceback
 import warnings
 from dataclasses import dataclass, field
+from enum import Enum
 from pprint import pprint
-from typing import Any, Callable, Dict, Iterable, Optional, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Literal,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 from warnings import warn
 
 import numpy as np
 import optuna
+import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame
+from pandas import DataFrame, Index, Series
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     explained_variance_score,
+    f1_score,
     mean_absolute_error,
     mean_absolute_percentage_error,
     mean_squared_error,
@@ -45,19 +63,25 @@ from legacy.src.objectives import (
 from legacy.src.regressors import get_regressor_constructor
 from src._constants import SEED, VAL_SIZE
 from src._types import Classifier, CVMethod, EstimationMode, Estimator, Regressor
+from src.cli.cli import ProgramOptions
+
+if TYPE_CHECKING:
+    from src.models.base import DfAnalyzeModel
+import jsonpickle
+
+from src.enumerables import ClassifierScorer, RegressorScorer
+from src.models.mlp import MLPEstimator
+from src.preprocessing.prepare import PreparedData
 from src.scoring import (
-    accuracy_scorer,
-    auc_scorer,
-    expl_var_scorer,
-    mae_scorer,
-    mdae_scorer,
-    mse_scorer,
-    r2_scorer,
+    CLASSIFIER_TEST_SCORERS,
+    REGRESSION_TEST_SCORERS,
     sensitivity,
-    sensitivity_scorer,
     specificity,
-    specificity_scorer,
 )
+from src.selection.embedded import EmbedSelected
+from src.selection.filter import FilterSelected
+from src.selection.models import ModelSelected
+from src.selection.wrapper import WrapperSelected
 
 Splits = Iterable[Tuple[ndarray, ndarray]]
 
@@ -65,24 +89,168 @@ LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
 N_SPLITS = 5
-CLASSIFIER_TEST_SCORERS = dict(
-    acc=accuracy_scorer,
-    auroc=auc_scorer,
-    sens=sensitivity_scorer,
-    spec=specificity_scorer,
-)
-REGRESSION_TEST_SCORERS = {
-    "mae": mae_scorer,
-    "msqe": mse_scorer,
-    "mdae": mdae_scorer,
-    # "MAPE": mape_scorer,
-    "r2": r2_scorer,
-    "var-exp": expl_var_scorer,
-}
+
+
+@dataclass
+class HtuneResult:
+    selection: str
+    model_cls: Type[DfAnalyzeModel]
+    model: DfAnalyzeModel
+    params: dict[str, Any]
+    score: float
+
+
+@dataclass
+class EvaluationResults:
+    df: DataFrame
+    results: list[HtuneResult]
+    is_classification: bool
+
+    def wide_table(self, valset: Literal["5-fold", "trainset", "holdout"] = "5-fold") -> DataFrame:
+        cols = ["trainset", "holdout", "5-fold"]
+        cols.remove(valset)
+        col = valset
+        df = (
+            self.df.drop(columns=cols)
+            .pivot(columns="metric", values=col, index=["model", "selection"])
+            .reset_index()
+        )
+        sorter = "acc" if self.is_classification else "mae"
+        ascending = not self.is_classification
+        return df.sort_values(by=sorter, ascending=ascending)
+
+    def to_markdown(self) -> str:
+        df_train = self.wide_table("trainset")
+        df_hold = self.wide_table("holdout")
+        df_fold = self.wide_table("5-fold")
+        tab_train = df_train.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        tab_hold = df_hold.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        tab_fold = df_fold.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        text = (
+            "# Final Model Performances\n\n"
+            "## Training set performance\n\n"
+            f"{tab_train}\n\n"
+            "## Holdout set performance\n\n"
+            f"{tab_hold}\n\n"
+            "## 5-fold performance on holdout set\n\n"
+            f"{tab_fold}\n\n"
+        )
+        return text
+
+    def to_json(self) -> str:
+        return str(jsonpickle.encode(self))
+
+
+def _get_cols(selection: str, cols: Any) -> list[str]:
+    if selection == "assoc":
+        # dealing with level-specific metrics
+        cols = sorted(set([re.sub("__.*", "", str(c)) for c in cols]))
+
+    if isinstance(cols, (EmbedSelected, WrapperSelected)):
+        cols = cols.selected
+    return cols
+
+
+def _get_splits(
+    prep_train: PreparedData, prep_test: PreparedData, selection: str, cols: list[str]
+) -> tuple[DataFrame, DataFrame]:
+    if selection == "none":
+        X_train = prep_train.X
+        X_test = prep_test.X
+    else:
+        # clunky way to deal with renames and indicators
+        X_train = prep_train.X.filter(regex="|".join(cols))
+        X_test = prep_test.X.filter(regex="|".join(cols))
+    return X_train, X_test
+
+
+def evaluate_tuned(
+    prepared: PreparedData,
+    prep_train: PreparedData,
+    prep_test: PreparedData,
+    assoc_filtered: FilterSelected,
+    pred_filtered: FilterSelected,
+    model_selected: ModelSelected,
+    options: ProgramOptions,
+) -> EvaluationResults:
+    model_cls: Union[Type[DfAnalyzeModel], Type[MLPEstimator]]
+    results: list[HtuneResult]
+    dfs: list[DataFrame]
+
+    selections = {
+        "none": [],
+        "assoc": assoc_filtered.selected,
+        "pred": pred_filtered.selected,
+        "embed": model_selected.embed_selected,
+        "wrap": model_selected.wrap_selected,
+    }
+    if selections["embed"] is None:
+        selections.pop("embed")
+    if selections["wrap"] is None:
+        selections.pop("wrap")
+
+    dfs, results = [], []
+    for model_cls in options.models:
+        for selection, cols in selections.items():
+            cols = _get_cols(selection=selection, cols=cols)
+            X_train, X_test = _get_splits(prep_train, prep_test, selection, cols)
+            if model_cls is MLPEstimator:
+                model = model_cls(num_classes=prepared.num_classes)  # type: ignore
+            else:
+                model = model_cls()
+
+            try:
+                study = model.htune_optuna(
+                    X_train=X_train,
+                    y_train=prep_train.y,
+                    n_trials=100,
+                    n_jobs=-1,
+                    verbosity=optuna.logging.ERROR,
+                )
+                df = model.htune_eval(
+                    X_train=X_train,
+                    y_train=prep_train.y,
+                    X_test=X_test,
+                    y_test=prep_test.y,
+                )
+                result = HtuneResult(
+                    selection=selection,
+                    model_cls=model_cls,
+                    model=model,
+                    params=study.best_params,
+                    score=study.best_value,
+                )
+                results.append(result)
+            except Exception as e:
+                if prepared.is_classification:
+                    nulls = Series(ClassifierScorer.null_scores(), name="metric")
+                else:
+                    nulls = Series(RegressorScorer.null_scores(), name="metric")
+                warn(
+                    f"Got exception when trying to tune and evaluate {model.shortname}:\n{e}\n"
+                    f"{traceback.print_exc()}"
+                )
+                df = DataFrame(
+                    {"trainset": nulls, "holdout": nulls, "5-fold": nulls},
+                    index=Index(data=nulls.values, name=nulls.name),
+                )
+                result = HtuneResult(
+                    selection=selection,
+                    model_cls=model_cls,
+                    model=model,
+                    params={},
+                    score=np.nan,
+                )
+                results.append(result)
+            df["model"] = model.shortname
+            df["selection"] = selection
+            dfs.append(df)
+    df = pd.concat(dfs, axis=0, ignore_index=True)
+    return EvaluationResults(df=df, results=results, is_classification=prepared.is_classification)
 
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
-class HtuneResult:
+class HtuneResultLegacy:
     estimator: Estimator
     mode: EstimationMode
     n_trials: int
@@ -149,7 +317,7 @@ def cv_desc(cv_method: CVMethod, n_folds: Optional[int] = None) -> str:
 
 def package_classifier_cv_scores(
     scores: Dict[str, ndarray],
-    htuned: HtuneResult,
+    htuned: HtuneResultLegacy,
     cv_method: CVMethod,
     log: bool = False,
 ) -> Dict[str, Any]:
@@ -191,7 +359,7 @@ def package_classifier_scores(
     y_test: ndarray,
     y_pred: ndarray,
     y_score: ndarray,
-    htuned: HtuneResult,
+    htuned: HtuneResultLegacy,
     cv_method: CVMethod,
     log: bool = False,
 ) -> Dict[str, Any]:
@@ -223,7 +391,7 @@ def package_classifier_scores(
 
 def package_regressor_cv_scores(
     scores: Dict[str, ndarray],
-    htuned: HtuneResult,
+    htuned: HtuneResultLegacy,
     cv_method: CVMethod,
     log: bool = False,
 ) -> Dict[str, Any]:
@@ -255,7 +423,7 @@ def package_regressor_cv_scores(
     mae_sd = np.std(scores["test_mae"], ddof=1)
     msqe_sd = np.std(scores["test_msqe"], ddof=1)
     mdae_sd = np.std(scores["test_mdae"], ddof=1)
-    mape_sd = np.std(scores["test_mape"], ddof=1)
+    # mape_sd = np.std(scores["test_mape"], ddof=1)
     r2_sd = np.std(scores["test_r2"], ddof=1)
     var_exp_sd = np.std(scores["test_var exp"], ddof=1)
 
@@ -275,7 +443,7 @@ def package_regressor_cv_scores(
 def package_regressor_scores(
     y_test: ndarray,
     y_pred: ndarray,
-    htuned: HtuneResult,
+    htuned: HtuneResultLegacy,
     cv_method: CVMethod,
     log: bool = False,
 ) -> Dict[str, Any]:
@@ -311,7 +479,7 @@ def hypertune_classifier(
     n_trials: int = 200,
     cv_method: CVMethod = 5,
     verbosity: int = optuna.logging.ERROR,
-) -> HtuneResult:
+) -> HtuneResultLegacy:
     """Core function. Uses Optuna base TPESampler (Tree-Parzen Estimator Sampler) to perform
     Bayesian hyperparameter optimization via Gaussian processes on the classifier specified in
     `classifier`.
@@ -339,7 +507,7 @@ def hypertune_classifier(
 
     Returns
     -------
-    htuned: HtuneResult
+    htuned: HtuneResultLegacy
         See top of this file.
     """
     OBJECTIVES: Dict[str, Callable] = {
@@ -373,7 +541,7 @@ def hypertune_classifier(
         print(f"Best accuracy:      μ = {acc:0.3f}")
         # print("=" * 80, end="\n")
 
-    return HtuneResult(
+    return HtuneResultLegacy(
         estimator=classifier,
         mode="classify",
         n_trials=n_trials,
@@ -390,7 +558,7 @@ def hypertune_regressor(
     n_trials: int = 200,
     cv_method: CVMethod = 5,
     verbosity: int = optuna.logging.ERROR,
-) -> HtuneResult:
+) -> HtuneResultLegacy:
     """Core function. Uses Optuna base TPESampler (Tree-Parzen Estimator Sampler) to perform
     Bayesian hyperparameter optimization via Gaussian processes on the classifier specified in
     `classifier`.
@@ -418,7 +586,7 @@ def hypertune_regressor(
 
     Returns
     -------
-    htuned: HtuneResult
+    htuned: HtuneResultLegacy
         See top of this file.
     """
     OBJECTIVES: Dict[str, Callable] = {
@@ -469,7 +637,7 @@ def hypertune_regressor(
         print(f"Best MAE:       μ = {mae:0.3f}")
         # print("=" * 80, end="\n")
 
-    return HtuneResult(
+    return HtuneResultLegacy(
         mode="regress",
         estimator=regressor,
         n_trials=n_trials,
@@ -480,7 +648,7 @@ def hypertune_regressor(
 
 
 def evaluate_hypertuned(
-    htuned: HtuneResult,
+    htuned: HtuneResultLegacy,
     cv_method: CVMethod,
     X_train: DataFrame,
     y_train: DataFrame,
@@ -493,7 +661,7 @@ def evaluate_hypertuned(
 
     Parameters
     ----------
-    htuned: HtuneResult
+    htuned: HtuneResultLegacy
         Results from `src.hypertune.hypertune_classifier`.
 
     cv_method: CVMethod = 5
@@ -521,7 +689,7 @@ def evaluate_hypertuned(
         A dict with structure:
 
             {
-                htuned: HtuneResult,
+                htuned: HtuneResultLegacy,
                 cv_method: CVMethod,  # The method used during hypertuning
                 acc: float  # mean accuracy across folds
                 auc: float  # mean AUC across folds

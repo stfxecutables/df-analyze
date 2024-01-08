@@ -11,8 +11,10 @@ from enum import Enum
 from pathlib import Path
 from random import choice, randint, uniform
 from typing import (
+    TYPE_CHECKING,
     Optional,
     Tuple,
+    Type,
     Union,
     cast,
 )
@@ -24,6 +26,7 @@ from pandas import DataFrame
 
 from src._constants import (
     CLASSIFIERS,
+    FULL_RESULTS,
     HTUNE_VAL_METHODS,
     N_WRAPPER_DEFAULT,
     P_FILTER_CAT_DEFAULT,
@@ -31,11 +34,8 @@ from src._constants import (
     P_FILTER_TOTAL_DEFAULT,
     REGRESSORS,
     SENTINEL,
-    TEST_RESULTS,
 )
 from src._types import (
-    Classifier,
-    Regressor,
     ValMethod,
 )
 from src.analysis.univariate.associate import CatClsStats, CatRegStats, ContClsStats, ContRegStats
@@ -101,9 +101,11 @@ from src.enumerables import (
     WrapperSelectionModel,
 )
 from src.loading import load_spreadsheet
-from src.models.base import DfAnalyzeModel
+
+if TYPE_CHECKING:
+    from src.models.base import DfAnalyzeModel
+    from src.testing.datasets import TestDataset
 from src.saving import ProgramDirs, get_hash
-from src.testing.datasets import TestDataset
 from src.utils import Debug
 
 Size = Union[float, int]
@@ -161,8 +163,8 @@ class SelectionOptions(Debug):
 
     cleaning_options: CleaningOptions
     is_classification: bool
-    classifiers: Tuple[Classifier, ...]
-    regressors: Tuple[Regressor, ...]
+    classifiers: Tuple[DfAnalyzeClassifier, ...]
+    regressors: Tuple[DfAnalyzeRegressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
     model_select: Optional[DfAnalyzeModel]
     embed_select: Optional[EmbedSelectionModel]
@@ -220,8 +222,8 @@ class ProgramOptions(Debug):
         filter_pred_cls_score: ClsScore,
         filter_pred_reg_score: RegScore,
         is_classification: bool,
-        classifiers: Tuple[Classifier, ...],
-        regressors: Tuple[Regressor, ...],
+        classifiers: Tuple[DfAnalyzeClassifier, ...],
+        regressors: Tuple[DfAnalyzeRegressor, ...],
         htune: bool,
         htune_val: ValMethod,
         htune_val_size: Size,
@@ -263,8 +265,8 @@ class ProgramOptions(Debug):
         self.filter_pred_cls_score: ClsScore = filter_pred_cls_score
         self.filter_pred_reg_score: RegScore = filter_pred_reg_score
         self.is_classification: bool = is_classification
-        self.classifiers: Tuple[Classifier, ...] = tuple(sorted(set(classifiers)))
-        self.regressors: Tuple[Regressor, ...] = tuple(sorted(set(regressors)))
+        self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(sorted(set(classifiers)))
+        self.regressors: Tuple[DfAnalyzeRegressor, ...] = tuple(sorted(set(regressors)))
         self.htune: bool = htune
         self.htune_val: ValMethod = htune_val
         self.htune_val_size: Size = htune_val_size
@@ -328,6 +330,12 @@ class ProgramOptions(Debug):
                 )
         self.spam_warnings()
 
+    @property
+    def models(self) -> list[Type[DfAnalyzeModel]]:
+        sources = self.classifiers if self.is_classification else self.regressors
+        clses = [source.get_model() for source in sources]
+        return clses
+
     @staticmethod
     def random(ds: TestDataset) -> ProgramOptions:
         n_samples, n_feats = ds.shape
@@ -358,7 +366,8 @@ class ProgramOptions(Debug):
         test_val: ValMethod = "kfold"
         test_val_sizes: Tuple[Size, ...] = (0.2,)
         mc_repeats: int = 0
-        outdir: Path = (TEST_RESULTS / "cli_testing") / ds.dsname
+        sub = "classification" if ds.is_classification else "regression"
+        outdir: Path = (FULL_RESULTS / sub) / ds.dsname
         is_spreadsheet: bool = False
         separator: str = ","
         verbosity: Verbosity = Verbosity.ERROR
