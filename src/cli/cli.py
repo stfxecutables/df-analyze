@@ -282,10 +282,15 @@ class ProgramOptions(Debug):
         self.verbosity: Verbosity = verbosity
         self.no_warn_explosion: bool = no_warn_explosion
 
+        # cleanup
         if isinstance(test_val_sizes, (int, float)):
             self.test_val_sizes = (test_val_sizes,)
         else:
             self.test_val_sizes = tuple(sorted(set(test_val_sizes)))
+        if DfAnalyzeClassifier.Dummy not in self.classifiers:
+            self.classifiers = (DfAnalyzeClassifier.Dummy, *self.classifiers)
+        if DfAnalyzeRegressor.Dummy not in self.regressors:
+            self.regressors = (DfAnalyzeRegressor.Dummy, *self.regressors)
 
         self.cleaning_options = CleaningOptions(
             datapath=self.datapath,
