@@ -182,8 +182,13 @@ def viable_subsample(
         assert np.bincount(target[idx_full]).min() >= N_CAT_LEVEL_MIN, "remain fail"
         return idx_full
     else:
-        ent = rng.bit_generator.seed_seq.entropy  # type: ignore
         smax = 2**32 - 1
+        if hasattr(rng.bit_generator, "seed_seq"):
+            ent = rng.bit_generator.seed_seq.entropy  # type: ignore
+        elif hasattr(rng.bit_generator, "_seed_seq"):
+            ent = rng.bit_generator._seed_seq.entropy  # type: ignore
+        else:
+            ent = np.random.randint(1, smax)
         while ent > smax:
             ent //= 2
 
