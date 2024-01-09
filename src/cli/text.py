@@ -4,24 +4,20 @@ from src._constants import (
     CLASSIFIERS,
     REGRESSORS,
 )
-from src.enumerables import ClsScore, RegScore
+from src.enumerables import ClsScore, DfAnalyzeClassifier, DfAnalyzeRegressor, RegScore
 
 DF_HELP_STR = """
 The dataframe to analyze.
 
-Currently only Pandas `DataFrame` objects saved as either `.json` or `.csv`, or
-NumPy `ndarray`s saved as "<filename>.npy" are supported, but a Pandas
-`DataFrame` is recommended.
+Currently only tables saved as either `.xlsx`, `.json` or `.csv`, or NumPy
+`ndarray`s saved as "<filename>.npy" are supported, but a file exported by
+Pandas `DataFrame.to_*` method is preferred.
 
 If your data is saved as a Pandas `DataFrame`, it must have shape
 `(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
 column holding the target variable (or feature) can be specified by the
 `--target` / `-y` argument, but is "target" by default if such a column name
 exists, or the last column if it does not.
-
-If your data is in a NumPy array, the array must have the shape
-`(n_samples, n_features + 1)` where the last column is the target for either
-classification or prediction.
 
 """
 
@@ -36,10 +32,6 @@ column holding the target variable (or feature) can be specified by the
 `--target` / `-y` argument, but is "target" by default if such a column name
 exists, or the last column if it does not.
 
-If your data is in a NumPy array, the array must have the shape
-`(n_samples, n_features + 1)` where the last column is the target for either
-classification or prediction.
-
 """
 
 SEP_HELP_STR = """
@@ -47,12 +39,8 @@ Separator used in .csv files. Default ",".
 """
 
 TARGET_HELP_STR = """
-The location of the target variable for either regression or classification.
-
-If a string, then `--df` must be a Pandas `DataFrame` and the string passed in
-here specifies the name of the column holding the targer variable.
-
-If an integer, and `--df` is a NumPy array only, specifies the column index.
+The (string) name of the target variable for either regression or
+classification.
 
 """
 
@@ -107,13 +95,13 @@ unspecified, a name will be generated based on the filename passed to `--df`.
 
 CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
-Can be a list of elements from: {' '.join(sorted(CLASSIFIERS))}.
+Can be a list of elements from: {' '.join(sorted([x.value for x in DfAnalyzeClassifier]))}.
 
 """
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
-Can be a list of elements from: {' '.join(sorted(REGRESSORS))}.
+Can be a list of elements from: {' '.join(sorted([x.value for x in DfAnalyzeRegressor]))}.
 
 """
 

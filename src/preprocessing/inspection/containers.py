@@ -248,6 +248,7 @@ class InspectionResults:
     inflation: list[InflationInfo]
     user_cats: set[str]
     user_ords: set[str]
+    drops: set[str]
 
     def ordered_basic_infos(
         self

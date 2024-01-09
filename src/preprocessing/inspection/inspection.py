@@ -566,6 +566,7 @@ def inspect_data(
     target: str,
     categoricals: Optional[list[str]] = None,
     ordinals: Optional[list[str]] = None,
+    drops: Optional[list[str]] = None,
     _warn: bool = True,
 ) -> InspectionResults:
     """Attempt to infer column types"""
@@ -573,6 +574,9 @@ def inspect_data(
     ordinals = ordinals or []
 
     df = df.drop(columns=target, errors="ignore")
+    if drops is not None:
+        drops = sorted(set(drops))
+        df = df.drop(columns=drops, errors="ignore")
 
     arg_cats, arg_ords = set(categoricals), set(ordinals)
 
@@ -674,6 +678,7 @@ def inspect_data(
         multi_cats=multi_cats,
         user_cats=arg_cats,
         user_ords=arg_ords,
+        drops=set(drops) if drops is not None else set(),
     )
 
 
