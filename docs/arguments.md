@@ -1,4 +1,5 @@
-```txt
+```
+
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -109,19 +110,12 @@ optional arguments:
 
   --embed-select {lgbm,linear,none} [{lgbm,linear,none} ...]
 
-                        Methods of model-based feature selection methods to use. Available options are:
+                        Model to use for embedded feature selection. Supported models are:
 
-                          embed:      Select using an embedded method, i.e. a method where the model
-                                      produces values for each feature that can be interpreted as
-                                      feature importances. Which model is used is determined by
-                                      `--embed-model`.
+                          linear      Tuned SGDRegressor or SGDClassifier, in both cases with L1
+                                      regularization.
 
-                          wrap:       Select using a wrapper method, i.e. a method which uses ("wraps")
-                                      a specific model, and then optimizes the feature set via some
-                                      alternation of model evaluations and feature-space search /
-                                      navigation strategy.
-
-                          none:       Do not select features using any model.
+                          lgbm:       LightGBM regressor or classifier, depending on task.
 
   --wrapper-select {step-up,step-down}
 

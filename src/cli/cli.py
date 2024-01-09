@@ -646,7 +646,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         type=lambda x: None if "none" in x.lower() else EmbedSelectionModel(x),
         choices=[m.value for m in EmbedSelectionModel] + ["none"],
         default=(EmbedSelectionModel.LGBM,),
-        help=MODEL_SELECT_HELP,
+        help=EMBED_SELECT_MODEL_HELP,
     )
     parser.add_argument(
         "--wrapper-select",
