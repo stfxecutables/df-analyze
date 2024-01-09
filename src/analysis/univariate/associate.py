@@ -427,7 +427,7 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
     t, t_p = tt_res.statistic, tt_res.pvalue  # type: ignore
     U_res = mannwhitneyu(g0, g1)
     U, U_p = U_res.statistic, U_res.pvalue
-    W_res = brunnermunzel(g0, g1)
+    W_res = brunnermunzel(g0, g1, distribution="normal")  # avoid errors for `distribution="t"`
     W, W_p = W_res.statistic, W_res.pvalue
     r_res = pearsonr(x, y_bin)
     r, r_p = r_res.statistic, r_res.pvalue  # type: ignore

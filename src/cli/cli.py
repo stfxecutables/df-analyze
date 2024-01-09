@@ -225,8 +225,8 @@ class ProgramOptions(Debug):
         classifiers: Tuple[DfAnalyzeClassifier, ...],
         regressors: Tuple[DfAnalyzeRegressor, ...],
         htune: bool,
-        htune_val: ValMethod,
-        htune_val_size: Size,
+        # htune_val: ValMethod,
+        # htune_val_size: Size,
         htune_trials: int,
         test_val: ValMethod,
         test_val_sizes: Tuple[Size, ...],
@@ -268,8 +268,8 @@ class ProgramOptions(Debug):
         self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[DfAnalyzeRegressor, ...] = tuple(sorted(set(regressors)))
         self.htune: bool = htune
-        self.htune_val: ValMethod = htune_val
-        self.htune_val_size: Size = htune_val_size
+        # self.htune_val: ValMethod = htune_val
+        # self.htune_val_size: Size = htune_val_size
         self.htune_trials: int = htune_trials
         self.test_val: ValMethod = test_val
         self.test_val_sizes: Tuple[Size, ...]
@@ -405,8 +405,8 @@ class ProgramOptions(Debug):
             classifiers=classifiers,
             regressors=regressors,
             htune=htune,
-            htune_val=htune_val,
-            htune_val_size=htune_val_size,
+            # htune_val=htune_val,
+            # htune_val_size=htune_val_size,
             htune_trials=htune_trials,
             test_val=test_val,
             test_val_sizes=test_val_sizes,
@@ -613,7 +613,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         nargs="+",
         type=str,
         choices=DfAnalyzeClassifier.choices(),
-        default=["svm"],
+        default=DfAnalyzeClassifier.defaults(),
         help=CLS_HELP_STR,
     )
     parser.add_argument(
@@ -621,7 +621,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         nargs="+",
         type=str,
         choices=DfAnalyzeRegressor.choices(),
-        default=["linear"],
+        default=DfAnalyzeRegressor.defaults(),
         help=REG_HELP_STR,
     )
     # parser.add_argument(
@@ -773,19 +773,19 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         action="store_true",
         help=HTUNE_HELP,
     )
-    parser.add_argument(
-        "--htune-val",
-        type=str,
-        choices=HTUNE_VAL_METHODS,
-        default=3,
-        help=HTUNEVAL_HELP_STR,
-    )
-    parser.add_argument(
-        "--htune-val-size",
-        type=cv_size,
-        default=3,
-        help=HTUNE_VALSIZE_HELP,
-    )
+    # parser.add_argument(
+    #     "--htune-val",
+    #     type=str,
+    #     choices=HTUNE_VAL_METHODS,
+    #     default=3,
+    #     help=HTUNEVAL_HELP_STR,
+    # )
+    # parser.add_argument(
+    #     "--htune-val-size",
+    #     type=cv_size,
+    #     default=3,
+    #     help=HTUNE_VALSIZE_HELP,
+    # )
     parser.add_argument(
         "--htune-trials",
         type=int,
@@ -870,8 +870,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
         htune=cli_args.htune,
-        htune_val=cli_args.htune_val,
-        htune_val_size=cli_args.htune_val_size,
+        # htune_val=cli_args.htune_val,
+        # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
         test_val=cli_args.test_val,
         test_val_sizes=cli_args.test_val_sizes,

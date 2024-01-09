@@ -101,6 +101,15 @@ class DfAnalyzeClassifier(RandEnum, Enum):
             DfAnalyzeClassifier.Dummy: DummyClassifier,
         }[self]
 
+    @staticmethod
+    def defaults() -> tuple[DfAnalyzeClassifier, ...]:
+        return (
+            DfAnalyzeClassifier.Dummy,
+            DfAnalyzeClassifier.KNN,
+            DfAnalyzeClassifier.LGBM,
+            DfAnalyzeClassifier.SGD,
+        )
+
 
 class DfAnalyzeRegressor(RandEnum, Enum):
     KNN = "knn"
@@ -133,6 +142,15 @@ class DfAnalyzeRegressor(RandEnum, Enum):
             DfAnalyzeRegressor.SVM: SVMRegressor,
             DfAnalyzeRegressor.Dummy: DummyRegressor,
         }[self]
+
+    @staticmethod
+    def defaults() -> tuple[DfAnalyzeRegressor, ...]:
+        return (
+            DfAnalyzeRegressor.Dummy,
+            DfAnalyzeRegressor.KNN,
+            DfAnalyzeRegressor.LGBM,
+            DfAnalyzeRegressor.SGD,
+        )
 
 
 @dataclass

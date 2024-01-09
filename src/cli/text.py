@@ -6,6 +6,43 @@ from src._constants import (
 )
 from src.enumerables import ClsScore, DfAnalyzeClassifier, DfAnalyzeRegressor, RegScore
 
+USAGE_STRING = """
+
+The `df-analyze` program can be used in one of two modes: CLI mode, and
+spreadsheet mode. In spreadsheet mode, df-analyze options are specified in a
+special format at the top of a spreadsheet or .csv file, and spreadsheet
+columns are given specific names to identify targets, continuous features,
+and categorical features. In spreadsheet mode, only a single argument needs
+to be passed, which is the path to the df-analyze formatted spreadsheet:
+
+    python df-analyze.py --spreadsheet my_formatted_sheet.xlsx
+
+Good defaults are chosen so that likely the only arguments you would wish to
+specify manually are:
+
+    --target (required)
+    --mode (required)
+
+"""
+
+USAGE_EXAMPLES = """
+USAGE EXAMPLE (assumes you have run `poetry shell`):
+
+    python df-analyze.py \\
+        --df="weather_data.json" \\
+        --target='temperature' \\
+        --mode=regress \\
+        --regressors=svm linear \\
+        --drop-nan=rows \\
+        --n-feat=5 \\
+        --htune \\
+        --test-val=kfold \\
+        --test-val-size=5 \\
+        --outdir='./results'
+
+"""
+
+
 DF_HELP_STR = """
 The dataframe to analyze.
 
@@ -147,7 +184,8 @@ Methods of model-based feature selection methods to use. Available options are:
               alternation of model evaluations and feature-space search /
               navigation strategy.
 
-  none:       Do not select features using any model.
+  none:       Do not select features using any model. Always included by
+              default.
 
 """
 
@@ -183,6 +221,9 @@ Model to use during wrapper-based feature selection. Available options are:
 
   lgbm:       Use a LightGBM gradient-boosted decision tree model.
 
+  none:       Do not select features based on any model. Always included by
+              by default.
+
 """
 
 EMBED_SELECT_MODEL_HELP = """
@@ -194,6 +235,9 @@ is used for embedded feature selection. Supported models are:
               regularization.
 
   lgbm:       LightGBM regressor or classifier, depending on task.
+
+  none:       Do not select features based on any model. Always included by
+              by default.
 
 """
 
@@ -210,8 +254,9 @@ Makes use of the featuretools library (featuretools.com). Options are:
 """
 
 SELECT_TUNE_ROUNDS_HELP = """
-If not the default of zero, the number of tuning rounds to do before evaluating
-each feature set during wrapper-based feature selection.
+If not the default of 100, the number of tuning rounds to do before evaluating
+each feature set during wrapper-based feature selection. Values less than 50
+are probably meaningless, values over 200 are likely to be exorbitant.
 
 """
 
@@ -223,7 +268,8 @@ NaN value.
 
   drop:      Attempt to remove all non-categorical NaN values. Note this could
              remove all data if a lot of values are missing, which will cause
-             errors.
+             errors. Currently unimplemented because of this, and instead
+             defaults to `median`.
 
   mean:      Replace all NaN values with the feature mean value.
 
@@ -265,13 +311,15 @@ Number or percentage (as a value in [0, 1]) of total features of any kind
 
 N_FEAT_CONT_FILTER_HELP = f"""
 Number or percentage (as a value in [0, 1]) of continuous features to select
-via filter-based feature selection. {N_FEAT_NOTE}
+via filter-based feature selection.
+{N_FEAT_NOTE}
 
 """
 
 N_FEAT_CAT_FILTER_HELP = f"""
 Number or percentage (as a value in [0, 1]) of categorical features to select
-via filter-based feature selection. {N_FEAT_NOTE}
+via filter-based feature selection.
+{N_FEAT_NOTE}
 
 """
 
@@ -419,7 +467,7 @@ total number of estimator fits from tuning will be 600 x 3.
 NOTE: if you can afford it, it is strongly recommended to set this value to a
 minimum of 100 (default), or 50 if your budget is constrained. Lower values
 often will fail to find good fits, given the wide range on hyperparameters
-needed to make this tool generally useful.
+needed to make Optuna generally useful.
 
 """
 
@@ -489,37 +537,4 @@ DESC = f"""
 {DF_HELP_STR}
 {TARGET_HELP_STR}
 {CLS_HELP_STR}
-"""
-
-USAGE_EXAMPLES = """
-USAGE EXAMPLE (assumes you have run `poetry shell`):
-
-    python df-analyze.py \\
-        --df="weather_data.json" \\
-        --target='temperature' \\
-        --mode=regress \\
-        --regressors=svm linear \\
-        --drop-nan=rows \\
-        --feat-clean=constant \\
-        --feat-select=pca pearson \\
-        --n-feat=5 \\
-        --htune \\
-        --test-val=kfold \\
-        --test-val-size=5 \\
-        --outdir='./results'
-
-"""
-
-USAGE_STRING = """
-
-    The df-analyze program can be used in one of two modes: CLI mode, and
-    spreadsheet mode. In spreadsheet mode, df-analyze options are specified in
-    a special format at the top of a spreadsheet or .csv file, and spreadsheet
-    columns are given specific names to identify targets, continuous features,
-    and categorical features. In spreadsheet mode, only a single argument needs
-    to be passed, which is the path to the df-analyze formatted spreadsheet:
-
-        python df-analyze.py --spreadsheet my_formatted_sheet.xlsx
-
-
 """
