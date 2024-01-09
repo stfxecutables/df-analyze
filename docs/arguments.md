@@ -1,5 +1,4 @@
 ```
-
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -110,9 +109,11 @@ optional arguments:
 
   --embed-select {lgbm,linear,none} [{lgbm,linear,none} ...]
 
-                        Model to use for embedded feature selection. Supported models are:
+                        Model to use for embedded feature selection. In either case, model is
+                        hyperparameter tuned on the training split so that only the best-fitting model
+                        is used for embedded feature selection. Supported models are:
 
-                          linear      Tuned SGDRegressor or SGDClassifier, in both cases with L1
+                          linear      SGDRegressor or SGDClassifier, in both cases with L1
                                       regularization.
 
                           lgbm:       LightGBM regressor or classifier, depending on task.
@@ -144,16 +145,18 @@ optional arguments:
 
                         Model to use during wrapper-based feature selection. Available options are:
 
-                          linear:     For classification tasks, logistic regression, and for regression
-                                      tasks, linear regression.
+                          linear:     For classification tasks, `sklearn.linear_model.SGDClassifier`,
+                                      and for regression tasks, `sklearn.linear_model.SGDRegressor`
 
                           lgbm:       Use a LightGBM gradient-boosted decision tree model.
 
   --embed-model {lgbm,linear}
 
-                        Model to use for embedded feature selection. Supported models are:
+                        Model to use for embedded feature selection. In either case, model is
+                        hyperparameter tuned on the training split so that only the best-fitting model
+                        is used for embedded feature selection. Supported models are:
 
-                          linear      Tuned SGDRegressor or SGDClassifier, in both cases with L1
+                          linear      SGDRegressor or SGDClassifier, in both cases with L1
                                       regularization.
 
                           lgbm:       LightGBM regressor or classifier, depending on task.
@@ -186,8 +189,10 @@ optional arguments:
 
                         Number or percentage (as a value in [0, 1]) of total features of any kind
                         (categorical or continuous) to select via filter-based feature selection.
-                        Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
 
+                        Note only two of two of the three options:`--n-filter-total`,
+                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
+                        otherwise the `--n-filter-total` argument will be ignored.
 
 
   --n-feat-wrapper N_FEAT_WRAPPER
@@ -200,15 +205,19 @@ optional arguments:
   --n-filter-cont N_FILTER_CONT
 
                         Number or percentage (as a value in [0, 1]) of continuous features to select
-                        via filter-based feature selection. Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
-
+                        via filter-based feature selection.
+                        Note only two of two of the three options:`--n-filter-total`,
+                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
+                        otherwise the `--n-filter-total` argument will be ignored.
 
 
   --n-filter-cat N_FILTER_CAT
 
                         Number or percentage (as a value in [0, 1]) of categorical features to select
-                        via filter-based feature selection. Note only two of two of the three options:`--n-filter-total`, `--n-filter-cont`, and  `--n-filter-cat` may be specified at once, otherwise the `--n-filter-total` argument will be ignored.
-
+                        via filter-based feature selection.
+                        Note only two of two of the three options:`--n-filter-total`,
+                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
+                        otherwise the `--n-filter-total` argument will be ignored.
 
 
   --filter-method FILTER_METHOD
