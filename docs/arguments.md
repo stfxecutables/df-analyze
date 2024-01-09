@@ -221,14 +221,31 @@ optional arguments:
 
 
   --filter-method FILTER_METHOD
+
                         Method(s) to use for filter selection.
 
-                        Method 'relief' is the most sophisticated and can detect interactions among pairs of features without dramatic compute costs (see https://www.sciencedirect.com/science/article/pii/S1532046418301400 or https://doi.org/10.1016/j.jbi.2018.07.014 for details and overview). This is in contrast to the 'assoc' and 'pred' methods (below) which do not detect any feature interactions.
+                        Method 'relief' is the most sophisticated and can detect interactions among
+                        pairs of features without dramatic compute costs (see
+                        https://www.sciencedirect.com/science/article/pii/S1532046418301400 or
+                        https://doi.org/10.1016/j.jbi.2018.07.014 for details and overview). This is
+                        in contrast to the 'assoc' and 'pred' methods (below) which do not detect any
+                        feature interactions.
 
-                        Method 'assoc' is the fastest and is based on a measure of association between the feature and the target variable, where the measure of association is appropriate based on the cardinality (e.g. categorical vs. continuous) of the feature and target. However, because association need not imply generalizable predictive utility (and because the absence of an association does not imply an absence of predictive utility), it is possible that this method selects features that generalize poorly for prediction tasks.
+                        Method 'assoc' is the fastest and is based on a measure of association
+                        between the feature and the target variable, where the measure of association
+                        is appropriate based on the cardinality (e.g. categorical vs. continuous) of
+                        the feature and target. However, because association need not imply
+                        generalizable predictive utility (and because the absence of an association
+                        does not imply an absence of predictive utility), it is possible that this
+                        method selects features that generalize poorly for prediction tasks.
 
-                        Method 'pred' is based on the k-fold univariate predictive performance of each feature on the target variable, where the estimator is a lightly tuned sklearn.linear_model.SGDClassifier or sklearn.linear_model.SGDRegressor, depending on the task. Computing these univariate predictive performances is quite expensive, but because of the internal k-fold validation used, these predictive performance metrics directly asses the potential predictive utility of each feature.
-
+                        Method 'pred' is based on the k-fold univariate predictive performance of
+                        each feature on the target variable, where the estimator is a lightly tuned
+                        sklearn.linear_model.SGDClassifier or sklearn.linear_model.SGDRegressor,
+                        depending on the task. Computing these univariate predictive performances is
+                        quite expensive, but because of the internal k-fold validation used, these
+                        predictive performance metrics directly asses the potential predictive
+                        utility of each feature.
   --filter-assoc-cont-classify {t,U,W,corr,cohen_d,AUROC,mut_info}
 
                         Type of association to use for selecting continuous features when the task or
