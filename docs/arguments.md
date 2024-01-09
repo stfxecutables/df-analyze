@@ -1,4 +1,4 @@
-```
+```txt
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -40,6 +40,7 @@ optional arguments:
   --separator SEPARATOR
 
                         Separator used in .csv files. Default ",".
+
   --target TARGET
                         The (string) name of the target variable for either regression or
                         classification.
@@ -246,6 +247,7 @@ optional arguments:
                         quite expensive, but because of the internal k-fold validation used, these
                         predictive performance metrics directly asses the potential predictive
                         utility of each feature.
+
   --filter-assoc-cont-classify {t,U,W,corr,cohen_d,AUROC,mut_info}
 
                         Type of association to use for selecting continuous features when the task or

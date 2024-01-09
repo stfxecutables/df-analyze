@@ -36,6 +36,7 @@ exists, or the last column if it does not.
 
 SEP_HELP_STR = """
 Separator used in .csv files. Default ",".
+
 """
 
 TARGET_HELP_STR = """
@@ -196,9 +197,6 @@ is used for embedded feature selection. Supported models are:
 
 """
 
-SELECT_TUNE_ROUNDS_HELP = """
-"""
-
 FEAT_CLEAN_HELP = """
 If specified, which feature cleaning methods to use prior to feature selection.
 Makes use of the featuretools library (featuretools.com). Options are:
@@ -303,6 +301,7 @@ depending on the task. Computing these univariate predictive performances is
 quite expensive, but because of the internal k-fold validation used, these
 predictive performance metrics directly asses the potential predictive
 utility of each feature.
+
 """
 
 ASSOC_SELECT_CONT_CLS_STATS = """
