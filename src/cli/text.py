@@ -95,13 +95,13 @@ unspecified, a name will be generated based on the filename passed to `--df`.
 
 CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
-Can be a list of elements from: {' '.join(sorted([x.value for x in DfAnalyzeClassifier]))}.
+Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeClassifier]))}].
 
 """
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
-Can be a list of elements from: {' '.join(sorted([x.value for x in DfAnalyzeRegressor]))}.
+Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeRegressor]))}].
 
 """
 

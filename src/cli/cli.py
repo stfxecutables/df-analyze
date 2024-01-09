@@ -624,14 +624,14 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=["linear"],
         help=REG_HELP_STR,
     )
-    parser.add_argument(
-        "--feat-select",
-        nargs="+",
-        type=FeatureSelection,  # applied to each spaced element in arg
-        choices=[f.value for f in FeatureSelection],
-        default=(FeatureSelection.Filter,),
-        help=FEAT_SELECT_HELP,
-    )
+    # parser.add_argument(
+    #     "--feat-select",
+    #     nargs="+",
+    #     type=FeatureSelection,  # applied to each spaced element in arg
+    #     choices=[f.value for f in FeatureSelection],
+    #     default=(FeatureSelection.Filter,),
+    #     help=FEAT_SELECT_HELP,
+    # )
     parser.add_argument(
         "--model-select",
         nargs="+",

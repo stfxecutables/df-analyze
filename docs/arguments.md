@@ -1,5 +1,4 @@
 ```txt
-
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -85,39 +84,12 @@ optional arguments:
   --classifiers {knn,lgbm,rf,lr,sgd,mlp,svm,dummy} [{knn,lgbm,rf,lr,sgd,mlp,svm,dummy} ...]
 
                         The list of classifiers to use when comparing classification performance.
-                        Can be a list of elements from: dummy knn lgbm lr mlp rf sgd svm.
+                        Can be a list of elements from: [dummy knn lgbm lr mlp rf sgd svm].
 
   --regressors {knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} [{knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} ...]
 
                         The list of regressors to use when comparing regression model performance.
-                        Can be a list of elements from: dummy elastic knn lgbm mlp rf sgd svm.
-
-  --feat-select {filter,embed,wrap} [{filter,embed,wrap} ...]
-
-                        The feature selection methods to use. Available options are:
-
-                          auc:        Select features with largest AUC values relative to the two
-                                      classes (classification only).
-
-                          d:          Select features with largest Cohen's d values relative to the two
-                                      classes (classification only).
-
-                          kpca:       Generate features by using largest components of kernel PCA.
-
-                          pca:        Generate features by using largest components from a PCA.
-
-                          pearson:    Select features with largest Pearson correlations with target.
-
-                          step-up:    Use step-up (forward) feature selection. Costly.
-
-                          step-up:    Use step-down (backward) feature selection. Also costly.
-
-                        NOTE: Feature selection currently uses the full data provided in the `--df`
-                        argument to `df-analyze.py`. Thus, if you take the final reported test results
-                        following feature selection and hyperparamter tuning as truly cross-validated
-                        or heldout test results, you are in fact double-dipping and reporting biased
-                        performance. To properly test the discovered features and optimal estimators,
-                        you should have held-out test data that never gets passed to `df-analyze`.
+                        Can be a list of elements from: [dummy elastic knn lgbm mlp rf sgd svm].
 
   --model-select {embed,wrap,none} [{embed,wrap,none} ...]
 
