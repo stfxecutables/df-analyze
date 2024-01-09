@@ -612,7 +612,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         "--classifiers",
         nargs="+",
         type=str,
-        choices=CLASSIFIERS,
+        choices=DfAnalyzeClassifier.choices(),
         default=["svm"],
         help=CLS_HELP_STR,
     )
@@ -620,7 +620,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         "--regressors",
         nargs="+",
         type=str,
-        choices=REGRESSORS,
+        choices=DfAnalyzeRegressor.choices(),
         default=["linear"],
         help=REG_HELP_STR,
     )

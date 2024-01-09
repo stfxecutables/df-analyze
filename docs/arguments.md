@@ -1,4 +1,5 @@
-```
+```txt
+
 usage:
 
     The df-analyze program can be used in one of two modes: CLI mode, and
@@ -81,12 +82,12 @@ optional arguments:
 
                         If "classify", do classification. If "regress", do regression.
 
-  --classifiers {rf,svm,dtree,mlp,bag,dummy,lgb} [{rf,svm,dtree,mlp,bag,dummy,lgb} ...]
+  --classifiers {knn,lgbm,rf,lr,sgd,mlp,svm,dummy} [{knn,lgbm,rf,lr,sgd,mlp,svm,dummy} ...]
 
                         The list of classifiers to use when comparing classification performance.
                         Can be a list of elements from: dummy knn lgbm lr mlp rf sgd svm.
 
-  --regressors {linear,rf,svm,adaboost,gboost,mlp,knn,lgb} [{linear,rf,svm,adaboost,gboost,mlp,knn,lgb} ...]
+  --regressors {knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} [{knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} ...]
 
                         The list of regressors to use when comparing regression model performance.
                         Can be a list of elements from: dummy elastic knn lgbm mlp rf sgd svm.

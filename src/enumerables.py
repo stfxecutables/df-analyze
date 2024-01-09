@@ -54,6 +54,10 @@ class RandEnum(Generic[T]):
             raise ValueError("Undefined")
         return choice([*cls, None])  # type: ignore
 
+    @classmethod
+    def choices(cls: Type[T]) -> list[str]:
+        return [x.value for x in cls]  # type: ignore
+
     @no_type_check
     def __lt__(self: T, other: Type[T]) -> bool:
         cls = self.__class__
