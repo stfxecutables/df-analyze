@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
@@ -61,17 +63,16 @@ def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
-    options.embed_select = EmbedSelectionModel.Linear
-    selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
-    if selected is None or (selected.selected is None):
-        return
-
-    assert len(selected.selected) > 0
+    # options.embed_select = EmbedSelectionModel.Linear
+    # selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
+    # if selected is None or (selected.selected is None):
+    #     raise ValueError("Impossible!")
+    # assert len(selected.selected) > 0
 
     options.embed_select = EmbedSelectionModel.LGBM
     selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
     if selected is None or (selected.selected is None):
-        return
+        raise ValueError("Impossible!")
     assert len(selected.selected) > 0
 
 
@@ -114,7 +115,19 @@ def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
 @fast_ds
 def test_embed_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
     with capsys.disabled():
+        start = perf_counter()
         do_embed_select(dataset)
+        elapsed = perf_counter() - start
+        unit = "s"
+        if elapsed > 60:
+            elapsed /= 60
+            unit = "min"
+
+        dsname, ds = dataset
+        prep = ds.prepared(load_cached=True)
+        with open(ROOT / "lgbm_embed_runtimes.txt", "a") as handle:
+            handle.write(f"{dsname:>30}  {str(prep.X.shape):>10}  {elapsed} ({unit})\n")
+            handle.flush()
 
 
 @med_ds
