@@ -273,6 +273,7 @@ class WrapperSelection(RandEnum, Enum):
 class WrapperSelectionModel(RandEnum, Enum):
     Linear = "linear"
     LGBM = "lgbm"
+    KNN = "knn"
 
 
 class DimensionReduction(RandEnum, Enum):

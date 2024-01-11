@@ -7,6 +7,7 @@ from joblib import Parallel, delayed
 if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from math import ceil
+from time import perf_counter
 from typing import Any, Literal, Type, Union
 
 import numpy as np
@@ -19,6 +20,7 @@ from src._constants import DEFAULT_N_STEPWISE_SELECT
 from src.cli.cli import ProgramOptions
 from src.enumerables import WrapperSelectionModel
 from src.models.base import DfAnalyzeModel
+from src.models.knn import KNNClassifier, KNNRegressor
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from src.models.linear import ElasticNetRegressor, SGDClassifierSelector, SGDRegressorSelector
 from src.preprocessing.prepare import PreparedData
@@ -75,6 +77,7 @@ class StepwiseSelector:
             self.n_features if self.is_forward else self.total_feats - self.n_features
         )
 
+    def fit(self) -> None:
         ddesc = "Forward" if self.is_forward else "Backward"
         for _ in tqdm(
             range(self.n_iterations),
@@ -91,6 +94,21 @@ class StepwiseSelector:
         self.support_ = self.selection_idx
         self.scores = self.scores[~np.isnan(self.scores)]
 
+    def estimate_runtime(self) -> float:
+        if self.is_forward:
+            # better approximation than using the first iteration
+            orig = self.selection_idx.copy()
+            half = ceil(self.n_features / 2)
+            self.selection_idx[:half] = True
+        start = perf_counter()
+        self._get_best_new_feature()
+        elapsed = perf_counter() - start
+        if self.is_forward:
+            self.selection_idx = orig  # type: ignore
+
+        total = self.n_iterations * elapsed
+        return round(total / 60, 1)
+
     def _get_best_new_feature(self) -> tuple[int, float]:
         # Return the best new feature to add to the current_mask, i.e. return
         # the best new feature to add (resp. remove) when doing forward
@@ -100,6 +118,8 @@ class StepwiseSelector:
         is_cls = self.prepared.is_classification
         if model_enum is WrapperSelectionModel.LGBM:
             model_cls = LightGBMClassifier if is_cls else LightGBMRegressor
+        elif model_enum is WrapperSelectionModel.KNN:
+            model_cls = KNNClassifier if is_cls else KNNRegressor
         else:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
@@ -138,6 +158,7 @@ def stepwise_select(
         n_features=options.n_feat_wrapper,
         direction=options.wrapper_select.direction(),
     )
+    selector.fit()
     selected_idx = selector.support_
     selected_feats = prep_train.X.loc[:, selected_idx].columns.to_list()
     scores = {}

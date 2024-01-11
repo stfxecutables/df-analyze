@@ -328,7 +328,9 @@ INSPECTION_TIMES = {
 FAST_INSPECTION: list[tuple[str, TestDataset]] = []
 MEDIUM_INSPECTION: list[tuple[str, TestDataset]] = []
 SLOW_INSPECTION: list[tuple[str, TestDataset]] = []
+ALL_DATASETS: list[tuple[str, TestDataset]] = []
 for dsname, ds in TEST_DATASETS.items():
+    ALL_DATASETS.append((dsname, ds))
     if dsname in INSPECTION_TIMES:
         runtime = INSPECTION_TIMES[dsname]
         if runtime < 1.0:
@@ -341,6 +343,7 @@ for dsname, ds in TEST_DATASETS.items():
 FAST_INSPECTION = sorted(FAST_INSPECTION, key=lambda d: str(d[0]).lower())
 MEDIUM_INSPECTION = sorted(MEDIUM_INSPECTION, key=lambda d: str(d[0]).lower())
 SLOW_INSPECTION = sorted(SLOW_INSPECTION, key=lambda d: str(d[0]).lower())
+ALL_DATASETS = sorted(ALL_DATASETS, key=lambda d: str(d[0]).lower())
 
 
 # https://stackoverflow.com/a/5409569

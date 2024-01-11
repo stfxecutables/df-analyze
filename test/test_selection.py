@@ -29,10 +29,19 @@ from src.selection.filter import (
     filter_by_univariate_associations,
     filter_by_univariate_predictions,
 )
-from src.selection.stepwise import stepwise_select
-from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds, med_ds, slow_ds
+from src.selection.stepwise import StepwiseSelector, stepwise_select
+from src.testing.datasets import (
+    ALL_DATASETS,
+    FAST_INSPECTION,
+    TestDataset,
+    fast_ds,
+    med_ds,
+    slow_ds,
+)
 
 DATA = ROOT / "data/banking/bank.json"
+RUNTIMES = ROOT / "runtimes"
+RUNTIMES.mkdir(exist_ok=True)
 
 
 def do_association_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
@@ -92,6 +101,79 @@ def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
     if selected is None or (selected.selected is None):
         raise ValueError("Impossible!")
     assert len(selected.selected) > 0
+
+
+def estimate_select(
+    dataset: tuple[str, TestDataset],
+    file: Path,
+    forward: bool,
+    model: WrapperSelectionModel,
+    subsample: bool = True,
+) -> float:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0] if subsample else prepared
+    n, p = prep_train.X.shape
+    m = 10
+
+    options = ProgramOptions.random(ds)
+    options.wrapper_model = model
+    options.wrapper_select = WrapperSelection.StepUp if forward else WrapperSelection.StepDown
+    options.n_feat_wrapper = m if forward else p - m
+    if (p <= m) and forward:
+        return float("nan")
+    if (p - m <= 0) and (not forward):
+        return float("nan")
+
+    selector = StepwiseSelector(
+        prep_train=prep_train,
+        options=options,
+        n_features=options.n_feat_wrapper,
+        direction=options.wrapper_select.direction(),
+    )
+    minutes = selector.estimate_runtime()
+    N = prepared.X.shape[0]
+    needs_header = False
+    if file.exists():
+        with open(file, "r") as handle:
+            if handle.readline().strip() == "":
+                needs_header = True
+    else:
+        needs_header = True
+
+    with open(file, "a") as handle:
+        if needs_header:
+            handle.write(
+                f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
+            )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {minutes:3.1f}\n")
+        handle.flush()
+
+    return minutes
+
+
+def estimate_linear_forward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "linear_forward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.Linear
+    estimate_select(dataset, file=file, forward=True, model=model)
+
+
+def estimate_linear_backward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "linear_backward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.Linear
+    estimate_select(dataset, file=file, forward=False, model=model)
+
+
+def estimate_lgbm_forward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "lgbm_forward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.LGBM
+    estimate_select(dataset, file=file, forward=True, model=model)
+
+
+def estimate_lgbm_backward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "lgbm_backward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.LGBM
+    estimate_select(dataset, file=file, forward=False, model=model)
 
 
 def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
@@ -158,17 +240,30 @@ def do_logged(
     start = perf_counter()
     f(dataset)
     elapsed = perf_counter() - start
-    unit = "s"
-    if elapsed > 60:
-        elapsed /= 60
-        unit = "min"
+    elapsed /= 60
     elapsed = round(elapsed, 1)
 
     dsname, ds = dataset
     prep = ds.prepared(load_cached=True)
+    prep_train = prep.representative_subsample()[0]
+    m = 10
+    N = prep.X.shape[0]
+    n, p = prep_train.X.shape
+    needs_header = False
+
+    if file.exists():
+        with open(file, "r") as handle:
+            if handle.readline().strip() == "":
+                needs_header = True
+    else:
+        needs_header = True
+
     with open(file, "a") as handle:
-        handle.write(f"{dsname:>30}  {str(prep.X.shape):>15}  {elapsed} ({unit})\n")
-        handle.flush()
+        if needs_header:
+            handle.write(
+                f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
+            )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {elapsed:3.1f}\n")
 
 
 @fast_ds
@@ -209,14 +304,14 @@ def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
 
 @fast_ds
 def test_embed_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
-    file = ROOT / "lgbm_embed_fast_runtimes.txt"
+    file = RUNTIMES / "lgbm_embed_fast_runtimes.txt"
     with capsys.disabled():
         do_logged(do_embed_select, file, dataset)
 
 
 @med_ds
 def test_embed_select_med(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
-    file = ROOT / "lgbm_embed_med_runtimes.txt"
+    file = RUNTIMES / "lgbm_embed_med_runtimes.txt"
     with capsys.disabled():
         do_logged(do_embed_select, file, dataset)
 
@@ -225,14 +320,23 @@ def test_embed_select_med(dataset: tuple[str, TestDataset], capsys: CaptureFixtu
 def test_linear_forward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
-    file = ROOT / "linear_forward_select_runtimes.txt"
+    file = RUNTIMES / "linear_forward_select_fast_runtimes.txt"
+    with capsys.disabled():
+        do_logged(do_linear_forward_select, file, dataset)
+
+
+@slow_ds
+def test_linear_forward_select_slow(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "linear_forward_select_slow_runtimes.txt"
     with capsys.disabled():
         do_logged(do_linear_forward_select, file, dataset)
 
 
 @fast_ds
 def test_lgbm_forward_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
-    file = ROOT / "lgbm_forward_select_runtimes.txt"
+    file = RUNTIMES / "lgbm_forward_select_fast_runtimes.txt"
     with capsys.disabled():
         do_logged(do_lgbm_forward_select, file, dataset)
 
@@ -241,7 +345,7 @@ def test_lgbm_forward_select_fast(dataset: tuple[str, TestDataset], capsys: Capt
 def test_linear_backward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
-    file = ROOT / "linear_backward_select_runtimes.txt"
+    file = RUNTIMES / "linear_backward_select_fast_runtimes.txt"
     with capsys.disabled():
         do_logged(do_linear_backward_select, file, dataset)
 
@@ -250,15 +354,17 @@ def test_linear_backward_select_fast(
 def test_lgbm_backward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
-    file = ROOT / "lgbm_backward_select_runtimes.txt"
+    file = RUNTIMES / "lgbm_backward_select_fast_runtimes.txt"
     with capsys.disabled():
         do_logged(do_lgbm_backward_select, file, dataset)
 
 
 if __name__ == "__main__":
-    for dsname, ds in FAST_INSPECTION:
-        if dsname != "abalone":
-            continue
+    for dsname, ds in ALL_DATASETS:
         print(dsname)
         # do_forward_select((dsname, ds))
-        do_backward_select((dsname, ds))
+        try:
+            # estimate_linear_forward_select((dsname, ds))
+            estimate_lgbm_forward_select((dsname, ds))
+        except Exception as e:
+            print(e)
