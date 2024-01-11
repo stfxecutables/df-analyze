@@ -6,11 +6,12 @@ such a long computation...
 """
 import numbers
 from math import ceil
-from typing import Any, Literal, Union, no_type_check
+from typing import Any, Literal, Type, Union, no_type_check
 
 import numpy as np
 from joblib import Parallel, delayed
 from numpy import ndarray
+from pandas import DataFrame, Series
 from sklearn.base import BaseEstimator, MetaEstimatorMixin, clone
 from sklearn.feature_selection._base import SelectorMixin
 from sklearn.model_selection import cross_val_score
@@ -19,6 +20,10 @@ from tqdm import tqdm
 
 from src._constants import DEFAULT_N_STEPWISE_SELECT
 from src.cli.cli import ProgramOptions
+from src.enumerables import WrapperSelectionModel
+from src.models.base import DfAnalyzeModel
+from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
+from src.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from src.preprocessing.prepare import PreparedData
 
 # from sklearn.utils._tags import _safe_tags
@@ -284,56 +289,3 @@ def get_score(
     return cross_val_score(
         estimator, X_new, y, cv=cv, scoring=scoring, n_jobs=1
     ).mean(), feature_idx
-
-
-def n_feat_int(prepared: PreparedData, n_features: Union[int, float, None]) -> int:
-    n_feat = prepared.X.shape[1]
-    if n_features is None:
-        return min(n_feat - 1, DEFAULT_N_STEPWISE_SELECT)
-    if isinstance(n_features, float):
-        return min(n_feat - 1, ceil(n_features * n_feat))
-    return min(n_feat - 1, n_features)
-
-
-class StepwiseSelector:
-    def __init__(
-        self,
-        prep_train: PreparedData,
-        options: ProgramOptions,
-        n_features: Union[int, float, None] = None,
-        direction: Literal["forward", "backward"] = "forward",
-    ) -> None:
-        self.is_forward = direction == "forward"
-        self.n_features: int = n_feat_int(prep_train, n_features)
-        self.total_feats: int = prep_train.X.shape[1]
-        self.prepared = prep_train
-        self.options = options
-        self.model = options.wrapper_model
-
-        # selection_idx is True for selected/excluded features in forward/backward select
-        self.selection_idx = np.zeros(shape=self.n_features, dtype=bool)
-        self.scores = np.full(shape=self.n_features, fill_value=np.nan)
-        self.remaining: list[str] = prep_train.X.columns.to_list()
-
-        self.n_iterations = (
-            self.n_features if self.is_forward else self.total_feats - self.n_features
-        )
-
-        ddesc = "Forward" if self.is_forward else "Backward"
-        for _ in tqdm(
-            range(self.n_iterations),
-            total=self.n_iterations,  # type: ignore
-            desc=f"{ddesc} feature selection: ",
-            leave=True,
-        ):  # type: ignore
-            new_feature_idx, score = self._get_best_new_feature(
-                cloned_estimator, X, y, current_mask
-            )
-            current_mask[new_feature_idx] = True
-            self.scores[new_feature_idx] = score
-
-        if self.direction == "backward":
-            current_mask = ~current_mask
-        self.support_ = current_mask
-
-        return self

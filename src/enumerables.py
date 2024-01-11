@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, EnumMeta
 from math import isnan
 from random import choice, randint
-from typing import TYPE_CHECKING, Any, Generic, Optional, Type, TypeVar, no_type_check
+from typing import TYPE_CHECKING, Any, Generic, Literal, Optional, Type, TypeVar, no_type_check
 from warnings import warn
 
 import numpy as np
@@ -263,8 +263,11 @@ class ModelFeatureSelection(RandEnum, Enum):
 class WrapperSelection(RandEnum, Enum):
     StepUp = "step-up"
     StepDown = "step-down"
+
     # Genetic = "genetic"
     # ParticleSwarm = "swarm"
+    def direction(self) -> Literal["forward", "backward"]:
+        return "forward" if self is WrapperSelection.StepUp else "backward"
 
 
 class WrapperSelectionModel(RandEnum, Enum):

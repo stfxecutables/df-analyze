@@ -281,6 +281,27 @@ class DfAnalyzeModel(ABC):
 
         return self.tuned_model.score(X, y)
 
+    def cv_score(self, X: DataFrame, y: Series) -> float:
+        if self.is_classifier:
+            ss = StratifiedKFold(n_splits=5)
+        else:
+            ss = KFold(n_splits=5)
+
+        scores = []
+        for idx_train, idx_test in ss.split(y, y):  # type: ignore
+            X_train = X.loc[idx_train]
+            X_test = X.loc[idx_test]
+            y_train = y.loc[idx_train]
+            y_test = y.loc[idx_test]
+            self.fit(X_train, y_train)
+            preds = self.predict(X=X_test)
+            self.model = None  # reset for next fit call
+            scorer = acc if self.is_classifier else mae
+            score = scorer(preds, y_test)
+            score = score if self.is_classifier else -score
+            scores.append(score)
+        return float(np.mean(scores))
+
     def tuned_cv_scores(self, X: DataFrame, y: Series) -> Series:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
