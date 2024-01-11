@@ -16,6 +16,7 @@ import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Mapping,
@@ -305,6 +306,14 @@ class MLPEstimator(DfAnalyzeModel):
             raise RuntimeError("Need to call `model.tune()` before calling `.tuned_predict()`")
         Xt = self._to_torch(X)
         return self.tuned_model.predict(Xt)
+
+    def predict_proba_untuned(self, X: DataFrame) -> ndarray:
+        if self.model is None:
+            raise RuntimeError(
+                "Need to call `model.fit()` before calling `.predict_proba_untuned()`"
+            )
+        Xt = self._to_torch(X)
+        return self.model.predict_proba(Xt)
 
     def predict_proba(self, X: DataFrame) -> ndarray:
         if self.tuned_model is None:

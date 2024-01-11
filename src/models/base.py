@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Type, Union
 
 import numpy as np
 import optuna
@@ -31,10 +31,6 @@ from sklearn.model_selection import KFold, StratifiedKFold
 
 from src._constants import SEED
 from src.enumerables import WrapperSelection
-from src.hypertune import (
-    ClassifierScorer,
-    RegressorScorer,
-)
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -207,6 +203,11 @@ class DfAnalyzeModel(ABC):
         X_test: DataFrame,
         y_test: Series,
     ) -> DataFrame:
+        from src.hypertune import (
+            ClassifierScorer,
+            RegressorScorer,
+        )
+
         """
         Returns
         -------

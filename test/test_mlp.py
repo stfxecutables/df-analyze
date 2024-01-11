@@ -41,7 +41,7 @@ def do_mlp_classifier(dataset: tuple[str, TestDataset]) -> None:
         if len(preds.shape) != 1:
             raise ValueError("`.predict()` is not flat.")
 
-        probs = model.predict_proba(X_test)
+        probs = model.predict_proba_untuned(X_test)
         if probs.dtype not in [np.float64, np.float32]:
             raise TypeError("`.predict_proba()` is not returning float")
         exp = (X_test.shape[0], num_classes)

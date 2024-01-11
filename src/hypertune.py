@@ -52,10 +52,10 @@ from src.cli.cli import ProgramOptions
 
 if TYPE_CHECKING:
     from src.models.base import DfAnalyzeModel
+    from src.models.mlp import MLPEstimator
 import jsonpickle
 
 from src.enumerables import ClassifierScorer, RegressorScorer
-from src.models.mlp import MLPEstimator
 from src.preprocessing.prepare import PreparedData
 from src.scoring import (
     sensitivity,

@@ -303,8 +303,9 @@ class StepwiseSelector:
         n_features: Union[int, float, None] = None,
         direction: Literal["forward", "backward"] = "forward",
     ) -> None:
-        self.direction = direction
+        self.is_forward = direction == "forward"
         self.n_features: int = n_feat_int(prep_train, n_features)
+        self.total_feats: int = prep_train.X.shape[1]
         self.prepared = prep_train
         self.options = options
         self.model = options.wrapper_model
@@ -312,5 +313,27 @@ class StepwiseSelector:
         # selection_idx is True for selected/excluded features in forward/backward select
         self.selection_idx = np.zeros(shape=self.n_features, dtype=bool)
         self.scores = np.full(shape=self.n_features, fill_value=np.nan)
-
         self.remaining: list[str] = prep_train.X.columns.to_list()
+
+        self.n_iterations = (
+            self.n_features if self.is_forward else self.total_feats - self.n_features
+        )
+
+        ddesc = "Forward" if self.is_forward else "Backward"
+        for _ in tqdm(
+            range(self.n_iterations),
+            total=self.n_iterations,  # type: ignore
+            desc=f"{ddesc} feature selection: ",
+            leave=True,
+        ):  # type: ignore
+            new_feature_idx, score = self._get_best_new_feature(
+                cloned_estimator, X, y, current_mask
+            )
+            current_mask[new_feature_idx] = True
+            self.scores[new_feature_idx] = score
+
+        if self.direction == "backward":
+            current_mask = ~current_mask
+        self.support_ = current_mask
+
+        return self

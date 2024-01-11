@@ -113,5 +113,11 @@ def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
 
 @fast_ds
 def test_embed_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        do_embed_select(dataset)
+
+
+@med_ds
+def test_embed_select_med(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
     # with capsys.disabled():
     do_embed_select(dataset)
