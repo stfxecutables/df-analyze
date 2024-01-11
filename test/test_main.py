@@ -17,12 +17,12 @@ from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions
 from src.enumerables import DfAnalyzeClassifier, DfAnalyzeRegressor
 from src.hypertune import evaluate_tuned
-from src.nonsense import enable_spam, silence_spam
+from src.nonsense import silence_spam
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
 from src.selection.models import ModelSelected
-from src.testing.datasets import FAST_INSPECTION, TEST_DATASETS, TestDataset, fast_ds
+from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 

@@ -1,9 +1,5 @@
 from pathlib import Path
 
-from src._constants import (
-    CLASSIFIERS,
-    REGRESSORS,
-)
 from src.enumerables import ClsScore, DfAnalyzeClassifier, DfAnalyzeRegressor, RegScore
 
 USAGE_STRING = """

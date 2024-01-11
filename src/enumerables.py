@@ -9,14 +9,13 @@ from warnings import warn
 
 import numpy as np
 from numpy import ndarray
-from pandas import DataFrame, Series
+from pandas import Series
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
     explained_variance_score,
     f1_score,
     mean_absolute_error,
-    mean_absolute_percentage_error,
     mean_squared_error,
     median_absolute_error,
     r2_score,

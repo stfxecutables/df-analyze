@@ -5,7 +5,6 @@ import re
 import traceback
 import warnings
 from dataclasses import dataclass, field
-from enum import Enum
 from pprint import pprint
 from typing import (
     TYPE_CHECKING,
@@ -28,9 +27,7 @@ from numpy import ndarray
 from pandas import DataFrame, Index, Series
 from sklearn.metrics import (
     accuracy_score,
-    balanced_accuracy_score,
     explained_variance_score,
-    f1_score,
     mean_absolute_error,
     mean_absolute_percentage_error,
     mean_squared_error,

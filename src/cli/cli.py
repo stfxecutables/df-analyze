@@ -25,22 +25,15 @@ import pandas as pd
 from pandas import DataFrame
 
 from src._constants import (
-    CLASSIFIERS,
     FULL_RESULTS,
-    HTUNE_VAL_METHODS,
     N_WRAPPER_DEFAULT,
     P_FILTER_CAT_DEFAULT,
     P_FILTER_CONT_DEFAULT,
     P_FILTER_TOTAL_DEFAULT,
-    REGRESSORS,
     SENTINEL,
-)
-from src._types import (
-    ValMethod,
 )
 from src.analysis.univariate.associate import CatClsStats, CatRegStats, ContClsStats, ContRegStats
 from src.cli.parsing import (
-    cv_size,
     int_or_percent_parser,
     resolved_path,
     separator,
@@ -58,11 +51,7 @@ from src.cli.text import (
     EXPLODE_HELP,
     FEAT_SELECT_HELP,
     FILTER_METHOD_HELP,
-    HTUNE_HELP,
     HTUNE_TRIALS_HELP,
-    HTUNE_VALSIZE_HELP,
-    HTUNEVAL_HELP_STR,
-    MC_REPEATS_HELP,
     MODE_HELP_STR,
     MODEL_SELECT_HELP,
     N_FEAT_CAT_FILTER_HELP,
@@ -76,11 +65,9 @@ from src.cli.text import (
     PRED_SELECT_CLS_SCORE,
     PRED_SELECT_REG_SCORE,
     REG_HELP_STR,
-    SELECT_TUNE_ROUNDS_HELP,
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
-    TEST_VAL_HELP,
     TEST_VALSIZES_HELP,
     USAGE_EXAMPLES,
     USAGE_STRING,
