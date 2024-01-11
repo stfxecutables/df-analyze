@@ -77,7 +77,9 @@ SENTINEL = __Sentinel()
 VAL_SIZE = 0.20
 SEED = 69
 
-MAX_STEPWISE_SELECTION_N_FEATURES = 200
+DEFAULT_N_STEPWISE_SELECT = 10
+"""Number of features to select during stepwise selection"""
+MAX_STEPWISE_SELECTION_N_FEATURES = 20
 """Number of features to warn user about feature selection problems"""
 MAX_PERF_N_FEATURES = 500
 """Number of features to warn users about general performance problems"""

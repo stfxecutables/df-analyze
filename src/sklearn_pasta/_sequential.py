@@ -5,7 +5,8 @@ NOTE: We are copying this in from sklearn because sklearn folks are too lazy to 
 such a long computation...
 """
 import numbers
-from typing import Any, Literal
+from math import ceil
+from typing import Any, Literal, Union
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -15,6 +16,10 @@ from sklearn.feature_selection._base import SelectorMixin
 from sklearn.model_selection import cross_val_score
 from sklearn.utils.validation import check_is_fitted
 from tqdm import tqdm
+
+from src._constants import DEFAULT_N_STEPWISE_SELECT
+from src.cli.cli import ProgramOptions
+from src.preprocessing.prepare import PreparedData
 
 # from sklearn.utils._tags import _safe_tags
 from src.sklearn_pasta._tags import _safe_tags
@@ -278,3 +283,31 @@ def get_score(
     return cross_val_score(
         estimator, X_new, y, cv=cv, scoring=scoring, n_jobs=1
     ).mean(), feature_idx
+
+
+def n_feat_int(prepared: PreparedData, n_features: Union[int, float, None]) -> int:
+    n_feat = prepared.X.shape[1]
+    if n_features is None:
+        return min(n_feat - 1, DEFAULT_N_STEPWISE_SELECT)
+    if isinstance(n_features, float):
+        return min(n_feat - 1, ceil(n_features * n_feat))
+    return min(n_feat - 1, n_features)
+
+
+class StepwiseSelector:
+    def __init__(
+        self,
+        prep_train: PreparedData,
+        options: ProgramOptions,
+        n_features: Union[int, float, None] = None,
+        direction: Literal["forward", "backward"] = "forward",
+    ) -> None:
+        self.direction = direction
+        self.n_features: int = n_feat_int(prep_train, n_features)
+        self.prepared = prep_train
+        self.options = options
+        self.model = options.wrapper_model
+
+        # selection_idx is True for selected/excluded features in forward/backward select
+        self.selection_idx = np.zeros(shape=n_features, dtype=bool)
+        self.scores = np.full(shape=n_features, fill_value=np.nan)

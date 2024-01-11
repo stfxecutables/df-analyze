@@ -70,6 +70,7 @@ from src.cli.text import (
     N_FEAT_TOTAL_FILTER_HELP,
     N_FEAT_WRAPPER_HELP,
     NAN_HELP,
+    NORM_HELP,
     ORDINAL_HELP_STR,
     OUTDIR_HELP,
     PRED_SELECT_CLS_SCORE,
@@ -96,6 +97,7 @@ from src.enumerables import (
     FilterSelection,
     ModelFeatureSelection,
     NanHandling,
+    Normalization,
     RegScore,
     WrapperSelection,
     WrapperSelectionModel,
@@ -144,6 +146,7 @@ class CleaningOptions(Debug):
     drops: list[str]
     # feat_clean: Tuple[FeatureCleaning, ...]
     nan_handling: NanHandling
+    norm: Normalization
 
 
 @dataclass
@@ -204,6 +207,7 @@ class ProgramOptions(Debug):
         ordinals: list[str],
         drops: list[str],
         nan_handling: NanHandling,
+        norm: Normalization,
         # feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
         model_select: Optional[DfAnalyzeModel],
@@ -224,13 +228,13 @@ class ProgramOptions(Debug):
         is_classification: bool,
         classifiers: Tuple[DfAnalyzeClassifier, ...],
         regressors: Tuple[DfAnalyzeRegressor, ...],
-        htune: bool,
+        # htune: bool,
         # htune_val: ValMethod,
         # htune_val_size: Size,
         htune_trials: int,
-        test_val: ValMethod,
-        test_val_sizes: Tuple[Size, ...],
-        mc_repeats: int,
+        # test_val: ValMethod,
+        test_val_size: Size,
+        # mc_repeats: int,
         outdir: Path,
         is_spreadsheet: bool,
         separator: str,
@@ -247,6 +251,7 @@ class ProgramOptions(Debug):
         self.ordinals: list[str] = ordinals
         self.drops: list[str] = drops
         self.nan_handling: NanHandling = nan_handling
+        self.norm: Normalization = norm
         # self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
         self.model_select: Optional[DfAnalyzeModel] = model_select
@@ -267,13 +272,13 @@ class ProgramOptions(Debug):
         self.is_classification: bool = is_classification
         self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(sorted(set(classifiers)))
         self.regressors: Tuple[DfAnalyzeRegressor, ...] = tuple(sorted(set(regressors)))
-        self.htune: bool = htune
+        # self.htune: bool = htune
         # self.htune_val: ValMethod = htune_val
         # self.htune_val_size: Size = htune_val_size
         self.htune_trials: int = htune_trials
-        self.test_val: ValMethod = test_val
-        self.test_val_sizes: Tuple[Size, ...]
-        self.mc_repeats: int = mc_repeats
+        # self.test_val: ValMethod = test_val
+        self.test_val_size: Size = test_val_size
+        # self.mc_repeats: int = mc_repeats
         # TODO: fix below
         self.outdir: Optional[Path] = self.get_outdir(outdir, self.datapath)
         self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir)
@@ -283,10 +288,6 @@ class ProgramOptions(Debug):
         self.no_warn_explosion: bool = no_warn_explosion
 
         # cleanup
-        if isinstance(test_val_sizes, (int, float)):
-            self.test_val_sizes = (test_val_sizes,)
-        else:
-            self.test_val_sizes = tuple(sorted(set(test_val_sizes)))
         if DfAnalyzeClassifier.Dummy not in self.classifiers:
             self.classifiers = (DfAnalyzeClassifier.Dummy, *self.classifiers)
         if DfAnalyzeRegressor.Dummy not in self.regressors:
@@ -300,6 +301,7 @@ class ProgramOptions(Debug):
             drops=self.drops,
             # feat_clean=self.feat_clean,
             nan_handling=self.nan_handling,
+            norm=self.norm,
         )
         self.selection_options = SelectionOptions(
             cleaning_options=self.cleaning_options,
@@ -324,15 +326,13 @@ class ProgramOptions(Debug):
             filter_pred_reg_score=self.filter_pred_reg_score,
         )
 
-        # errors
-        if not self.is_classification:
-            if ("d" in self.feat_select) or ("auc" in self.feat_select):
-                args = " ".join([f.value for f in self.feat_select])
-                raise ValueError(
-                    "Feature selection with Cohen's d or AUC values is not supported "
-                    "for regression tasks. Do not pass arguments `d` or `auc` to "
-                    f"`--feat-select` CLI option. [Got arguments: {args}]"
-                )
+        is_cls = self.is_classification
+        self.comparables = {
+            "model": self.classifiers if is_cls else self.regressors,
+            "selection": self.feat_select,
+            "norm": self.norm,
+        }
+
         self.spam_warnings()
 
     @property
@@ -364,13 +364,13 @@ class ProgramOptions(Debug):
         is_classification = ds.is_classification
         classifiers = DfAnalyzeClassifier.random_n()
         regressors = DfAnalyzeRegressor.random_n()
-        htune: bool = choice([True, False])
-        htune_val: ValMethod = "kfold"
-        htune_val_size: Size = 5
+        # htune: bool = choice([True, False])
+        # htune_val: ValMethod = "kfold"
+        # htune_val_size: Size = 5
         htune_trials: int = randint(20, 100)
-        test_val: ValMethod = "kfold"
-        test_val_sizes: Tuple[Size, ...] = (0.2,)
-        mc_repeats: int = 0
+        # test_val: ValMethod = "kfold"
+        test_val_size: Size = 0.4
+        # mc_repeats: int = 0
         sub = "classification" if ds.is_classification else "regression"
         outdir: Path = (FULL_RESULTS / sub) / ds.dsname
         is_spreadsheet: bool = False
@@ -384,6 +384,7 @@ class ProgramOptions(Debug):
             ordinals=[],
             drops=[],
             nan_handling=NanHandling.random(),
+            norm=Normalization.random(),
             # feat_clean=feat_clean,
             feat_select=feat_select,
             model_select=model_select,
@@ -404,13 +405,12 @@ class ProgramOptions(Debug):
             is_classification=is_classification,
             classifiers=classifiers,
             regressors=regressors,
-            htune=htune,
+            # htune=htune,
             # htune_val=htune_val,
             # htune_val_size=htune_val_size,
             htune_trials=htune_trials,
-            test_val=test_val,
-            test_val_sizes=test_val_sizes,
-            mc_repeats=mc_repeats,
+            # test_val=test_val,
+            test_val_size=test_val_size,
             outdir=outdir,
             is_spreadsheet=is_spreadsheet,
             separator=separator,
@@ -471,7 +471,9 @@ class ProgramOptions(Debug):
         return outdir
 
     def hash(self) -> str:
-        return get_hash(self.__dict__, ignores=["cleaning_options", "selection_options"])
+        return get_hash(
+            self.__dict__, ignores=["cleaning_options", "selection_options", "comparables"]
+        )
 
     def to_json(self) -> None:
         path = self.program_dirs.options
@@ -487,7 +489,7 @@ class ProgramOptions(Debug):
 
     def load_df(self) -> DataFrame:
         if self.is_spreadsheet:
-            return load_spreadsheet(self.datapath)[0]
+            return load_spreadsheet(self.datapath, self.separator)[0]
         path = self.datapath
         if path.name.endswith("parquet"):
             return pd.read_parquet(path)
@@ -506,17 +508,23 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     sentinel_parser = deepcopy(parser)
 
     if args is None:
-        sentinels = {key: SENTINEL for key in parser.parse_args().__dict__}
+        sentinels = {key: SENTINEL for key in parser.parse_known_args()[0].__dict__}
     else:
-        sentinels = {key: SENTINEL for key in parser.parse_args(args.split()).__dict__}
+        sentinels = {key: SENTINEL for key in parser.parse_known_args(args.split())[0].__dict__}
     sentinel_parser.set_defaults(**sentinels)
 
-    cli_args = cli_parser.parse_args() if args is None else cli_parser.parse_args(args.split())
+    cli_args = (
+        cli_parser.parse_known_args()[0]
+        if args is None
+        else cli_parser.parse_known_args(args.split())[0]
+    )
     if cli_args.spreadsheet is None and cli_args.df is None:
         raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
 
     sentinel_cli_args = (
-        sentinel_parser.parse_args() if args is None else sentinel_parser.parse_args(args.split())
+        sentinel_parser.parse_known_args()[0]
+        if args is None
+        else sentinel_parser.parse_known_args(args.split())[0]
     )
     explicit_cli_args = {
         key: val for key, val in sentinel_cli_args.__dict__.items() if val is not SENTINEL
@@ -528,7 +536,7 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     else:
         options = ""
 
-    sheet_args = sheet_parser.parse_args(options.split()).__dict__
+    sheet_args = sheet_parser.parse_known_args(options.split())[0].__dict__
     # sentinel_sheet_args = sentinel_parser.parse_args(options.split())
     # explicit_sheet_args = Namespace(
     #     **{key: val for key, val in sentinel_sheet_args.__dict__.items() if val is not SENTINEL}
@@ -669,12 +677,12 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=(EmbedSelectionModel.LGBM,),
         help=EMBED_SELECT_MODEL_HELP,
     )
-    parser.add_argument(  # TODO UNIMPLEMENTED!
-        "--n-selection-tune-rounds",
-        type=int,
-        default=0,
-        help=SELECT_TUNE_ROUNDS_HELP,
-    )
+    # parser.add_argument(  # TODO UNIMPLEMENTED!
+    #     "--n-selection-tune-rounds",
+    #     type=int,
+    #     default=0,
+    #     help=SELECT_TUNE_ROUNDS_HELP,
+    # )
     # parser.add_argument(
     #     "--feat-clean",
     #     nargs="+",
@@ -683,6 +691,13 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     #     default=["constant"],
     #     help=FEAT_CLEAN_HELP,
     # )
+    parser.add_argument(
+        "--norm",
+        choices=[n.value for n in Normalization],
+        default=Normalization.Robust,
+        type=Normalization,
+        help=NORM_HELP,
+    )
     parser.add_argument(
         "--nan",
         choices=[n.value for n in NanHandling],
@@ -768,11 +783,11 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=ClsScore.default(),
         help=PRED_SELECT_CLS_SCORE,
     )
-    parser.add_argument(
-        "--htune",
-        action="store_true",
-        help=HTUNE_HELP,
-    )
+    # parser.add_argument(
+    #     "--htune",
+    #     action="store_true",
+    #     help=HTUNE_HELP,
+    # )
     # parser.add_argument(
     #     "--htune-val",
     #     type=str,
@@ -792,24 +807,23 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=100,
         help=HTUNE_TRIALS_HELP,
     )
+    # parser.add_argument(
+    #     "--mc-repeats",
+    #     type=int,
+    #     default=10,
+    #     help=MC_REPEATS_HELP,
+    # )
+    # parser.add_argument(
+    #     "--test-val",
+    #     type=str,
+    #     choices=HTUNE_VAL_METHODS,
+    #     default="kfold",
+    #     help=TEST_VAL_HELP,
+    # )
     parser.add_argument(
-        "--mc-repeats",
-        type=int,
-        default=10,
-        help=MC_REPEATS_HELP,
-    )
-    parser.add_argument(
-        "--test-val",
-        type=str,
-        choices=HTUNE_VAL_METHODS,
-        default="kfold",
-        help=TEST_VAL_HELP,
-    )
-    parser.add_argument(
-        "--test-val-sizes",
-        nargs="+",
-        type=cv_size,
-        default=5,
+        "--test-val-size",
+        type=int_or_percent_parser(default=0.4),
+        default=0.4,
         help=TEST_VALSIZES_HELP,
     )
     parser.add_argument(
@@ -849,6 +863,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         categoricals=sorted(cats),
         ordinals=sorted(ords),
         drops=cli_args.drops,
+        norm=cli_args.norm,
         nan_handling=cli_args.nan,
         feat_select=cli_args.feat_select,
         model_select=cli_args.model_select,
@@ -869,13 +884,13 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         is_classification=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
-        htune=cli_args.htune,
+        # htune=cli_args.htune,
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
-        test_val=cli_args.test_val,
-        test_val_sizes=cli_args.test_val_sizes,
-        mc_repeats=cli_args.mc_repeats,
+        # test_val=cli_args.test_val,
+        test_val_size=cli_args.test_val_size,
+        # mc_repeats=cli_args.mc_repeats,
         outdir=cli_args.outdir,
         is_spreadsheet=cli_args.spreadsheet is not None,
         separator=cli_args.separator,

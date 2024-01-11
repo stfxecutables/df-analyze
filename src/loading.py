@@ -72,11 +72,11 @@ def load_csv(path: Path, separator: str = ",") -> tuple[DataFrame, str]:
     return df, " ".join(meta.values())
 
 
-def load_spreadsheet(path: Path) -> tuple[DataFrame, str]:
+def load_spreadsheet(path: Path, separator: str = ",") -> tuple[DataFrame, str]:
     if "xlsx" in path.suffix:
         return load_excel(path)
     elif "csv" in path.suffix:
-        return load_csv(path)
+        return load_csv(path, separator=separator)
     else:
         raise ValueError(f"Unsupported file extension: {path.suffix}")
 

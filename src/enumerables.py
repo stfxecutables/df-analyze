@@ -234,6 +234,11 @@ class NanHandling(RandEnum, Enum):
     Impute = "impute"
 
 
+class Normalization(RandEnum, Enum):
+    MinMax = "minmax"
+    Robust = "robust"
+
+
 class EstimationMode(RandEnum, Enum):
     Classify = "classify"
     Regress = "regress"

@@ -80,4 +80,5 @@ def wrap_select_features(
         scores=scores,
         method=options.wrapper_select,
         model=options.wrapper_model,
+        is_classification=prep_train.is_classification,
     )

@@ -260,6 +260,26 @@ are probably meaningless, values over 200 are likely to be exorbitant.
 
 """
 
+NORM_HELP = """
+How to normalize features to [0, 1] prior to training. Available options are
+`robust` and `minmax`. For short-tailed features (e.g. normally-distributed)
+or uniformly distributed features, the method `robust` usually is equivalent
+to minmax normalization, and no feature values are clipped, and so is the
+default method.
+
+  minmax:     Typical normalization (also sometimes called "rescaling") to
+              [0, 1] by subtracting each feature minimum and then dividing by
+              the feature range.
+
+  robust:     Computes the feature "robust range" (distance from 5th to
+              95th percentile, i.e. `rmin` and `rmax`, respectively, which
+              yields range `rng = rmax - rmin`) and then considers values
+              outside of `[rmin - 2 * rng, rmax + 2 * rng] = [xmin, xmax]` to
+              be "outliers", which are then clipped (clamped) to [xmin,
+              xmax]. The resulting clipped feature is then minmax normalized.
+
+"""
+
 NAN_HELP = """
 How to handle NaN values in non-categorical features. Categorical features
 are handled by representing the NaN value as another category level (class),

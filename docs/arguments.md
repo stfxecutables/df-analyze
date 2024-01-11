@@ -1,14 +1,20 @@
 ```txt
 usage:
 
-    The df-analyze program can be used in one of two modes: CLI mode, and
-    spreadsheet mode. In spreadsheet mode, df-analyze options are specified in
-    a special format at the top of a spreadsheet or .csv file, and spreadsheet
-    columns are given specific names to identify targets, continuous features,
-    and categorical features. In spreadsheet mode, only a single argument needs
-    to be passed, which is the path to the df-analyze formatted spreadsheet:
+The `df-analyze` program can be used in one of two modes: CLI mode, and
+spreadsheet mode. In spreadsheet mode, df-analyze options are specified in a
+special format at the top of a spreadsheet or .csv file, and spreadsheet
+columns are given specific names to identify targets, continuous features,
+and categorical features. In spreadsheet mode, only a single argument needs
+to be passed, which is the path to the df-analyze formatted spreadsheet:
 
-        python df-analyze.py --spreadsheet my_formatted_sheet.xlsx
+    python df-analyze.py --spreadsheet my_formatted_sheet.xlsx
+
+Good defaults are chosen so that likely the only arguments you would wish to
+specify manually are:
+
+    --target (required)
+    --mode (required)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -106,7 +112,8 @@ optional arguments:
                                       alternation of model evaluations and feature-space search /
                                       navigation strategy.
 
-                          none:       Do not select features using any model.
+                          none:       Do not select features using any model. Always included by
+                                      default.
 
   --embed-select {lgbm,linear,none} [{lgbm,linear,none} ...]
 
@@ -118,6 +125,9 @@ optional arguments:
                                       regularization.
 
                           lgbm:       LightGBM regressor or classifier, depending on task.
+
+                          none:       Do not select features based on any model. Always included by
+                                      by default.
 
   --wrapper-select {step-up,step-down}
 
@@ -151,6 +161,9 @@ optional arguments:
 
                           lgbm:       Use a LightGBM gradient-boosted decision tree model.
 
+                          none:       Do not select features based on any model. Always included by
+                                      by default.
+
   --embed-model {lgbm,linear}
 
                         Model to use for embedded feature selection. In either case, model is
@@ -162,10 +175,27 @@ optional arguments:
 
                           lgbm:       LightGBM regressor or classifier, depending on task.
 
-  --n-selection-tune-rounds N_SELECTION_TUNE_ROUNDS
+                          none:       Do not select features based on any model. Always included by
+                                      by default.
 
-                        If not the default of zero, the number of tuning rounds to do before evaluating
-                        each feature set during wrapper-based feature selection.
+  --norm {minmax,robust}
+
+                        How to normalize features to [0, 1] prior to training. Available options are
+                        `robust` and `minmax`. For short-tailed features (e.g. normally-distributed)
+                        or uniformly distributed features, the method `robust` usually is equivalent
+                        to minmax normalization, and no feature values are clipped, and so is the
+                        default method.
+
+                          minmax:     Typical normalization (also sometimes called "rescaling") to
+                                      [0, 1] by subtracting each feature minimum and then dividing by
+                                      the feature range.
+
+                          robust:     Computes the feature "robust range" (distance from 5th to
+                                      95th percentile, i.e. `rmin` and `rmax`, respectively, which
+                                      yields range `rng = rmax - rmin`) and then considers values
+                                      outside of `[rmin - 2 * rng, rmax + 2 * rng] = [xmin, xmax]` to
+                                      be "outliers", which are then clipped (clamped) to [xmin,
+                                      xmax]. The resulting clipped feature is then minmax normalized.
 
   --nan {drop,mean,median,impute}
 
@@ -176,7 +206,8 @@ optional arguments:
 
                           drop:      Attempt to remove all non-categorical NaN values. Note this could
                                      remove all data if a lot of values are missing, which will cause
-                                     errors.
+                                     errors. Currently unimplemented because of this, and instead
+                                     defaults to `median`.
 
                           mean:      Replace all NaN values with the feature mean value.
 
@@ -207,6 +238,7 @@ optional arguments:
 
                         Number or percentage (as a value in [0, 1]) of continuous features to select
                         via filter-based feature selection.
+
                         Note only two of two of the three options:`--n-filter-total`,
                         `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
                         otherwise the `--n-filter-total` argument will be ignored.
@@ -216,6 +248,7 @@ optional arguments:
 
                         Number or percentage (as a value in [0, 1]) of categorical features to select
                         via filter-based feature selection.
+
                         Note only two of two of the three options:`--n-filter-total`,
                         `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
                         otherwise the `--n-filter-total` argument will be ignored.
@@ -298,62 +331,6 @@ optional arguments:
 
 
 
-  --htune
-                        If provided, use Optuna TPESampler to attempt to optimize classifier performance
-                        prior to fitting and evaluating.
-
-  --htune-val {holdout,kfold,k-fold,loocv,mc,none}
-
-                        If hyperparamater tuning using `--htune` option, specifies the validation style
-                        to use internally for each Optuna trial. Number of trials is specified by
-                        `--htune-trials`, so the number of estimator fits interacts with that values
-                        and `--htune-val-size`, which has a different meaning depending on validation
-                        type chosen. Available options:
-
-                          holdout:    Create a single holdout set and use to validate all Optuna trials.
-                                      The float value in (0, 1) specified in `--htune-val-size` sets the
-                                      percentage of samples to use for this holdout / test set.
-
-                          kfold:      Use k-fold cross validation to compute performance for each Optuna
-                                      trial. The value for `k` is specified by `--htune-val-size`.
-
-                          loocv:      Use Leave-One-Out cross validation. `--htune-val-size` is ignored
-                                      in this case.
-
-                          mc:         Use "Monte-Carlo Cross Validation", e.g. generate multiple random
-                                      train / test splits, i.e. equivalent to using all the splits
-                                      generated by `sklearn.model_selection.StratifiedShuffleSplit`
-                                      Currently generates 20 splits at 80%/20% train/test.
-                                      `--htune-val-size` specifies the size of the test split in this
-                                      case.
-
-                          none:       Just fit the full data (e.g. validate on fitting / training data).
-                                      Fast but highly biased. `--htune-val-size` is ignored in this case.
-
-  --htune-val-size HTUNE_VAL_SIZE
-
-                        See documentation for `--htune-val` (directly above if using `--help`). The
-                        meaning of this argument depends on the choice of `--htune-val`:
-
-                          holdout:    A float in (0, 1) specifies the proportion of samples from the
-                                      input spreadsheet or table to set aside for evaluating during
-                                      hyperparameter tuning.
-
-                                      An integer specifies the number of samples to set aside for
-                                      testing.
-
-                          kfold:      An integer being one of 3, 5, 10, or 20 specifies the number of
-                                      folds.
-
-                          loocv:      Ignored.
-
-                          mc:         A float in (0, 1) specifies the proportion of samples from the
-                                      input spreadsheet or table to set aside for evaluating during
-                                      each Monte-Carlo repeat evaluation.
-
-                                      An integer specifies the number of samples to set aside for
-                                      each repeat.
-
   --htune-trials HTUNE_TRIALS
 
                         Specifies number of trials in Optuna study, and for each estimator and feature
@@ -365,20 +342,9 @@ optional arguments:
                         NOTE: if you can afford it, it is strongly recommended to set this value to a
                         minimum of 100 (default), or 50 if your budget is constrained. Lower values
                         often will fail to find good fits, given the wide range on hyperparameters
-                        needed to make this tool generally useful.
+                        needed to make Optuna generally useful.
 
-  --mc-repeats MC_REPEATS
-
-                        Ignored unless using Monte-Carlo style cross validation via `--htune-val mc`.
-                        Otherwise, specifies the number of random subsets of proportion
-                        `--htune-val-size` on which to validate the data. Default 10.
-
-  --test-val {holdout,kfold,k-fold,loocv,mc,none}
-
-                        Specify which validation method to use for testing. Same behavour as for
-                        `--htune-val` argument (see above).
-
-  --test-val-sizes TEST_VAL_SIZES [TEST_VAL_SIZES ...]
+  --test-val-size TEST_VAL_SIZE
 
                         Specify sizes of test validation sets. Same behavour as for `--htune-val-sizes`
                         argument (see above), except that multiple sizes can be specified. E.g.
@@ -437,8 +403,6 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
         --mode=regress \
         --regressors=svm linear \
         --drop-nan=rows \
-        --feat-clean=constant \
-        --feat-select=pca pearson \
         --n-feat=5 \
         --htune \
         --test-val=kfold \
