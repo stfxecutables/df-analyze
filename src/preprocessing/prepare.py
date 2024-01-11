@@ -243,7 +243,7 @@ class PreparedData:
             ss = StratifiedShuffleSplit(train_size=train_size, n_splits=1)
         else:
             ss = ShuffleSplit(train_size=train_size, n_splits=1)
-        idx_train, idx_test = next(ss.split(y, y))
+        idx_train, idx_test = next(ss.split(y, y))  # type: ignore
 
         prep_train = self.subsample(idx_train)
         prep_train.phase = "train"

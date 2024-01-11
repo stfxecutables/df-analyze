@@ -12,16 +12,11 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Optional,
-    Tuple,
 )
 from warnings import warn
 
-from pandas import DataFrame
-
-from src._types import FeatureCleaning, FeatureSelection
-from src.analysis.univariate.associate import AssocResults
-
 if TYPE_CHECKING:
+    from src.analysis.univariate.associate import AssocResults
     from src.analysis.univariate.predict.predict import PredResults
     from src.hypertune import EvaluationResults
     from src.preprocessing.inspection.inspection import InspectionResults
@@ -182,7 +177,7 @@ class ProgramDirs(Debug):
             return
         tables = self.results / "performances.csv"
         try:
-            out.write_text(results.to_markdown())
+            results.df.to_csv(tables)
         except Exception as e:
             warn(
                 "Got exception when attempting to save final evaluation report. "
@@ -378,64 +373,3 @@ def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:
     # comparisons / different combinations we have here
     hsh = md5(str(tuple(sorted(to_hash.items()))).encode()).hexdigest()
     return hsh
-
-
-def try_save(
-    program_dirs: ProgramDirs,
-    df: DataFrame,
-    file_stem: str,
-    file_type: FileType,
-    selection: Optional[FeatureSelection] = None,
-    cleaning: Tuple[FeatureCleaning, ...] = (),
-) -> None:
-    if file_type is FileType.Interim:
-        outdir = program_dirs.interim_results
-        desc = "interim results"
-    elif file_type is FileType.Final:
-        outdir = program_dirs.final_results
-        desc = "final results for all options"
-    elif file_type is FileType.Feature:
-        if selection is None or selection == "none":
-            # feature cleaning may have removed features and the cleaned
-            # set of features is still worth saving
-            selection = "no-selection"
-        else:
-            selection += "-selection"
-        if len(cleaning) > 0:
-            clean = f"_cleaning={'-'.join([method for method in cleaning])}"
-        else:
-            clean = ""
-        outdir = program_dirs.feature_selection / f"{selection}{clean}"
-        desc = "selected/cleaned features"
-    elif file_type is FileType.Params:
-        if selection is None or selection == "none":
-            selection = "no-selection"
-        else:
-            selection += "-selection"
-        if len(cleaning) > 0:
-            clean = f"_cleaning={'-'.join([method for method in cleaning])}"
-        else:
-            clean = ""
-        outdir = program_dirs.feature_selection / f"{selection}{clean}"
-        desc = "selected/cleaned features"
-    else:
-        raise ValueError("Invalid FileType for manual saving")
-
-    json = outdir / f"json/{file_stem}.json"
-    csv = outdir / f"csv/{file_stem}.csv"
-    json.parent.mkdir(parents=True, exist_ok=True)
-    csv.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        df.to_json(json)
-        print(f"Saved {desc} to {json}")
-    except Exception:
-        traceback.print_exc()
-        print(f"Failed to save following results to {json}")
-        df.to_markdown(tablefmt="simple", floatfmt="0.5f")
-    try:
-        df.to_csv(csv)
-        print(f"Saved {desc} to {csv}")
-    except Exception:
-        traceback.print_exc()
-        print(f"Failed to save {desc} results to {csv}:")
-        df.to_markdown(tablefmt="simple", floatfmt="0.5f")

@@ -9,7 +9,6 @@ from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from src.models.linear import SGDClassifierSelector, SGDRegressorSelector
 from src.preprocessing.prepare import PreparedData
 from src.selection.filter import FilterSelected
-from src.selection.wrapper import WrapperSelectionModel
 
 
 def stepwise_select(

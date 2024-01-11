@@ -1,6 +1,6 @@
 from math import isnan
 from pathlib import Path
-from typing import Callable, Optional, Union, overload
+from typing import Callable, Optional, Union
 from warnings import warn
 
 
@@ -41,16 +41,6 @@ def cv_size(cv_str: str) -> Union[float, int]:
     if cv > 1:
         return int(cv)
     return cv
-
-
-@overload
-def int_or_percent(default: int) -> Callable[[str], int]:
-    ...
-
-
-@overload
-def int_or_percent(default: float) -> Callable[[str], float]:
-    ...
 
 
 def int_or_percent_parser(

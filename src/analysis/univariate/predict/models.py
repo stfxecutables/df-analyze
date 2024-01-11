@@ -81,7 +81,7 @@ class UnivariatePredictor(ABC):
                 message="invalid value encountered in divide",
                 category=RuntimeWarning,
             )
-            opt.fit(X, y)
+            opt.fit(X, y)  # type: ignore
         os.environ["PYTHONWARNINGS"] = before
         enable_spam()
         res = self.get_best_scores(opt)

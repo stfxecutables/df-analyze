@@ -83,9 +83,9 @@ def embed_select_features(
     model.htune_optuna(X_train=X_train, y_train=y, n_trials=100, n_jobs=-1)
     # `coefs` are floats if Linear, int32 if LGBM
     scores = np.ravel(
-        model.tuned_model.coef_
+        model.tuned_model.coef_  # type: ignore
         if options.embed_select is EmbedSelectionModel.Linear
-        else model.tuned_model.feature_importances_
+        else model.tuned_model.feature_importances_  # type: ignore
     )
     fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
 

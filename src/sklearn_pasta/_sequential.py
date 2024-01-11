@@ -6,7 +6,7 @@ such a long computation...
 """
 import numbers
 from math import ceil
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, no_type_check
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -25,6 +25,7 @@ from src.preprocessing.prepare import PreparedData
 from src.sklearn_pasta._tags import _safe_tags
 
 
+@no_type_check
 class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
     """Transformer that performs Sequential Feature Selection.
 
@@ -150,8 +151,8 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         -------
         self : object
         """
-        tags = self._get_tags()
-        X, y = self._validate_data(
+        tags = self._get_tags()  # type: ignore
+        X, y = self._validate_data(  # type: ignore
             X,
             y,
             accept_sparse="csc",
@@ -172,11 +173,11 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         if self.n_features_to_select is None:
             self.n_features_to_select_ = n_features // 2
         elif isinstance(self.n_features_to_select, numbers.Integral):
-            if not 0 < self.n_features_to_select < n_features:
+            if not 0 < self.n_features_to_select < n_features:  # type: ignore
                 raise ValueError(error_msg)
             self.n_features_to_select_ = self.n_features_to_select
         elif isinstance(self.n_features_to_select, numbers.Real):
-            if not 0 < self.n_features_to_select <= 1:
+            if not 0 < self.n_features_to_select <= 1:  # type: ignore
                 raise ValueError(error_msg)
             self.n_features_to_select_ = int(n_features * self.n_features_to_select)
         else:
@@ -309,5 +310,7 @@ class StepwiseSelector:
         self.model = options.wrapper_model
 
         # selection_idx is True for selected/excluded features in forward/backward select
-        self.selection_idx = np.zeros(shape=n_features, dtype=bool)
-        self.scores = np.full(shape=n_features, fill_value=np.nan)
+        self.selection_idx = np.zeros(shape=self.n_features, dtype=bool)
+        self.scores = np.full(shape=self.n_features, fill_value=np.nan)
+
+        self.remaining: list[str] = prep_train.X.columns.to_list()

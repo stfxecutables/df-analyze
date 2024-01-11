@@ -2,12 +2,7 @@ from __future__ import annotations
 
 # fmt: off
 import sys  # isort: skip
-from pathlib import Path
-from typing import Mapping, Optional, overload
-
-from optuna import Trial
-
-from pandas import DataFrame, Series  # isort: skip
+from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
@@ -23,8 +18,10 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
+    Mapping,
     Optional,
     Union,
+    overload,
 )
 
 import matplotlib.pyplot as plt
@@ -32,6 +29,7 @@ import numpy as np
 import optuna
 import torch
 from numpy import ndarray
+from optuna import Trial
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
 from sklearn.metrics import accuracy_score as acc
@@ -318,7 +316,7 @@ class MLPEstimator(DfAnalyzeModel):
         Xt, yt = self._to_torch(X, y)
         if self.model is None:
             raise RuntimeError("Need to call `model.fit()` before calling `.score()`")
-        return float(self.model.score(Xt, yt))
+        return float(self.model.score(Xt, yt))  # type: ignore
 
     def tuned_score(self, X: DataFrame, y: Series) -> float:
         Xt, yt = self._to_torch(X, y)

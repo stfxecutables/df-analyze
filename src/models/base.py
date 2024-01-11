@@ -237,7 +237,7 @@ class DfAnalyzeModel(ABC):
             ss = KFold(n_splits=5)
 
         scores = []
-        for idx_train, idx_test in ss.split(y_test, y_test):
+        for idx_train, idx_test in ss.split(y_test, y_test):  # type: ignore
             df_train = X_test.loc[idx_train]
             df_test = X_test.loc[idx_test]
             targ_train = y_test.loc[idx_train]
@@ -277,14 +277,12 @@ class DfAnalyzeModel(ABC):
     def tuned_scores(self, X: DataFrame, y: Series) -> Series:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
-        preds = self.tuned_predict(X)
 
         return self.tuned_model.score(X, y)
 
     def tuned_cv_scores(self, X: DataFrame, y: Series) -> Series:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
-        preds = self.tuned_predict(X)
 
         return self.tuned_model.score(X, y)
 

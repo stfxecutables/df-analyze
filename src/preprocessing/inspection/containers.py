@@ -403,7 +403,7 @@ class InspectionResults:
         ord_section = self.subsection("Ordinals", ord_lines)
         cont_section = self.subsection("Continuous", cont_lines)
 
-        shape_info = self.big_header("Shape info", pad)
+        # shape_info = self.big_header("Shape info", pad)
 
         inflate_lines = self.inflation_lines()
         inflate_info = "\n".join(inflate_lines)

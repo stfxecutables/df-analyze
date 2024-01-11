@@ -66,7 +66,7 @@ class FilterSelected:
             text = text + (
                 f"### Continuous Features ({cont_metric.longname()}: "
                 f"{direction} = More important)\n\n"
-                f"{self.cont_scores.to_frame().to_markdown(floatfmt='0.3e')}\n\n"
+                f"{self.cont_scores.to_frame().to_markdown(floatfmt='0.3e')}\n\n"  # type: ignore
             )
         if cat_metric is not None:
             higher_better = cat_metric.higher_is_better()
@@ -74,7 +74,7 @@ class FilterSelected:
             text = text + (
                 f"### Categorical Features ({cat_metric.longname()}: "
                 f"{direction} = More important)\n\n"
-                f"{self.cat_scores.to_frame().to_markdown(floatfmt='0.3e')}"
+                f"{self.cat_scores.to_frame().to_markdown(floatfmt='0.3e')}"  # type: ignore
             )
         return text
 
@@ -259,15 +259,12 @@ def filter_by_univariate_associations(
             idx_keep = cat_stats[ps] > 0.05
             cat_stats = cat_stats.loc[idx_keep]
 
-    use_total = n_total is not None
-
     if all(n is not None for n in [n_cat, n_cont, n_total]):
         if n_total != n_cat + n_cont:  # type: ignore
             warn(
                 "When specifying all of `n_cat`, `n_cont`, and `n_total`, will "
                 "ignore count specified for `n_total`."
             )
-        use_total = False
     if n_cat is None:
         n_cat = n_cat_select_default(prepared, n_cat)
     if n_cont is None:
@@ -303,12 +300,6 @@ def filter_by_univariate_associations(
         method="association",
         is_classification=prepared.is_classification,
     )
-
-
-def dummy_adjust(df: DataFrame) -> DataFrame:
-    idx = df["model"] == "dummy"
-    dummy_cont = df.loc[idx, :].drop(columns="model")
-    linear_cont = df.loc[~idx, :].drop(columns="model")
 
 
 def filter_by_univariate_predictions(

@@ -180,7 +180,7 @@ class TestDataset:
             y = df["target"]
 
             if self.is_classification:
-                X, y = encode_target(X, y)
+                X, y, labels = encode_target(X, y)
             else:
                 X, y = clean_regression_target(X, y)
 

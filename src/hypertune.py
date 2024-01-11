@@ -35,31 +35,19 @@ from sklearn.metrics import (
     r2_score,
     roc_auc_score,
 )
-from sklearn.model_selection import cross_validate as cv
 from sklearn.model_selection import (
     train_test_split,
 )
 
-from legacy.src.classifiers import get_classifier_constructor
 from legacy.src.objectives import (
-    adaboost_regressor_objective,
     bagging_classifier_objective,
     dtree_classifier_objective,
-    get_cv,
-    gradboost_regressor_objective,
-    knn_regressor_objective,
-    linear_regressor_objective,
-    mlp_args_from_params,
     mlp_classifier_objective,
-    mlp_regressor_objective,
     rf_classifier_objective,
-    rf_regressor_objective,
     svm_classifier_objective,
-    svm_regressor_objective,
 )
-from legacy.src.regressors import get_regressor_constructor
 from src._constants import SEED, VAL_SIZE
-from src._types import Classifier, CVMethod, EstimationMode, Estimator, Regressor
+from src._types import Classifier, CVMethod, EstimationMode, Estimator
 from src.cli.cli import ProgramOptions
 
 if TYPE_CHECKING:
@@ -70,8 +58,6 @@ from src.enumerables import ClassifierScorer, RegressorScorer
 from src.models.mlp import MLPEstimator
 from src.preprocessing.prepare import PreparedData
 from src.scoring import (
-    CLASSIFIER_TEST_SCORERS,
-    REGRESSION_TEST_SCORERS,
     sensitivity,
     specificity,
 )
@@ -523,11 +509,10 @@ def hypertune_classifier(
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
         os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
-
-    study.optimize(objective, n_trials=n_trials)
-
-    if classifier == "mlp":
+        study.optimize(objective, n_trials=n_trials)
         os.environ["PYTHONWARNINGS"] = before
+    else:
+        study.optimize(objective, n_trials=n_trials)
 
     val_method = cv_desc(cv_method)
     acc = np.round(study.best_value, 3)
@@ -547,186 +532,3 @@ def hypertune_classifier(
         val_acc=study.best_value,
         best_params=study.best_params,
     )
-
-
-def hypertune_regressor(
-    regressor: Regressor,
-    X_train: DataFrame,
-    y_train: DataFrame,
-    n_trials: int = 200,
-    cv_method: CVMethod = 5,
-    verbosity: int = optuna.logging.ERROR,
-) -> HtuneResultLegacy:
-    """Core function. Uses Optuna base TPESampler (Tree-Parzen Estimator Sampler) to perform
-    Bayesian hyperparameter optimization via Gaussian processes on the classifier specified in
-    `classifier`.
-
-    Parameters
-    ----------
-    regressor: Regressor
-        Regressor to tune.
-
-    X_train: DataFrame
-        DataFrame with no target value (features only). Shape (n_samples, n_features)
-
-    y_train: DataFrame
-        Target values. Shape (n_samples,).
-
-    n_trials: int = 200
-        Number of trials to use with Optuna.
-
-    cv_method: CVMethod = 5
-        How to evaluate accuracy during tuning.
-
-    verbosity: int = optuna.logging.ERROR
-        See https://optuna.readthedocs.io/en/stable/reference/logging.html. Most useful other option
-        is `optuna.logging.INFO`.
-
-    Returns
-    -------
-    htuned: HtuneResultLegacy
-        See top of this file.
-    """
-    OBJECTIVES: Dict[str, Callable] = {
-        "linear": linear_regressor_objective(X_train, y_train, cv_method),
-        "rf": rf_regressor_objective(X_train, y_train, cv_method),
-        "adaboost": adaboost_regressor_objective(X_train, y_train, cv_method),
-        "gboost": gradboost_regressor_objective(X_train, y_train, cv_method),
-        "svm": svm_regressor_objective(X_train, y_train, cv_method),
-        "knn": knn_regressor_objective(X_train, y_train, cv_method),
-        "mlp": mlp_regressor_objective(X_train, y_train, cv_method),
-    }
-    # HYPERTUNING
-    objective = OBJECTIVES[regressor]
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
-    optuna.logging.set_verbosity(verbosity)
-    if regressor == "mlp":
-        # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
-        before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
-
-    study.optimize(objective, n_trials=n_trials)
-
-    if regressor == "mlp":
-        os.environ["PYTHONWARNINGS"] = before
-
-    val_method = cv_desc(cv_method)
-    try:
-        best_val = study.best_value
-        best_params = study.best_params
-    except ValueError:
-        traceback.print_exc()
-        warn(
-            f"All Optuna trials for regressor {regressor} likely either failed "
-            "or produced NaN values (full stack trace should be above). Likely "
-            "this is due to an inappropriate feature selection method for the "
-            "data (e.g. kpca) or a convergence issue. Setting best metric to "
-            "NaN for now. "
-        )
-        best_val = np.nan
-        best_params = {}
-    mae = -np.round(best_val, 3)
-
-    if verbosity != optuna.logging.ERROR:
-        print(f"\n{' Tuning Results ':=^80}")
-        print("Best params:")
-        pprint(study.best_params, indent=4, width=80)
-        print(f"\nTuning validation: {val_method}")
-        print(f"Best MAE:       μ = {mae:0.3f}")
-        # print("=" * 80, end="\n")
-
-    return HtuneResultLegacy(
-        mode="regress",
-        estimator=regressor,
-        n_trials=n_trials,
-        cv_method=cv_method,
-        val_acc=best_val,
-        best_params=best_params,
-    )
-
-
-def evaluate_hypertuned(
-    htuned: HtuneResultLegacy,
-    cv_method: CVMethod,
-    X_train: DataFrame,
-    y_train: DataFrame,
-    X_test: Optional[DataFrame] = None,
-    y_test: Optional[DataFrame] = None,
-    n_folds: Optional[int] = None,
-    log: bool = True,
-) -> Dict[str, Any]:
-    """Core function. Given the result of hypertuning, evaluate the final parameters.
-
-    Parameters
-    ----------
-    htuned: HtuneResultLegacy
-        Results from `src.hypertune.hypertune_classifier`.
-
-    cv_method: CVMethod = 5
-        How to evaluate accuracy during tuning.
-
-    X_train: DataFrame
-        DataFrame with no target value (features only). Shape (n_samples, n_features)
-
-    y_train: DataFrame
-        Target values. Shape (n_samples,).
-
-    X_test: DataFrame = None
-        DataFrame with no target value (features only). Shape (n_test_samples, n_features), if using
-        a test sample held out during hyperparameter tuning.
-
-    y_test: DataFrame = None
-        Target values. Shape (n_test_samples,), corresponding to X_test.
-
-    log: bool = True
-        If True, print results to console.
-
-    Returns
-    -------
-    result: Dict[str, Any]
-        A dict with structure:
-
-            {
-                htuned: HtuneResultLegacy,
-                cv_method: CVMethod,  # The method used during hypertuning
-                acc: float  # mean accuracy across folds
-                auc: float  # mean AUC across folds
-                acc_sd: float  # sd of accuracy across folds
-                auc_sd: float  # sd of AUC across folds
-            }
-    """
-    model = htuned.estimator
-    params = htuned.best_params
-    args = mlp_args_from_params(params) if model == "mlp" else params
-    if htuned.mode == "classify":
-        estimator = get_classifier_constructor(model)(**args)
-    else:
-        estimator = get_regressor_constructor(model)(**args)
-    SCORERS = CLASSIFIER_TEST_SCORERS if htuned.mode == "classify" else REGRESSION_TEST_SCORERS
-    if (X_test is None) and (y_test is None):
-        _cv = get_cv(y_train, cv_method, n_folds=n_folds)
-        scores = cv(estimator, X=X_train, y=y_train, scoring=SCORERS, cv=_cv)
-        if htuned.mode == "classify":
-            return package_classifier_cv_scores(scores, htuned, cv_method, log)
-        else:
-            return package_regressor_cv_scores(scores, htuned, cv_method, log)
-    elif (X_test is not None) and (y_test is not None):
-        y_pred = estimator.fit(X_train, y_train).predict(X_test)
-        if htuned.mode == "classify":
-            y_score = (
-                estimator.decision_function(X_test)
-                if model != "mlp"
-                else estimator.predict_proba(X_test)
-            )
-            return package_classifier_scores(
-                y_test=y_test,
-                y_pred=y_pred,
-                y_score=y_score,
-                htuned=htuned,
-                cv_method=cv_method,
-                log=log,
-            )
-        else:
-            return package_regressor_scores(y_test, y_pred, htuned, cv_method, log)
-    else:
-        raise ValueError("Invalid test data: only one of `X_test` or `y_test` was None.")

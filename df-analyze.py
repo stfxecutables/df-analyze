@@ -18,7 +18,7 @@ from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions, get_options
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
-from src.saving import FileType, try_save
+from src.saving import FileType
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
@@ -45,35 +45,6 @@ def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
     if isinstance(item, tuple):
         return [i for i in item]
     return [item]
-
-
-def pbar_desc(loop_args: LoopArgs) -> str:
-    estimator = loop_args.estimator
-    selection = loop_args.feature_selection
-    n_feat = loop_args.options.selection_options.n_feat
-    htune_val = loop_args.options.htune_val
-    if isinstance(htune_val, int):
-        hv = f"{htune_val}-fold"
-    elif isinstance(htune_val, float):
-        hv = f"{int(100*htune_val)}%-holdout"
-    elif htune_val == "mc":
-        hv = "mc"
-    else:
-        hv = "none"
-    return f"{estimator}|{selection}|{n_feat} features|htune_val={hv}"
-
-
-def save_interim_result(args: LoopArgs, result: DataFrame) -> None:
-    estimator = args.estimator
-    outdir = args.options.outdir
-    prog_dirs = args.options.program_dirs
-    if outdir is None:
-        return
-    step = "step-up" == args.feature_selection
-
-    timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    file_stem = f"results__{estimator}{'_step-up' if step else ''}__{timestamp}"
-    try_save(prog_dirs, result, file_stem, FileType.Interim)
 
 
 def sort_df(df: DataFrame) -> DataFrame:
