@@ -173,7 +173,7 @@ class SelectionOptions(Debug):
     embed_select: Optional[EmbedSelectionModel]
     wrapper_select: Optional[WrapperSelection]
     wrapper_model: Optional[WrapperSelectionModel]
-    n_feat: int
+    # n_feat: int
     n_filter_cont: Union[int, float]
     n_filter_cat: Union[int, float]
     n_feat_filter: Union[int, float]
@@ -214,7 +214,7 @@ class ProgramOptions(Debug):
         embed_select: Optional[EmbedSelectionModel],
         wrapper_select: Optional[WrapperSelection],
         wrapper_model: WrapperSelectionModel,
-        n_feat: int,
+        # n_feat: int,
         n_filter_cont: Union[int, float],
         n_filter_cat: Union[int, float],
         n_feat_filter: Union[int, float],
@@ -258,7 +258,7 @@ class ProgramOptions(Debug):
         self.embed_select: Optional[EmbedSelectionModel] = embed_select
         self.wrapper_select: Optional[WrapperSelection] = wrapper_select
         self.wrapper_model: WrapperSelectionModel = wrapper_model
-        self.n_feat: int = n_feat
+        # self.n_feat: int = n_feat
         self.n_filter_cont: Union[int, float] = n_filter_cont
         self.n_filter_cat: Union[int, float] = n_filter_cat
         self.n_feat_filter: Union[int, float] = n_feat_filter
@@ -313,7 +313,7 @@ class ProgramOptions(Debug):
             embed_select=self.embed_select,
             wrapper_select=self.wrapper_select,
             wrapper_model=self.wrapper_model,
-            n_feat=self.n_feat,
+            # n_feat=self.n_feat,
             n_filter_cont=self.n_filter_cont,
             n_filter_cat=self.n_filter_cat,
             n_feat_filter=self.n_feat_filter,
@@ -350,7 +350,7 @@ class ProgramOptions(Debug):
         wrap_model = WrapperSelectionModel.random()
         model_select = ModelFeatureSelection.random()
         embed_select = EmbedSelectionModel.random_none()
-        n_feat = n_feats
+        # n_feat = n_feats
         n_feat_filter = uniform(0.5, 0.95)
         n_feat_wrapper = choice([uniform(0.2, 0.5), None])
         n_filter_cont = uniform(0.1, 0.25)
@@ -391,7 +391,7 @@ class ProgramOptions(Debug):
             embed_select=embed_select,
             wrapper_select=wrap_select,
             wrapper_model=wrap_model,
-            n_feat=n_feat,
+            # n_feat=n_feat,
             n_filter_cat=n_filter_cat,
             n_filter_cont=n_filter_cont,
             n_feat_filter=n_feat_filter,
@@ -632,14 +632,14 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=DfAnalyzeRegressor.defaults(),
         help=REG_HELP_STR,
     )
-    # parser.add_argument(
-    #     "--feat-select",
-    #     nargs="+",
-    #     type=FeatureSelection,  # applied to each spaced element in arg
-    #     choices=[f.value for f in FeatureSelection],
-    #     default=(FeatureSelection.Filter,),
-    #     help=FEAT_SELECT_HELP,
-    # )
+    parser.add_argument(
+        "--feat-select",
+        nargs="+",
+        type=FeatureSelection,  # applied to each spaced element in arg
+        choices=[f.value for f in FeatureSelection],
+        default=(FeatureSelection.Filter,),
+        help=FEAT_SELECT_HELP,
+    )
     parser.add_argument(
         "--model-select",
         nargs="+",
@@ -870,7 +870,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         embed_select=cli_args.embed_select,
         wrapper_select=cli_args.wrapper_select,
         wrapper_model=cli_args.wrapper_model,
-        n_feat=cli_args.n_feat,
+        # n_feat=cli_args.n_feat,
         n_feat_wrapper=cli_args.n_feat_wrapper,
         n_feat_filter=cli_args.n_feat_filter,
         n_filter_cont=cli_args.n_filter_cont,
@@ -879,8 +879,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
         filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,
         filter_assoc_cat_reg=cli_args.filter_assoc_cat_regress,
-        filter_pred_cls_score=cli_args.filter_pred_cls_score,
-        filter_pred_reg_score=cli_args.filter_pred_reg_score,
+        filter_pred_cls_score=cli_args.filter_pred_classify,
+        filter_pred_reg_score=cli_args.filter_pred_regress,
         is_classification=cli_args.mode,
         classifiers=cli_args.classifiers,
         regressors=cli_args.regressors,
