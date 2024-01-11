@@ -176,6 +176,18 @@ def estimate_lgbm_backward_select(dataset: tuple[str, TestDataset]) -> None:
     estimate_select(dataset, file=file, forward=False, model=model)
 
 
+def estimate_knn_forward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "knn_forward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.KNN
+    estimate_select(dataset, file=file, forward=True, model=model)
+
+
+def estimate_knn_backward_select(dataset: tuple[str, TestDataset]) -> None:
+    file = RUNTIMES / "knn_backward_select_runtime_estimates.txt"
+    model = WrapperSelectionModel.KNN
+    estimate_select(dataset, file=file, forward=False, model=model)
+
+
 def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
     dsname, ds = dataset
     prepared = ds.prepared(load_cached=True)
@@ -365,6 +377,9 @@ if __name__ == "__main__":
         # do_forward_select((dsname, ds))
         try:
             # estimate_linear_forward_select((dsname, ds))
-            estimate_lgbm_forward_select((dsname, ds))
+            # estimate_lgbm_forward_select((dsname, ds))
+            # estimate_lgbm_backward_select((dsname, ds))
+            # estimate_knn_forward_select((dsname, ds))
+            estimate_knn_backward_select((dsname, ds))
         except Exception as e:
             print(e)
