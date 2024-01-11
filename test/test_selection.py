@@ -376,10 +376,11 @@ if __name__ == "__main__":
         print(dsname)
         # do_forward_select((dsname, ds))
         try:
+            # estimate_linear_backward_select((dsname, ds))
             # estimate_linear_forward_select((dsname, ds))
             # estimate_lgbm_forward_select((dsname, ds))
-            # estimate_lgbm_backward_select((dsname, ds))
+            estimate_lgbm_backward_select((dsname, ds))
             # estimate_knn_forward_select((dsname, ds))
-            estimate_knn_backward_select((dsname, ds))
+            # estimate_knn_backward_select((dsname, ds))
         except Exception as e:
             print(e)

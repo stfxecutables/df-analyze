@@ -282,6 +282,8 @@ class DfAnalyzeModel(ABC):
         return self.tuned_model.score(X, y)
 
     def cv_score(self, X: DataFrame, y: Series) -> float:
+        # NOTE: VERY IMPORTANT: This must remain single-threaded! As it is
+        # used in stepwise selection in the parallel loop
         if self.is_classifier:
             ss = StratifiedKFold(n_splits=5)
         else:

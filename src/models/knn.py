@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from logging import ERROR
+
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
 from typing import Any, Mapping, Type
 
-from optuna import Trial
+import optuna
+from optuna import Study, Trial
+from pandas import DataFrame, Series
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
@@ -30,7 +34,7 @@ class KNNEstimator(DfAnalyzeModel):
         self.grid = {
             "n_neighbors": [1, 5, 10, 25, 50],
             "weights": ["uniform", "distance"],
-            "metric": ["cosine", "l1", "l2", "correlation"],
+            "metric": ["cosine", "l2", "correlation"],
         }
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
@@ -42,6 +46,21 @@ class KNNEstimator(DfAnalyzeModel):
             weights=trial.suggest_categorical("weights", ["uniform", "distance"]),
             metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "correlation"]),
         )
+
+    def htune_optuna(
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        n_trials: int = 100,
+        n_jobs: int = -1,
+        verbosity: int = optuna.logging.ERROR,
+    ) -> Study:
+        if self.grid is None:
+            raise ValueError("Impossible!")
+        n_hp = 1
+        for opts in self.grid.values():
+            n_hp *= len(opts)
+        return super().htune_optuna(X_train, y_train, n_trials, n_hp, verbosity)
 
     # def optuna_objective(
     #     self, X_train: DataFrame, y_train: DataFrame, n_folds: int = 3
