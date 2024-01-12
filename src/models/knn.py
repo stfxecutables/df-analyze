@@ -60,7 +60,9 @@ class KNNEstimator(DfAnalyzeModel):
         n_hp = 1
         for opts in self.grid.values():
             n_hp *= len(opts)
-        return super().htune_optuna(X_train, y_train, n_trials, n_hp, verbosity)
+        return super().htune_optuna(
+            X_train, y_train, n_trials=n_hp, n_jobs=n_jobs, verbosity=verbosity
+        )
 
     # def optuna_objective(
     #     self, X_train: DataFrame, y_train: DataFrame, n_folds: int = 3
