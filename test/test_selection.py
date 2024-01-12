@@ -23,6 +23,7 @@ from src.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
+from src.nonsense import silence_spam
 from src.selection.embedded import embed_select_features
 from src.selection.filter import (
     FilterSelected,
@@ -152,43 +153,68 @@ def estimate_select(
     return minutes
 
 
-def estimate_linear_forward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "linear_forward_select_runtime_estimates.txt"
+def estimate_linear_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"linear_forward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.Linear
-    estimate_select(dataset, file=file, forward=True, model=model)
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
 
 
-def estimate_linear_backward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "linear_backward_select_runtime_estimates.txt"
+def estimate_linear_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"linear_backward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.Linear
-    estimate_select(dataset, file=file, forward=False, model=model)
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
-def estimate_lgbm_forward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "lgbm_forward_select_runtime_estimates.txt"
+def estimate_lgbm_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"lgbm_forward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.LGBM
-    estimate_select(dataset, file=file, forward=True, model=model)
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
 
 
-def estimate_lgbm_backward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "lgbm_backward_select_runtime_estimates.txt"
+def estimate_lgbm_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"lgbm_backward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.LGBM
-    estimate_select(dataset, file=file, forward=False, model=model)
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
-def estimate_knn_forward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "knn_forward_select_runtime_estimates.txt"
+def estimate_knn_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"knn_forward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.KNN
-    estimate_select(dataset, file=file, forward=True, model=model)
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
 
 
-def estimate_knn_backward_select(dataset: tuple[str, TestDataset]) -> None:
-    file = RUNTIMES / "knn_backward_select_runtime_estimates.txt"
+def estimate_knn_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"knn_backward_select_runtime_estimates{extra}.txt"
     model = WrapperSelectionModel.KNN
-    estimate_select(dataset, file=file, forward=False, model=model)
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
 def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+    silence_spam()
     dsname, ds = dataset
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
@@ -217,6 +243,7 @@ def do_lgbm_forward_select(dataset: tuple[str, TestDataset]) -> None:
 
 
 def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+    silence_spam()
     dsname, ds = dataset
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
@@ -377,9 +404,9 @@ if __name__ == "__main__":
         # do_forward_select((dsname, ds))
         try:
             # estimate_linear_backward_select((dsname, ds))
-            # estimate_linear_forward_select((dsname, ds))
+            estimate_linear_forward_select((dsname, ds), subsample=False)
             # estimate_lgbm_forward_select((dsname, ds))
-            estimate_lgbm_backward_select((dsname, ds))
+            # estimate_lgbm_backward_select((dsname, ds))
             # estimate_knn_forward_select((dsname, ds))
             # estimate_knn_backward_select((dsname, ds))
         except Exception as e:
