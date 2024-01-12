@@ -13,6 +13,7 @@ data/testing/__FULL*
 test_results
 
 results/reports
+runtimes/*.txt
 
 __cache__
 
