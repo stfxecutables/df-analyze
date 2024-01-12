@@ -28,11 +28,13 @@ def cohens_d(g0: Union[ndarray, Series], g1: Union[ndarray, Series]) -> float:
     s_pool = np.sqrt((n0 * s0**2 + n1 * s1**2) / (n0 + n1))
     if s_pool == 0:
         return np.nan
-    return (m1 - m0) / s_pool
+    return float(m1 - m0) / s_pool
 
 
 def auroc(x: Union[ndarray, Series], y_bin: Union[ndarray, Series]) -> float:
-    return roc_auc_score(y_bin, x, multi_class="raise")
+    raw = float(roc_auc_score(y_bin, x, multi_class="raise"))
+    normed = 0.5 + abs(0.5 - raw)
+    return normed
 
 
 def relative_entropy(x: Union[ndarray, Series], y: Union[ndarray, Series]) -> float:

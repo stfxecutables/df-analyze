@@ -167,8 +167,9 @@ class ClassifierScorer(RandEnum, Enum):
             y_prob = y_prob[:, 1]
         raws = {
             ClassifierScorer.Accuracy.value: accuracy_score(y_true, y_pred),
-            ClassifierScorer.AUROC.value: roc_auc_score(
-                y_true, y_prob, average="macro", multi_class="ovr"
+            ClassifierScorer.AUROC.value: 0.5
+            + np.abs(
+                0.5 - float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
             ),
             ClassifierScorer.Sensitivity.value: sensitivity(y_true, y_pred),
             ClassifierScorer.Specificity.value: specificity(y_true, y_pred),
