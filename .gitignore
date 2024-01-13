@@ -14,6 +14,7 @@ test_results
 
 results/reports
 runtimes/*.txt
+*runtime*txt
 
 __cache__
 
