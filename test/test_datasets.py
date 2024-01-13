@@ -8,10 +8,8 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-from contextlib import nullcontext
 
 import numpy as np
-import pytest
 
 from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 

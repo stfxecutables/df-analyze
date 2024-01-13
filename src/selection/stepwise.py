@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Literal, Optional, Type, Union
 
 from joblib import Parallel, delayed
 
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from math import ceil
 from time import perf_counter
-from typing import Any, Literal, Type, Union
+from typing import Literal, Type, Union
 
 import numpy as np
 from joblib import Parallel, delayed
@@ -22,9 +22,8 @@ from src.enumerables import WrapperSelectionModel
 from src.models.base import DfAnalyzeModel
 from src.models.knn import KNNClassifier, KNNRegressor
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
-from src.models.linear import ElasticNetRegressor, SGDClassifierSelector, SGDRegressorSelector
+from src.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from src.preprocessing.prepare import PreparedData
-from src.selection.filter import FilterSelected
 
 
 def get_dfanalyze_score(

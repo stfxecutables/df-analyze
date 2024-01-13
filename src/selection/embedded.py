@@ -14,7 +14,6 @@ from src.enumerables import EmbedSelectionModel
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from src.models.linear import SGDClassifierSelector, SGDRegressorSelector
 from src.preprocessing.prepare import PreparedData
-from src.selection.filter import FilterSelected
 from src.testing.datasets import TestDataset
 
 
@@ -62,13 +61,11 @@ class EmbedSelected:
 
 def embed_select_features(
     prep_train: PreparedData,
-    filtered: Optional[FilterSelected],
     options: ProgramOptions,
 ) -> Optional[EmbedSelected]:
     ...
     y = prep_train.y
-    X = prep_train.X
-    X_train = X.loc[:, filtered.selected] if filtered is not None else X
+    X_train = prep_train.X
     is_cls = options.is_classification
 
     if options.embed_select is None:

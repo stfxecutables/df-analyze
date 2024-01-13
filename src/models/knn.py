@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from logging import ERROR
 
 # fmt: off
 import sys  # isort: skip

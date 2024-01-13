@@ -94,9 +94,9 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     # phases of feature selection: filter selection, and model-based
     # selection, wher model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
-    # selected = model_select_features(prep_train, filtered, options)
-    model_selected = ModelSelected.random(ds)
-    prog_dirs.save_model_selection_reports(model_selected)
+    selected = model_select_features(prep_train, filtered, options)
+    selected = ModelSelected.random(ds)
+    prog_dirs.save_model_selection_reports(selected)
 
     silence_spam()
     eval_results = evaluate_tuned(

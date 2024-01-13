@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Type, Union
+from typing import Any, Callable, Mapping, Optional, Type, Union
 
 import numpy as np
 import optuna

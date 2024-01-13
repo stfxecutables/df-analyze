@@ -32,14 +32,11 @@ def model_select_features(
     filtered: FilterSelected,
     options: ProgramOptions,
 ) -> ModelSelected:
-    ...
     embed_selected = None
     wrap_selected = None
     try:
         if options.embed_select is not None:
-            embed_selected = embed_select_features(
-                prep_train=prep_train, filtered=filtered, options=options
-            )
+            embed_selected = embed_select_features(prep_train=prep_train, options=options)
     except Exception as e:
         warn(
             f"Got error when attempting embedded feature selection:\n{e}\n"
@@ -48,9 +45,7 @@ def model_select_features(
 
     try:
         if options.wrapper_select is not None:
-            wrap_selected = wrap_select_features(
-                prep_train=prep_train, filtered=filtered, options=options
-            )
+            wrap_selected = wrap_select_features(prep_train=prep_train, options=options)
     except Exception as e:
         warn(
             f"Got error when attempting wrapped-based feature selection:\n{e}\n"

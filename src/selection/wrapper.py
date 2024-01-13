@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from src.enumerables import ClsScore, RegScore, WrapperSelection, WrapperSelectionModel
 from src.preprocessing.prepare import PreparedData
-from src.selection.filter import FilterSelected
 from src.selection.stepwise import stepwise_select
 from src.testing.datasets import TestDataset
 
@@ -65,12 +64,12 @@ class WrapperSelected:
 
 
 def wrap_select_features(
-    prep_train: PreparedData, filtered: FilterSelected, options: ProgramOptions
+    prep_train: PreparedData, options: ProgramOptions
 ) -> Optional[WrapperSelected]:
     if options.wrapper_select is None:
         return None
 
-    result = stepwise_select(prep_train=prep_train, filtered=filtered, options=options)
+    result = stepwise_select(prep_train=prep_train, options=options)
     if result is None:
         return None
     selected, scores = result

@@ -33,7 +33,6 @@ from src.selection.filter import (
 from src.selection.stepwise import StepwiseSelector, stepwise_select
 from src.testing.datasets import (
     ALL_DATASETS,
-    FAST_INSPECTION,
     TestDataset,
     fast_ds,
     med_ds,

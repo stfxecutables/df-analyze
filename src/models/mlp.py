@@ -16,7 +16,6 @@ import warnings
 from copy import deepcopy
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Mapping,
