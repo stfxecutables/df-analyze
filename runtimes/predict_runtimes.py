@@ -75,10 +75,59 @@ if __name__ == "__main__":
     dfs = []
     for file in FILES:
         df = pd.read_csv(file, sep=r" +", engine="python")
-        df["file"] = file.stem.replace("select_runtime_", "")
-        y = df["minutes"]
+        fname = file.stem.replace("select_runtime_", "").replace("_estimates", "")
+        splits = fname.split("_")
+        model, direction = splits[:2]
+        extra = "no" if "no_subsample" in fname else "yes"
+        df.insert(0, "subsample", extra)
+        df.insert(0, "direction", direction)
+        df.insert(0, "model", model)
+        df["dsname"] = df["dsname"].apply(lambda s: s[:20])
         print(df.round(3).sort_values(by="minutes", ascending=False).to_markdown(tablefmt="simple"))
         dfs.append(df)
     df = pd.concat(dfs, axis=0)
-    largest = df.groupby("file").apply(lambda grp: grp.nlargest(5, "minutes")).drop(columns="file")
-    print(largest.to_markdown(tablefmt="simple"))
+    largest = (
+        df.groupby(["model", "direction", "subsample"])
+        .apply(lambda grp: grp.nlargest(5, "minutes"))
+        .reset_index(drop=True)
+        .sort_values(
+            by=["model", "direction", "subsample", "minutes"], ascending=[True, False, False, False]
+        )
+    )
+    smallest = (
+        df.groupby(["model", "direction", "subsample"])
+        .apply(lambda grp: grp.nsmallest(5, "minutes"))
+        .reset_index(drop=True)
+        .sort_values(
+            by=["model", "direction", "subsample", "minutes"], ascending=[True, False, False, False]
+        )
+    )
+    idx_keep = df["minutes"] != np.inf
+
+    desc = (
+        df.loc[idx_keep]
+        .drop(columns=["dsname", "N", "N_sub", "p", "n_iter"])
+        .groupby(["model", "direction", "subsample"])
+        .describe(percentiles=[0.05, 0.25, 0.75, 0.95])
+        .reset_index()
+        .drop(columns=[("minutes", "count"), ("minutes", "std")])
+        .round(0)
+    )
+    desc.columns = [
+        "model",
+        "direction",
+        "subsample",
+        "mean",
+        "min",
+        "5%",
+        "25%",
+        "50%",
+        "75%",
+        "95%",
+        "max",
+    ]
+    desc = desc.map(lambda x: int(x) if isinstance(x, float) else x)
+    print(largest.to_markdown(tablefmt="simple", index=False))
+    print(smallest.to_markdown(tablefmt="simple", index=False))
+    print(desc.to_markdown(tablefmt="simple", index=False))
+    print(desc)
