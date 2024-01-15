@@ -153,7 +153,7 @@ if __name__ == "__main__":
     for dsname, ds in FAST_INSPECTION:
         if "kdd" in dsname.lower():
             continue  # all slow as hell
-        if dsname.lower() <= "primary-tumor":
+        if dsname.lower() < "student_dropout":
             continue
 
         print("=" * 79)

@@ -429,7 +429,7 @@ class MLPEstimator(DfAnalyzeModel):
             y_train=y_train,
             n_trials=n_trials,
             verbosity=verbosity,
-            n_jobs=1,
+            n_jobs=2,
         )
 
     # def htune_eval(
