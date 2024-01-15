@@ -130,8 +130,8 @@ NETWORK_MAX_WIDTH = 512
 NETWORK_MIN_WIDTH = 32
 BATCH_SIZE = 128
 
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
+# torch.set_num_threads(1)
+# torch.set_num_interop_threads(1)
 
 # silence_spam()
 warnings.filterwarnings("ignore", category=UserWarning, message="Lazy modules")
