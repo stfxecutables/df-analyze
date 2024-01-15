@@ -41,24 +41,25 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     options = ProgramOptions.random(ds)
     options.feat_select = (
         FeatureSelection.Filter,
-        FeatureSelection.Wrapper,
-        FeatureSelection.Embedded,
+        # FeatureSelection.Wrapper,
+        # FeatureSelection.Embedded,
     )
-    options.embed_select = EmbedSelectionModel.LGBM
-    # options.embed_select = None
+    # options.embed_select = EmbedSelectionModel.LGBM
+    options.embed_select = None
     options.wrapper_model = WrapperSelectionModel.Linear
-    options.wrapper_select = WrapperSelection.StepUp
+    # options.wrapper_select = WrapperSelection.StepUp
+    options.wrapper_select = None
     options.n_feat_wrapper = 10
 
     if ds.is_classification:
         # options.classifiers = tuple([x for x in DfAnalyzeClassifier])
         options.classifiers = (
             DfAnalyzeClassifier.Dummy,
-            DfAnalyzeClassifier.KNN,
-            DfAnalyzeClassifier.SGD,
-            DfAnalyzeClassifier.LR,
+            # DfAnalyzeClassifier.KNN,
+            # DfAnalyzeClassifier.SGD,
+            # DfAnalyzeClassifier.LR,
             DfAnalyzeClassifier.MLP,
-            DfAnalyzeClassifier.LGBM,
+            # DfAnalyzeClassifier.LGBM,
             # DfAnalyzeClassifier.SVM,
         )
         # options.classifiers = (DfAnalyzeClassifier.MLP,)
@@ -66,11 +67,11 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
         options.regressors = tuple([x for x in DfAnalyzeRegressor])
         options.regressors = (
             DfAnalyzeRegressor.Dummy,
-            DfAnalyzeRegressor.KNN,
-            DfAnalyzeRegressor.SGD,
-            DfAnalyzeRegressor.ElasticNet,
+            # DfAnalyzeRegressor.KNN,
+            # DfAnalyzeRegressor.SGD,
+            # DfAnalyzeRegressor.ElasticNet,
             DfAnalyzeRegressor.MLP,
-            DfAnalyzeRegressor.LGBM,
+            # DfAnalyzeRegressor.LGBM,
             # DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
