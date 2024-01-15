@@ -18,13 +18,14 @@ from src.models.base import DfAnalyzeModel
 
 
 class DummyRegressor(DfAnalyzeModel):
+    shortname = "dummy"
+    longname = "Dummy Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = SklearnDummyRegressor
         self.fixed_args = dict()
-        self.shortname = "dummy"
-        self.longname = "Dummy Regressor"
         self.grid = {
             "strategy": ["mean", "median"],
         }
@@ -34,18 +35,21 @@ class DummyRegressor(DfAnalyzeModel):
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
-            strategy=trial.suggest_categorical("strategy", ["mean", "median", "quantile"]),
+            strategy=trial.suggest_categorical(
+                "strategy", ["mean", "median", "quantile"]
+            ),
         )
 
 
 class DummyClassifier(DfAnalyzeModel):
+    shortname = "dummy"
+    longname = "Dummy Classifier"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = SklearnDummyClassifier
         self.fixed_args = dict()
-        self.shortname = "dummy"
-        self.longname = "Dummy Classifier"
         self.grid = {"strategy": ["most_frequent", "prior", "stratified", "uniform"]}
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:

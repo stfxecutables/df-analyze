@@ -1,5 +1,6 @@
 import warnings
 from typing import Any, Callable, Union
+from warnings import warn
 
 import numpy as np
 from numpy import ndarray
@@ -19,6 +20,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.utils import assert_all_finite
 
 
 def sensitivity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
@@ -36,7 +38,9 @@ def specificity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) 
 def silent_scorer(f: Callable) -> Callable:
     def silent(*args, **kwargs) -> Any:
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="Scoring failed", category=UserWarning)
+            warnings.filterwarnings(
+                "ignore", message="Scoring failed", category=UserWarning
+            )
             try:
                 return f(*args, **kwargs)
             except ValueError as e:
@@ -46,6 +50,54 @@ def silent_scorer(f: Callable) -> Callable:
                     return np.nan
 
     return silent
+
+
+def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
+    try:
+        assert_all_finite(y_true)
+        assert_all_finite(y_prob)
+    except ValueError:
+        warn(
+            "Found non-finite values (infinity or NaN) in predicted "
+            "probabilities. This will cause errors when computing the "
+            "AUROC performance. Attempting to drop NaN or infinite "
+            "samples as a workaround."
+        )
+        idx_keep = ~np.isnan(y_prob).any(axis=1)
+        idx_keep = idx_keep & np.isfinite(y_prob).any(axis=1)
+        y_true = y_true.loc[idx_keep]
+        y_prob = y_prob[idx_keep]
+
+    try:
+        assert_all_finite(y_true)
+        assert_all_finite(y_prob)
+    except ValueError:
+        warn(
+            "Could not remove non-finite values from predicted "
+            "probabilities. This might happen with a badly tuned model "
+            "(e.g. SGDClassifier or SGDRegressor) which might output NaN or "
+            "infinity due to internal sigmoids or interactions with a bad "
+            "learning rate. Will return AUROC=0.5 in this case."
+        )
+        return 0.5
+
+    try:
+        if y_prob.ndim == 1:
+            y_prob = np.stack([y_prob, 1 - y_prob], axis=1)
+        # if y_prob.shape[1] == 2:
+        #     y_prob = y_prob[:, 1].reshape(-1, 1)
+        raw = float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
+
+    except Exception as e:
+        warn(
+            "Could not compute AUROC for given inputs:\n"
+            f"y_true: {type(y_true)} shape={y_true.shape}\n{y_true}\n"
+            f"y_prob: {type(y_prob)} shape={y_prob.shape}\n{y_prob}\n"
+            f"Details:\n{e}"
+        )
+        return 0.5
+
+    return 0.5 + abs(0.5 - raw)
 
 
 accuracy_scorer = make_scorer(accuracy_score)

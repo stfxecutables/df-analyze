@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+import traceback
+
 import matplotlib as mpl
 
 mpl.rcParams["axes.formatter.useoffset"] = False
@@ -200,6 +202,9 @@ def get_T0(
 
 
 class MLPEstimator(DfAnalyzeModel):
+    shortname = "mlp"
+    longname = "Multilayer Perceptron"
+
     def __init__(self, num_classes: int, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = num_classes > 1
@@ -207,6 +212,8 @@ class MLPEstimator(DfAnalyzeModel):
         self.model: Union[NeuralNetClassifier, NeuralNetRegressor]
         self.fixed_args = dict(
             module=SkorchMLP,
+            # https://github.com/skorch-dev/skorch/issues/477#issuecomment-493660800
+            iterator_train__drop_last=True,
             module__num_classes=num_classes,
             criterion=CrossEntropyLoss if self.is_classifier else HuberLoss,
             optimizer=AdamW,
@@ -216,8 +223,6 @@ class MLPEstimator(DfAnalyzeModel):
             device="cpu",
             verbose=0,
         )
-        self.shortname = "mlp"
-        self.longname = "Multilayer Perceptron"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -280,7 +285,15 @@ class MLPEstimator(DfAnalyzeModel):
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
             self.model = self.model_cls(**kwargs)
         X, y = self._to_torch(X_train, y_train)
-        self.model.fit(X, y)
+        try:
+            self.model.fit(X, y)
+        except ValueError as e:
+            raise RuntimeError(
+                "Got exception when trying to fit MLP.\n"
+                f"X={type(X)}, shape={X.shape}\n"
+                f"y={type(y)}, shape={y.shape}\n"
+                f"Additional details: {traceback.format_exc()}"
+            ) from e
 
     def refit_tuned(
         self, X: DataFrame, y: Series, tuned_args: Optional[dict[str, Any]] = None
@@ -302,7 +315,9 @@ class MLPEstimator(DfAnalyzeModel):
 
     def tuned_predict(self, X: DataFrame) -> ndarray:
         if self.tuned_model is None:
-            raise RuntimeError("Need to call `model.tune()` before calling `.tuned_predict()`")
+            raise RuntimeError(
+                "Need to call `model.tune()` before calling `.tuned_predict()`"
+            )
         Xt = self._to_torch(X)
         return self.tuned_model.predict(Xt)
 
@@ -316,7 +331,9 @@ class MLPEstimator(DfAnalyzeModel):
 
     def predict_proba(self, X: DataFrame) -> ndarray:
         if self.tuned_model is None:
-            raise RuntimeError("Need to call `model.tune()` before calling `.predict_proba()`")
+            raise RuntimeError(
+                "Need to call `model.tune()` before calling `.predict_proba()`"
+            )
         Xt = self._to_torch(X)
         return self.tuned_model.predict_proba(Xt)
 
@@ -332,7 +349,9 @@ class MLPEstimator(DfAnalyzeModel):
             raise RuntimeError("Need to tune model before calling `.tuned_score()`")
         return self.tuned_model.score(Xt, yt)
 
-    def _to_model_args(self, optuna_args: dict[str, Any], X_train: DataFrame) -> dict[str, Any]:
+    def _to_model_args(
+        self, optuna_args: dict[str, Any], X_train: DataFrame
+    ) -> dict[str, Any]:
         final_args: dict[str, Any] = deepcopy(optuna_args)
         restarts = final_args.pop("restarts")
         early = final_args.pop("early_stopping")

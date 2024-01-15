@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path
@@ -22,14 +21,15 @@ from src.models.base import DfAnalyzeModel
 
 
 class KNNEstimator(DfAnalyzeModel):
+    shortname = "knn"
+    longname = "K-Neighbours Estimator"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.needs_calibration = False
         self.fixed_args = dict(n_jobs=1)
         self.model_cls: Type[Any] = type(None)
-        self.shortname = "knn"
-        self.longname = "K-Neighbours Estimator"
         self.grid = {
             "n_neighbors": [1, 5, 10, 25, 50],
             "weights": ["uniform", "distance"],
@@ -43,7 +43,9 @@ class KNNEstimator(DfAnalyzeModel):
         return dict(
             n_neighbors=trial.suggest_int("n_neighbors", 1, 50, step=1),
             weights=trial.suggest_categorical("weights", ["uniform", "distance"]),
-            metric=trial.suggest_categorical("metric", ["cosine", "l1", "l2", "correlation"]),
+            metric=trial.suggest_categorical(
+                "metric", ["cosine", "l1", "l2", "correlation"]
+            ),
         )
 
     def htune_optuna(
@@ -118,15 +120,19 @@ class KNNEstimator(DfAnalyzeModel):
 
 
 class KNNClassifier(KNNEstimator):
+    shortname = "knn"
+    longname = "K-Neighbours Classifier"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = KNeighborsClassifier
-        self.shortname = "knn"
-        self.longname = "K-Neighbours Classifier"
 
 
 class KNNRegressor(KNNEstimator):
+    shortname = "knn"
+    longname = "K-Neighbours Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False

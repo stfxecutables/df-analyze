@@ -29,7 +29,6 @@ class ModelSelected:
 
 def model_select_features(
     prep_train: PreparedData,
-    filtered: FilterSelected,
     options: ProgramOptions,
 ) -> ModelSelected:
     embed_selected = None

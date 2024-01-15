@@ -60,13 +60,14 @@ class SVMEstimator(DfAnalyzeModel):
 
 
 class SVMClassifier(SVMEstimator):
+    shortname = "svm"
+    longname = "Support Vector Classifier"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.needs_calibration = True
         self.model_cls = SVC
-        self.shortname = "svm"
-        self.longname = "Support Vector Classifier"
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
@@ -76,9 +77,10 @@ class SVMClassifier(SVMEstimator):
 
 
 class SVMRegressor(SVMEstimator):
+    shortname = "svm"
+    longname = "Support Vector Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = SVR
-        self.shortname = "svm"
-        self.longname = "Support Vector Regressor"

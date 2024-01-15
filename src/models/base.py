@@ -71,6 +71,9 @@ class EarlyStopping:
 
 
 class DfAnalyzeModel(ABC):
+    shortname: str = ""
+    longname: str = ""
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__()
         self.is_classifier: bool = True
@@ -84,11 +87,11 @@ class DfAnalyzeModel(ABC):
         self.tuned_args: Optional[dict[str, Any]] = None
         self.tuned_model: Optional[Any] = None
         self.is_refit = False
-        self.shortname = ""
-        self.longname = ""
 
     @abstractmethod
-    def model_cls_args(self, full_args: dict[str, Any]) -> tuple[Type[Any], dict[str, Any]]:
+    def model_cls_args(
+        self, full_args: dict[str, Any]
+    ) -> tuple[Type[Any], dict[str, Any]]:
         """Allows for conditioning the model based on args (e.g. SVC vs. LinearSVC
         depending on kernel, and also subsequent removal or addition of necessary
         args because of this.
@@ -181,7 +184,9 @@ class DfAnalyzeModel(ABC):
             self.model = self.model_cls_args(kwargs)[0](**kwargs)
         self.model.fit(X_train, y_train)
 
-    def refit_tuned(self, X: DataFrame, y: Series, tuned_args: Optional[Mapping] = None) -> None:
+    def refit_tuned(
+        self, X: DataFrame, y: Series, tuned_args: Optional[Mapping] = None
+    ) -> None:
         tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
@@ -192,7 +197,9 @@ class DfAnalyzeModel(ABC):
         self.tuned_model = self.model_cls_args(kwargs)[0](**kwargs)
 
         if self.needs_calibration:
-            self.tuned_model = CVCalibrate(self.tuned_model, method="sigmoid", cv=5, n_jobs=5)
+            self.tuned_model = CVCalibrate(
+                self.tuned_model, method="sigmoid", cv=5, n_jobs=5
+            )
 
         self.tuned_model.fit(X, y)
 
@@ -224,9 +231,14 @@ class DfAnalyzeModel(ABC):
         if self.is_classifier:
             probs_test = self.predict_proba(X_test)
             probs_train = self.predict_proba(X_train)
+
             scorer = ClassifierScorer
-            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test, y_prob=probs_test)
-            train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train, y_prob=probs_train)
+            holdout_scores = scorer.get_scores(
+                y_true=y_test, y_pred=preds_test, y_prob=probs_test
+            )
+            train_scores = scorer.get_scores(
+                y_true=y_train, y_pred=preds_train, y_prob=probs_train
+            )
         else:
             scorer = RegressorScorer
             holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test)
@@ -249,7 +261,9 @@ class DfAnalyzeModel(ABC):
                 probs_test = self.predict_proba(X=df_test)
                 scorer = ClassifierScorer
                 scores.append(
-                    scorer.get_scores(y_true=targ_test, y_pred=preds_test, y_prob=probs_test)
+                    scorer.get_scores(
+                        y_true=targ_test, y_pred=preds_test, y_prob=probs_test
+                    )
                 )
             else:
                 scorer = RegressorScorer
@@ -317,7 +331,9 @@ class DfAnalyzeModel(ABC):
 
     def tuned_predict(self, X: DataFrame) -> Series:
         if self.tuned_model is None:
-            raise RuntimeError("Need to call `model.tune()` before calling `.tuned_predict()`")
+            raise RuntimeError(
+                "Need to call `model.tune()` before calling `.tuned_predict()`"
+            )
         return self.tuned_model.predict(X)
 
     def wrapper_select(
@@ -343,7 +359,9 @@ class DfAnalyzeModel(ABC):
         return self.tuned_model.predict_proba(X)
 
 
-def get_n_select(X_train: DataFrame, n_feat: Optional[Union[float, int]] = None) -> Optional[int]:
+def get_n_select(
+    X_train: DataFrame, n_feat: Optional[Union[float, int]] = None
+) -> Optional[int]:
     n_features = X_train.shape[1]
     msg = (
         "`n_feat` must be either None, an integer in [1, n_features - 1] "

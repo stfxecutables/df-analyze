@@ -21,13 +21,14 @@ from src.models.base import DfAnalyzeModel
 
 
 class ElasticNetRegressor(DfAnalyzeModel):
+    shortname = "elastic"
+    longname = "ElasticNet Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = ElasticNet
         self.fixed_args = dict(max_iter=2000)
-        self.shortname = "elastic"
-        self.longname = "ElasticNet Regressor"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -40,14 +41,15 @@ class ElasticNetRegressor(DfAnalyzeModel):
 
 
 class LRClassifier(DfAnalyzeModel):
+    shortname = "lr"
+    longname = "Logistic Regression"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = LogisticRegression
         self.fixed_args = dict(max_iter=2000, penalty="elasticnet", solver="saga")
         self.default_args = dict(l1_ratio=0.5)
-        self.shortname = "lr"
-        self.longname = "Logistic Regression"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -60,13 +62,14 @@ class LRClassifier(DfAnalyzeModel):
 
 
 class SGDClassifier(DfAnalyzeModel):
+    shortname = "sgd"
+    longname = "SGD Linear Classifer"
+
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = SklearnSGDClassifier
         self.default_args = dict(learning_rate="adaptive", penalty="l2", eta0=3e-4)
-        self.shortname = "sgd"
-        self.longname = "SGD Linear Classifer"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -80,13 +83,14 @@ class SGDClassifier(DfAnalyzeModel):
 
 
 class SGDRegressor(DfAnalyzeModel):
+    shortname = "sgd"
+    longname = "SGD Linear Regressor"
+
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = SklearnSGDRegressor
         self.default_args = dict(eta0=3e-4)
-        self.shortname = "sgd"
-        self.longname = "SGD Linear Regressor"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -103,13 +107,14 @@ class SGDRegressor(DfAnalyzeModel):
 
 
 class SGDClassifierSelector(DfAnalyzeModel):
+    shortname = "sgd-select"
+    longname = "SGD Linear Selector"
+
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = SklearnSGDClassifier
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
-        self.shortname = "sgd-select"
-        self.longname = "SGD Linear Selector"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -125,13 +130,14 @@ class SGDClassifierSelector(DfAnalyzeModel):
 
 
 class SGDRegressorSelector(DfAnalyzeModel):
+    shortname = "sgd-select"
+    longname = "SGD Linear Selector"
+
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.model_cls = SklearnSGDRegressor
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
-        self.shortname = "sgd-select"
-        self.longname = "SGD Linear Selector"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -140,7 +146,12 @@ class SGDRegressorSelector(DfAnalyzeModel):
         return dict(
             loss=trial.suggest_categorical(
                 "loss",
-                ["squared_error", "huber", "epsilon_insensitive", "squared_epsilon_insensitive"],
+                [
+                    "squared_error",
+                    "huber",
+                    "epsilon_insensitive",
+                    "squared_epsilon_insensitive",
+                ],
             ),
             eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
             alpha=trial.suggest_float("alpha", 1e-6, 1.0, log=True),

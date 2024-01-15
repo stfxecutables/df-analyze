@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from random import randint, uniform
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
+import jsonpickle
 import numpy as np
 from pandas import DataFrame, Series
 from sklearn.feature_selection import SelectFromModel
@@ -41,6 +43,13 @@ class EmbedSelected:
             f"{scores.to_markdown(floatfmt='0.3e')}"
         )
         return text
+
+    def to_json(self) -> str:
+        return str(jsonpickle.encode(self))
+
+    @staticmethod
+    def from_json(path: Path) -> EmbedSelected:
+        return cast(EmbedSelected, jsonpickle.decode(path.read_text()))
 
     @staticmethod
     def random(ds: TestDataset) -> EmbedSelected:

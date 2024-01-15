@@ -15,13 +15,20 @@ from pathlib import Path
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions
-from src.enumerables import DfAnalyzeClassifier, DfAnalyzeRegressor
+from src.enumerables import (
+    DfAnalyzeClassifier,
+    DfAnalyzeRegressor,
+    EmbedSelectionModel,
+    FeatureSelection,
+    WrapperSelection,
+    WrapperSelectionModel,
+)
 from src.hypertune import evaluate_tuned
 from src.nonsense import silence_spam
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
-from src.selection.models import ModelSelected
+from src.selection.models import ModelSelected, model_select_features
 from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -32,27 +39,38 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     if dsname == "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc":
         return  # target undersampled levels
     options = ProgramOptions.random(ds)
+    options.feat_select = (
+        FeatureSelection.Filter,
+        FeatureSelection.Wrapper,
+        FeatureSelection.Embedded,
+    )
+    options.embed_select = EmbedSelectionModel.LGBM
+    # options.embed_select = None
+    options.wrapper_model = WrapperSelectionModel.Linear
+    options.wrapper_select = WrapperSelection.StepUp
+    options.n_feat_wrapper = 10
+
     if ds.is_classification:
         # options.classifiers = tuple([x for x in DfAnalyzeClassifier])
         options.classifiers = (
-            DfAnalyzeClassifier.Dummy,
-            DfAnalyzeClassifier.KNN,
-            DfAnalyzeClassifier.SGD,
+            # DfAnalyzeClassifier.Dummy,
+            # DfAnalyzeClassifier.KNN,
+            # DfAnalyzeClassifier.SGD,
             # DfAnalyzeClassifier.LR,
-            # DfAnalyzeClassifier.MLP,
-            DfAnalyzeClassifier.LGBM,
+            DfAnalyzeClassifier.MLP,
+            # DfAnalyzeClassifier.LGBM,
             # DfAnalyzeClassifier.SVM,
         )
         # options.classifiers = (DfAnalyzeClassifier.MLP,)
     else:
         options.regressors = tuple([x for x in DfAnalyzeRegressor])
         options.regressors = (
-            DfAnalyzeRegressor.Dummy,
-            DfAnalyzeRegressor.KNN,
-            DfAnalyzeRegressor.SGD,
-            DfAnalyzeRegressor.ElasticNet,
-            # DfAnalyzeRegressor.MLP,
-            DfAnalyzeRegressor.LGBM,
+            # DfAnalyzeRegressor.Dummy,
+            # DfAnalyzeRegressor.KNN,
+            # DfAnalyzeRegressor.SGD,
+            # DfAnalyzeRegressor.ElasticNet,
+            DfAnalyzeRegressor.MLP,
+            # DfAnalyzeRegressor.LGBM,
             # DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
@@ -94,9 +112,10 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     # phases of feature selection: filter selection, and model-based
     # selection, wher model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
-    selected = model_select_features(prep_train, filtered, options)
-    selected = ModelSelected.random(ds)
+    selected = model_select_features(prep_train, options)
+    # selected = ModelSelected.random(ds)
     prog_dirs.save_model_selection_reports(selected)
+    prog_dirs.save_model_selection_data(selected)
 
     silence_spam()
     eval_results = evaluate_tuned(
@@ -105,11 +124,13 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
         prep_test=prep_test,
         assoc_filtered=assoc_filtered,
         pred_filtered=pred_filtered,
-        model_selected=model_selected,
+        model_selected=selected,
         options=options,
     )
     print(eval_results.to_markdown())
     prog_dirs.save_eval_report(eval_results)
+    prog_dirs.save_eval_tables(eval_results)
+    prog_dirs.save_eval_data(eval_results)
 
     # prog_dirs.save_final_reports(results)
     # prog_dirs.save_final_tables(results)
@@ -129,14 +150,12 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 if __name__ == "__main__":
     for dsname, ds in FAST_INSPECTION:
-        if dsname in [
-            "abalone",
-            "analcatdata_marketing",
-            "ada_prior",
-            "BNG(lowbwt)",
-            "cmc",
-        ]:
+        if "kdd" in dsname.lower():
+            continue  # all slow as hell
+        if dsname.lower() != "primary-tumor":
             continue
-        if not ds.is_classification:
-            continue
+
+        print("=" * 79)
+        print(f"Testing {dsname}")
+        print("=" * 79)
         do_main((dsname, ds))

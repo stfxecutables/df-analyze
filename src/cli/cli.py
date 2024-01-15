@@ -32,7 +32,12 @@ from src._constants import (
     P_FILTER_TOTAL_DEFAULT,
     SENTINEL,
 )
-from src.analysis.univariate.associate import CatClsStats, CatRegStats, ContClsStats, ContRegStats
+from src.analysis.univariate.associate import (
+    CatClsStats,
+    CatRegStats,
+    ContClsStats,
+    ContRegStats,
+)
 from src.cli.parsing import (
     int_or_percent_parser,
     resolved_path,
@@ -257,7 +262,9 @@ class ProgramOptions(Debug):
         self.filter_pred_cls_score: ClsScore = filter_pred_cls_score
         self.filter_pred_reg_score: RegScore = filter_pred_reg_score
         self.is_classification: bool = is_classification
-        self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(sorted(set(classifiers)))
+        self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(
+            sorted(set(classifiers))
+        )
         self.regressors: Tuple[DfAnalyzeRegressor, ...] = tuple(sorted(set(regressors)))
         # self.htune: bool = htune
         # self.htune_val: ValMethod = htune_val
@@ -268,11 +275,11 @@ class ProgramOptions(Debug):
         # self.mc_repeats: int = mc_repeats
         # TODO: fix below
         self.outdir: Optional[Path] = self.get_outdir(outdir, self.datapath)
-        self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir)
         self.is_spreadsheet: bool = is_spreadsheet
         self.separator: str = separator
         self.verbosity: Verbosity = verbosity
         self.no_warn_explosion: bool = no_warn_explosion
+        self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir, self.hash())
 
         # cleanup
         if DfAnalyzeClassifier.Dummy not in self.classifiers:
@@ -459,7 +466,13 @@ class ProgramOptions(Debug):
 
     def hash(self) -> str:
         return get_hash(
-            self.__dict__, ignores=["cleaning_options", "selection_options", "comparables"]
+            self.__dict__,
+            ignores=[
+                "cleaning_options",
+                "selection_options",
+                "comparables",
+                "program_dirs",
+            ],
         )
 
     def to_json(self) -> None:
@@ -497,7 +510,9 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     if args is None:
         sentinels = {key: SENTINEL for key in parser.parse_known_args()[0].__dict__}
     else:
-        sentinels = {key: SENTINEL for key in parser.parse_known_args(args.split())[0].__dict__}
+        sentinels = {
+            key: SENTINEL for key in parser.parse_known_args(args.split())[0].__dict__
+        }
     sentinel_parser.set_defaults(**sentinels)
 
     cli_args = (
@@ -506,7 +521,9 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
         else cli_parser.parse_known_args(args.split())[0]
     )
     if cli_args.spreadsheet is None and cli_args.df is None:
-        raise ValueError("Must specify one of either `--spreadsheet [file]` or `--df [file]`.")
+        raise ValueError(
+            "Must specify one of either `--spreadsheet [file]` or `--df [file]`."
+        )
 
     sentinel_cli_args = (
         sentinel_parser.parse_known_args()[0]

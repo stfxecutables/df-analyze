@@ -19,10 +19,12 @@ from typing import (
     Tuple,
 )
 
-
 from src.cli.cli import ProgramOptions
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.saving import ProgramDirs
+from src.selection.embedded import EmbedSelected
+from src.selection.models import ModelSelected
+from src.selection.wrapper import WrapperSelected
 from src.testing.datasets import TestDataset, all_ds
 
 
@@ -76,7 +78,7 @@ def test_json(dataset: Tuple[str, TestDataset]) -> None:
             if opts.outdir is not None:
                 rmtree(opts.outdir)
             root = Path(tempdir.name)
-            opts.program_dirs = ProgramDirs.new(root=root)
+            opts.program_dirs = ProgramDirs.new(root=root, hsh=opts.hash())
             opts.to_json()
             assert root.exists()
             assert opts.program_dirs.options is not None
@@ -108,6 +110,44 @@ def test_inspection_json(dataset: Tuple[str, TestDataset]) -> None:
     assert isinstance(loaded, InspectionResults)
     for attr in inspections.__dict__:
         attr1 = getattr(inspections, attr)
+        attr2 = getattr(loaded, attr)
+        if not are_equal(attr1, attr2):
+            raise ValueError(
+                f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
+            )
+
+
+@all_ds
+def test_embed_json(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    tempdir = TemporaryDirectory()
+    selected = EmbedSelected.random(ds)
+    outdir = Path(tempdir.name)
+    outfile = outdir / "embed.json"
+    outfile.write_text(selected.to_json())
+    loaded = EmbedSelected.from_json(outfile)
+    assert isinstance(loaded, EmbedSelected)
+    for attr in selected.__dict__:
+        attr1 = getattr(selected, attr)
+        attr2 = getattr(loaded, attr)
+        if not are_equal(attr1, attr2):
+            raise ValueError(
+                f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
+            )
+
+
+@all_ds
+def test_wrap_json(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    tempdir = TemporaryDirectory()
+    selected = WrapperSelected.random(ds)
+    outdir = Path(tempdir.name)
+    outfile = outdir / "wrap.json"
+    outfile.write_text(selected.to_json())
+    loaded = WrapperSelected.from_json(outfile)
+    assert isinstance(loaded, WrapperSelected)
+    for attr in selected.__dict__:
+        attr1 = getattr(selected, attr)
         attr2 = getattr(loaded, attr)
         if not are_equal(attr1, attr2):
             raise ValueError(

@@ -4,7 +4,16 @@ from dataclasses import dataclass
 from enum import Enum, EnumMeta
 from math import isnan
 from random import choice, randint
-from typing import TYPE_CHECKING, Any, Generic, Literal, Optional, Type, TypeVar, no_type_check
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generic,
+    Literal,
+    Optional,
+    Type,
+    TypeVar,
+    no_type_check,
+)
 from warnings import warn
 
 import numpy as np
@@ -21,8 +30,10 @@ from sklearn.metrics import (
     r2_score,
     roc_auc_score,
 )
+from sklearn.utils import assert_all_finite
 
 from src.scoring import (
+    robust_auroc_score,
     sensitivity,
     specificity,
 )
@@ -164,17 +175,22 @@ class ClassifierScorer(RandEnum, Enum):
     @staticmethod
     def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
         if y_prob.shape[1] == 2:
-            y_prob = y_prob[:, 1]
+            y_prob = y_prob[:, 1].reshape(-1, 1)
+
+        if np.isnan(y_true).ravel().any():
+            raise ValueError("Impossible! NaNs in y_true.")
+        if np.isnan(y_pred).ravel().any():
+            raise ValueError("NaNs in y_pred")
+
         raws = {
             ClassifierScorer.Accuracy.value: accuracy_score(y_true, y_pred),
-            ClassifierScorer.AUROC.value: 0.5
-            + np.abs(
-                0.5 - float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
-            ),
+            ClassifierScorer.AUROC.value: robust_auroc_score(y_true, y_prob),
             ClassifierScorer.Sensitivity.value: sensitivity(y_true, y_pred),
             ClassifierScorer.Specificity.value: specificity(y_true, y_pred),
             ClassifierScorer.F1.value: f1_score(y_true, y_pred, average="macro"),
-            ClassifierScorer.BalanceAccuracy.value: balanced_accuracy_score(y_true, y_pred),
+            ClassifierScorer.BalanceAccuracy.value: balanced_accuracy_score(
+                y_true, y_pred
+            ),
         }
         return {raw: float(value) for raw, value in raws.items()}
 
@@ -395,7 +411,9 @@ class CVSplit(Enum):
         if isnan(cv):
             raise ValueError("NaN is not a valid size")
         if cv <= 0:
-            raise ValueError("`... -size` arguments (e.g. --htune-val-size) must be positive")
+            raise ValueError(
+                "`... -size` arguments (e.g. --htune-val-size) must be positive"
+            )
         if cv == 1:
             raise ValueError(
                 "'1' is not a valid value for `... -size` arguments (e.g. --htune-val-size)."

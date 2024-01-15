@@ -19,13 +19,14 @@ from src.models.base import DfAnalyzeModel
 
 
 class LightGBMEstimator(DfAnalyzeModel):
+    shortname = "lgbm"
+    longname = "LightGBM Estimator"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.fixed_args = dict(verbosity=-1)
         self.model_cls: Type[Any] = type(None)
-        self.shortname = "lgbm"
-        self.longname = "LightGBM Estimator"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -46,6 +47,9 @@ class LightGBMEstimator(DfAnalyzeModel):
 
 
 class LightGBMRFEstimator(DfAnalyzeModel):
+    shortname = "rf"
+    longname = "LightGBM Random Forest Estimator"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
@@ -53,8 +57,6 @@ class LightGBMRFEstimator(DfAnalyzeModel):
         self.fixed_args = dict(verbosity=-1)
         self.default_args = dict(bagging_freq=1, bagging_fraction=0.75)
         self.model_cls: Type[Any] = type(None)
-        self.shortname = "rf"
-        self.longname = "LightGBM Random Forest Estimator"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
@@ -76,40 +78,44 @@ class LightGBMRFEstimator(DfAnalyzeModel):
 
 
 class LightGBMClassifier(LightGBMEstimator):
+    shortname = "lgbm"
+    longname = "LightGBM Classifier"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.fixed_args = dict(verbosity=-1)
         self.model_cls = LGBMClassifier
-        self.shortname = "lgbm"
-        self.longname = "LightGBM Classifier"
 
 
 class LightGBMRegressor(LightGBMEstimator):
+    shortname = "lgbm"
+    longname = "LightGBM Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.fixed_args = dict(verbosity=-1)
         self.model_cls = LGBMRegressor
-        self.shortname = "lgbm"
-        self.longname = "LightGBM Regressor"
 
 
 class LightGBMRFClassifier(LightGBMRFEstimator):
+    shortname = "rf"
+    longname = "LightGBM Random Forest Classifier"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.fixed_args.update(dict(boosting_type="rf", verbosity=-1))
         self.model_cls = LGBMClassifier
-        self.shortname = "rf"
-        self.longname = "LightGBM Random Forest Classifier"
 
 
 class LightGBMRFRegressor(LightGBMRFEstimator):
+    shortname = "rf"
+    longname = "LightGBM Random Forest Regressor"
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = False
         self.fixed_args.update(dict(boosting_type="rf", verbosity=-1))
         self.model_cls = LGBMRegressor
-        self.shortname = "rf"
-        self.longname = "LightGBM Random Forest Regressor"

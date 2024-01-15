@@ -17,6 +17,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    overload,
 )
 from warnings import warn
 
@@ -52,10 +53,10 @@ from src.cli.cli import ProgramOptions
 
 if TYPE_CHECKING:
     from src.models.base import DfAnalyzeModel
-    from src.models.mlp import MLPEstimator
 import jsonpickle
 
 from src.enumerables import ClassifierScorer, RegressorScorer
+from src.models.mlp import MLPEstimator
 from src.preprocessing.prepare import PreparedData
 from src.scoring import (
     sensitivity,
@@ -82,6 +83,17 @@ class HtuneResult:
     params: dict[str, Any]
     score: float
 
+    def to_row(self) -> DataFrame:
+        return DataFrame(
+            {
+                "selection": self.selection,
+                "model": self.model.shortname,
+                "params": str(jsonpickle.encode(self.params)),
+                "score": self.score,
+            },
+            index=[0],
+        )
+
 
 @dataclass
 class EvaluationResults:
@@ -89,7 +101,16 @@ class EvaluationResults:
     results: list[HtuneResult]
     is_classification: bool
 
-    def wide_table(self, valset: Literal["5-fold", "trainset", "holdout"] = "5-fold") -> DataFrame:
+    def hp_table(self) -> DataFrame:
+        dfs = []
+        for res in self.results:
+            dfs.append(res.to_row())
+        df = pd.concat(dfs, axis=0, ignore_index=True)
+        return df
+
+    def wide_table(
+        self, valset: Literal["5-fold", "trainset", "holdout"] = "5-fold"
+    ) -> DataFrame:
         cols = ["trainset", "holdout", "5-fold"]
         cols.remove(valset)
         col = valset
@@ -124,26 +145,45 @@ class EvaluationResults:
         return str(jsonpickle.encode(self))
 
 
-def _get_cols(selection: str, cols: Any) -> list[str]:
+def _get_cols(
+    selection: Literal["none", "assoc", "pred", "embed", "wrap"],
+    selected: Optional[list[str]],
+) -> Union[list[str], slice]:
+    if selection == "none" or (selected is None):
+        return slice(None)
+
     if selection == "assoc":
         # dealing with level-specific metrics
-        cols = sorted(set([re.sub("__.*", "", str(c)) for c in cols]))
-
-    if isinstance(cols, (EmbedSelected, WrapperSelected)):
-        cols = cols.selected
-    return cols
+        selected = sorted(set([re.sub("__.*", "", str(c)) for c in selected]))
+    return selected
 
 
 def _get_splits(
-    prep_train: PreparedData, prep_test: PreparedData, selection: str, cols: list[str]
+    prep_train: PreparedData,
+    prep_test: PreparedData,
+    selection: str,
+    cols: Union[list[str], slice],
 ) -> tuple[DataFrame, DataFrame]:
-    if selection == "none":
+    if selection == "none" or isinstance(cols, slice):
         X_train = prep_train.X
         X_test = prep_test.X
     else:
         # clunky way to deal with renames and indicators
-        X_train = prep_train.X.filter(regex="|".join(cols))
-        X_test = prep_test.X.filter(regex="|".join(cols))
+        try:
+            X_train = prep_train.X.filter(regex="|".join(cols))
+            X_test = prep_test.X.filter(regex="|".join(cols))
+        except Exception:
+            to_drop = set()
+            for col in cols:  # may be e.g. colname__target.1
+                for c in prep_train.X.columns:
+                    cname = os.path.commonprefix([col, c])
+                    if cname == "":
+                        continue
+                    if cname in [col, c]:  # handle e.g. car1, car2
+                        to_drop.add(c)
+            X_train = prep_train.X.drop(list(to_drop))
+            X_test = prep_test.X.drop(list(to_drop))
+
     return X_train, X_test
 
 
@@ -160,23 +200,36 @@ def evaluate_tuned(
     results: list[HtuneResult]
     dfs: list[DataFrame]
 
-    selections = {
-        "none": [],
+    selections: dict[
+        Literal["none", "assoc", "pred", "embed", "wrap"], Optional[list[str]]
+    ] = {
+        "none": None,
         "assoc": assoc_filtered.selected,
         "pred": pred_filtered.selected,
-        "embed": model_selected.embed_selected,
-        "wrap": model_selected.wrap_selected,
     }
-    if selections["embed"] is None:
-        selections.pop("embed")
-    if selections["wrap"] is None:
-        selections.pop("wrap")
+    if model_selected.embed_selected is not None:
+        selections["embed"] = model_selected.embed_selected.selected
+    if model_selected.wrap_selected is not None:
+        selections["wrap"] = model_selected.wrap_selected.selected
 
     dfs, results = [], []
     for model_cls in options.models:
         for selection, cols in selections.items():
-            cols = _get_cols(selection=selection, cols=cols)
-            X_train, X_test = _get_splits(prep_train, prep_test, selection, cols)
+            selected_cols = _get_cols(selection=selection, selected=cols)
+            X_train, X_test = _get_splits(prep_train, prep_test, selection, selected_cols)
+            if X_train.empty or X_test.empty:
+                raise ValueError(
+                    f"Error when subsetting features for model '{model_cls.shortname}'. Got:\n"
+                    f"cols: {cols}\n"
+                    f"selected_cols: {selected_cols}\n"
+                )
+            if X_train.isna().any().any() or X_test.isna().any().any():
+                raise ValueError(
+                    f"Got NaNs when subsetting features for model '{model_cls.shortname}'. Got:\n"
+                    f"cols: {cols}\n"
+                    f"selected_cols: {selected_cols}\n"
+                )
+
             if model_cls is MLPEstimator:
                 model = model_cls(num_classes=prepared.num_classes)  # type: ignore
             else:
@@ -212,7 +265,7 @@ def evaluate_tuned(
                     nulls = Series(RegressorScorer.null_scores(), name="metric")
                 warn(
                     f"Got exception when trying to tune and evaluate {model.shortname}:\n{e}\n"
-                    f"{traceback.print_exc()}"
+                    f"{traceback.format_exc()}"
                 )
                 df = DataFrame(
                     {"trainset": nulls, "holdout": nulls, "5-fold": nulls},
@@ -230,7 +283,9 @@ def evaluate_tuned(
             df["selection"] = selection
             dfs.append(df)
     df = pd.concat(dfs, axis=0, ignore_index=True)
-    return EvaluationResults(df=df, results=results, is_classification=prepared.is_classification)
+    return EvaluationResults(
+        df=df, results=results, is_classification=prepared.is_classification
+    )
 
 
 @dataclass(init=True, repr=True, eq=True, frozen=True)
@@ -352,7 +407,9 @@ def package_classifier_scores(
     sens = sensitivity(y_test, y_pred)
     spec = specificity(y_test, y_pred)
     percent = int(100 * float(cv_method))
-    scores = dict(test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel())
+    scores = dict(
+        test_accuracy=np.array([acc]).ravel(), test_roc_auc=np.array([auc]).ravel()
+    )
     result = dict(
         htuned=htuned,
         cv_method=cv_method,
@@ -368,8 +425,12 @@ def package_classifier_scores(
     if not log:
         return result
     print(f"Testing validation: {percent}% holdout")
-    print(f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})")
-    print(f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})")
+    print(
+        f"          Accuracy: μ = {np.round(acc, 3):0.3f} (sd = {np.round(acc, 4):0.4f})"
+    )
+    print(
+        f"               AUC: μ = {np.round(auc, 3):0.3f} (sd = {np.round(auc, 4):0.4f})"
+    )
     return result
 
 
@@ -503,12 +564,16 @@ def hypertune_classifier(
     }
     # HYPERTUNING
     objective = OBJECTIVES[classifier]
-    study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+    study = optuna.create_study(
+        direction="maximize", sampler=optuna.samplers.TPESampler()
+    )
     optuna.logging.set_verbosity(verbosity)
     if classifier == "mlp":
         # https://stackoverflow.com/questions/53784971/how-to-disable-convergencewarning-using-sklearn
         before = os.environ.get("PYTHONWARNINGS", "")
-        os.environ["PYTHONWARNINGS"] = "ignore"  # can't kill ConvergenceWarning any other way
+        os.environ[
+            "PYTHONWARNINGS"
+        ] = "ignore"  # can't kill ConvergenceWarning any other way
         study.optimize(objective, n_trials=n_trials)
         os.environ["PYTHONWARNINGS"] = before
     else:

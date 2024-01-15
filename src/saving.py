@@ -57,11 +57,12 @@ class ProgramDirs(Debug):
     needs_clean: bool = False
 
     @staticmethod
-    def new(root: Optional[Path]) -> ProgramDirs:
+    def new(root: Optional[Path], hsh: str) -> ProgramDirs:
         root, needs_clean = ProgramDirs.configure_root(root)
 
         if root is None:
             return ProgramDirs()
+        root = root / hsh
 
         new = ProgramDirs(
             root=root,
@@ -170,17 +171,34 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_eval_results(self, results: Optional[EvaluationResults]) -> None:
+    def save_eval_tables(self, results: Optional[EvaluationResults]) -> None:
+        if self.results is None or self.tuning is None:
+            return
+        if results is None:
+            return
+        perfs = self.results / "final_performances.csv"
+        tuned = self.tuning / "tuned_models.csv"
+        df_tuned = results.hp_table()
+        try:
+            results.df.to_csv(perfs)
+            df_tuned.to_csv(tuned)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save final evaluation report. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_eval_data(self, results: Optional[EvaluationResults]) -> None:
         if self.results is None:
             return
         if results is None:
             return
-        tables = self.results / "performances.csv"
+        out = self.results / "evaluation_results.json"
         try:
-            results.df.to_csv(tables)
+            out.write_text(results.to_json())
         except Exception as e:
             warn(
-                "Got exception when attempting to save final evaluation report. "
+                "Got exception when attempting to save final evaluation results. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
@@ -220,9 +238,49 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
+    def save_wrap_data(self, selected: Optional[ModelSelected]) -> None:
+        if selected is None:
+            return
+        if selected.wrap_selected is None:
+            return
+        if self.wrapper is None:
+            return
+
+        json = selected.wrap_selected.to_json()
+        out = self.wrapper / "wrapper_selection_data.json"
+        try:
+            out.write_text(json)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save wrapper selection data. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_embed_data(self, selected: Optional[ModelSelected]) -> None:
+        if selected is None:
+            return
+        if selected.embed_selected is None:
+            return
+        if self.embed is None:
+            return
+
+        json = selected.embed_selected.to_json()
+        out = self.embed / "embed_selection_data.json"
+        try:
+            out.write_text(json)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save embeded selection data. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
     def save_model_selection_reports(self, selected: Optional[ModelSelected]) -> None:
         self.save_embed_report(selected)
         self.save_wrap_report(selected)
+
+    def save_model_selection_data(self, selected: Optional[ModelSelected]) -> None:
+        self.save_embed_data(selected)
+        self.save_wrap_data(selected)
 
     def save_filter_report(self, selected: Optional[FilterSelected]) -> None:
         if (self.filter is None) or (selected is None):
@@ -366,7 +424,8 @@ def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:
     ignores = [] if ignores is None else ignores
     to_hash = {**args}
     for ignore in ignores:
-        to_hash.pop(ignore)
+        if ignore in to_hash:
+            to_hash.pop(ignore)
 
     # quick and dirty hashing for caching  https://stackoverflow.com/a/1151705
     # we are not really worried about collisions with the tiny amount of
