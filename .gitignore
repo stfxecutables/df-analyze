@@ -6,7 +6,7 @@ data/*.rar
 data/testing/**/*.csv
 data/testing/**/*.txt
 data/testing/**/*.parquet
-data/testing/**/*.tar.gz
+data/**/*.tar.gz
 data/testing/__*_CACHE__
 data/testing/__TEST*
 data/testing/__FULL*
