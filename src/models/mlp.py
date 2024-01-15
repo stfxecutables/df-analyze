@@ -31,7 +31,7 @@ import numpy as np
 import optuna
 import torch
 from numpy import ndarray
-from optuna import Trial
+from optuna import Study, Trial
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
 from sklearn.metrics import accuracy_score as acc
@@ -415,6 +415,22 @@ class MLPEstimator(DfAnalyzeModel):
             # return float(np.mean(scores["test_score"]))
 
         return objective
+
+    def htune_optuna(
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        n_trials: int = 100,
+        n_jobs: int = -1,
+        verbosity: int = optuna.logging.ERROR,
+    ) -> Study:
+        return super().htune_optuna(
+            X_train=X_train,
+            y_train=y_train,
+            n_trials=n_trials,
+            verbosity=verbosity,
+            n_jobs=1,
+        )
 
     # def htune_eval(
     #     self,
