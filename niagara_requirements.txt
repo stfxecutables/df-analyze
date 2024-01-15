@@ -16,3 +16,5 @@ lightgbm
 openpyxl
 fastparquet
 openml
+pytest-xdist[psutil]
+jsonpickle
