@@ -53,24 +53,24 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     if ds.is_classification:
         # options.classifiers = tuple([x for x in DfAnalyzeClassifier])
         options.classifiers = (
-            # DfAnalyzeClassifier.Dummy,
-            # DfAnalyzeClassifier.KNN,
-            # DfAnalyzeClassifier.SGD,
-            # DfAnalyzeClassifier.LR,
+            DfAnalyzeClassifier.Dummy,
+            DfAnalyzeClassifier.KNN,
+            DfAnalyzeClassifier.SGD,
+            DfAnalyzeClassifier.LR,
             DfAnalyzeClassifier.MLP,
-            # DfAnalyzeClassifier.LGBM,
+            DfAnalyzeClassifier.LGBM,
             # DfAnalyzeClassifier.SVM,
         )
         # options.classifiers = (DfAnalyzeClassifier.MLP,)
     else:
         options.regressors = tuple([x for x in DfAnalyzeRegressor])
         options.regressors = (
-            # DfAnalyzeRegressor.Dummy,
-            # DfAnalyzeRegressor.KNN,
-            # DfAnalyzeRegressor.SGD,
-            # DfAnalyzeRegressor.ElasticNet,
+            DfAnalyzeRegressor.Dummy,
+            DfAnalyzeRegressor.KNN,
+            DfAnalyzeRegressor.SGD,
+            DfAnalyzeRegressor.ElasticNet,
             DfAnalyzeRegressor.MLP,
-            # DfAnalyzeRegressor.LGBM,
+            DfAnalyzeRegressor.LGBM,
             # DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     for dsname, ds in FAST_INSPECTION:
         if "kdd" in dsname.lower():
             continue  # all slow as hell
-        if dsname.lower() != "primary-tumor":
+        if dsname.lower() <= "primary-tumor":
             continue
 
         print("=" * 79)
