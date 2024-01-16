@@ -23,6 +23,7 @@ from src.models.base import DfAnalyzeModel
 class ElasticNetRegressor(DfAnalyzeModel):
     shortname = "elastic"
     longname = "ElasticNet Regressor"
+    timeout_s = 30 * 60  # should never hit this
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -43,6 +44,7 @@ class ElasticNetRegressor(DfAnalyzeModel):
 class LRClassifier(DfAnalyzeModel):
     shortname = "lr"
     longname = "Logistic Regression"
+    timeout_s = 15 * 60  # if it isn't done will be bad fit at this point
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -64,6 +66,7 @@ class LRClassifier(DfAnalyzeModel):
 class SGDClassifier(DfAnalyzeModel):
     shortname = "sgd"
     longname = "SGD Linear Classifer"
+    timeout_s = 15 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
@@ -85,6 +88,7 @@ class SGDClassifier(DfAnalyzeModel):
 class SGDRegressor(DfAnalyzeModel):
     shortname = "sgd"
     longname = "SGD Linear Regressor"
+    timeout_s = 15 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
@@ -109,6 +113,7 @@ class SGDRegressor(DfAnalyzeModel):
 class SGDClassifierSelector(DfAnalyzeModel):
     shortname = "sgd-select"
     longname = "SGD Linear Selector"
+    timeout_s = 10 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
@@ -132,6 +137,7 @@ class SGDClassifierSelector(DfAnalyzeModel):
 class SGDRegressorSelector(DfAnalyzeModel):
     shortname = "sgd-select"
     longname = "SGD Linear Selector"
+    timeout_s = 10 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)

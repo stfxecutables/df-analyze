@@ -21,6 +21,7 @@ from src.models.base import DfAnalyzeModel
 class LightGBMEstimator(DfAnalyzeModel):
     shortname = "lgbm"
     longname = "LightGBM Estimator"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -49,6 +50,7 @@ class LightGBMEstimator(DfAnalyzeModel):
 class LightGBMRFEstimator(DfAnalyzeModel):
     shortname = "rf"
     longname = "LightGBM Random Forest Estimator"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -80,6 +82,7 @@ class LightGBMRFEstimator(DfAnalyzeModel):
 class LightGBMClassifier(LightGBMEstimator):
     shortname = "lgbm"
     longname = "LightGBM Classifier"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -91,6 +94,7 @@ class LightGBMClassifier(LightGBMEstimator):
 class LightGBMRegressor(LightGBMEstimator):
     shortname = "lgbm"
     longname = "LightGBM Regressor"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -102,6 +106,7 @@ class LightGBMRegressor(LightGBMEstimator):
 class LightGBMRFClassifier(LightGBMRFEstimator):
     shortname = "rf"
     longname = "LightGBM Random Forest Classifier"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -113,6 +118,7 @@ class LightGBMRFClassifier(LightGBMRFEstimator):
 class LightGBMRFRegressor(LightGBMRFEstimator):
     shortname = "rf"
     longname = "LightGBM Random Forest Regressor"
+    timeout_s = 3600  # one hour for tuning is plenty
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)

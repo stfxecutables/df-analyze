@@ -20,6 +20,7 @@ from src.models.base import DfAnalyzeModel
 class DummyRegressor(DfAnalyzeModel):
     shortname = "dummy"
     longname = "Dummy Regressor"
+    timeout_s = 5 * 60
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -44,6 +45,7 @@ class DummyRegressor(DfAnalyzeModel):
 class DummyClassifier(DfAnalyzeModel):
     shortname = "dummy"
     longname = "Dummy Classifier"
+    timeout_s = 5 * 60
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)

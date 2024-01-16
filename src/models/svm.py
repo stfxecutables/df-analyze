@@ -20,13 +20,15 @@ from src.models.base import DfAnalyzeModel
 
 
 class SVMEstimator(DfAnalyzeModel):
+    shortname = "svm"
+    longname = "Support Vector Machine"
+    timeout_s = 10 * 60  # can't have this eating up all the time
+
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
         self.is_classifier = True
         self.fixed_args = dict(cache_size=1000)
         self.default_args = dict(kernel="rbf")
-        self.shortname = "svm"
-        self.longname = "Support Vector Machine"
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         is_rbf = full_args["kernel"]
@@ -62,6 +64,7 @@ class SVMEstimator(DfAnalyzeModel):
 class SVMClassifier(SVMEstimator):
     shortname = "svm"
     longname = "Support Vector Classifier"
+    timeout_s = 10 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -79,6 +82,7 @@ class SVMClassifier(SVMEstimator):
 class SVMRegressor(SVMEstimator):
     shortname = "svm"
     longname = "Support Vector Regressor"
+    timeout_s = 10 * 60  # can't have this eating up all the time
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)

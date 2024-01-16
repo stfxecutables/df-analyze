@@ -23,6 +23,7 @@ from src.models.base import DfAnalyzeModel
 class KNNEstimator(DfAnalyzeModel):
     shortname = "knn"
     longname = "K-Neighbours Estimator"
+    timeout_s = 30 * 60  # 30 minutes is enough given the grid
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -122,6 +123,7 @@ class KNNEstimator(DfAnalyzeModel):
 class KNNClassifier(KNNEstimator):
     shortname = "knn"
     longname = "K-Neighbours Classifier"
+    timeout_s = 30 * 60
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
@@ -132,6 +134,7 @@ class KNNClassifier(KNNEstimator):
 class KNNRegressor(KNNEstimator):
     shortname = "knn"
     longname = "K-Neighbours Regressor"
+    timeout_s = 30 * 60
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)

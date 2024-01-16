@@ -13,6 +13,8 @@ import matplotlib as mpl
 
 mpl.rcParams["axes.formatter.useoffset"] = False
 
+import os
+import platform
 import sys
 import warnings
 from copy import deepcopy
@@ -204,6 +206,7 @@ def get_T0(
 class MLPEstimator(DfAnalyzeModel):
     shortname = "mlp"
     longname = "Multilayer Perceptron"
+    timeout_s = 3600
 
     def __init__(self, num_classes: int, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
@@ -424,30 +427,43 @@ class MLPEstimator(DfAnalyzeModel):
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
+        try:
+            plat = platform.platform().lower()
+        except Exception:
+            plat = ""
+
+        if os.environ.get("CC_CLUSTER") == "niagara":
+            # Niagara trials
+            #
+            # n_jobs    50 models   10      20 models    30 models   40 models
+            #      1        s                 ~4 min     ~5.4        ~6.8 min
+            #      2        s       3 min     ~6 min     ~9 min      ~10.5 min
+            #      4        s
+            #      8        s                8-9 min     15 min
+            #
+            # Seems VERY clear to make n_jobs=1 here
+            override_jobs = 1
+
+        elif ("macos" in plat) and ("arm64" in plat):
+            # Local M2 MacBook Air, 16GB RAM, 500GB
+            #
+            # n_jobs    50 models
+            #     -1     ~7 min
+            #      1    6.6 min (6-7 min)
+            #      2     ~6 min
+            #      4     ~3.5-6 min               # confirmed this is sweet spot
+            #      8     ~6 min for 30 models
+            override_jobs = 4
+        else:
+            override_jobs = 2  # seems to work / be least harmful on both tested
+
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
             n_trials=n_trials,
             verbosity=verbosity,
-            n_jobs=2,
+            n_jobs=override_jobs,
         )
-
-    # def htune_eval(
-    #     self,
-    #     X_train: DataFrame,
-    #     y_train: Series,
-    #     X_test: DataFrame,
-    #     y_test: Series,
-    # ) -> Any:
-    #     # TODO: need to specify valiation method, and return confidences, etc.
-    #     # Actually maybe just want to call refit in here...
-    #     if self.tuned_args is None:
-    #         raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
-
-    #     args = self._to_model_args(self.tuned_args, X_train)
-    #     self.refit_tuned(X_train, y_train, tuned_args=args)
-    #     # TODO: return Platt-scaling or probability estimates
-    #     return self.score(X_test, y_test)
 
 
 if __name__ == "__main__":

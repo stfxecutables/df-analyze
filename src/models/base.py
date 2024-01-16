@@ -73,6 +73,7 @@ class EarlyStopping:
 class DfAnalyzeModel(ABC):
     shortname: str = ""
     longname: str = ""
+    timeout_s: int = 3600  # one hour
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__()
@@ -168,7 +169,7 @@ class DfAnalyzeModel(ABC):
             objective,
             n_trials=n_trials,
             callbacks=cbs if grid is None else [],
-            timeout=64_800,  # 18h * 60min/h * 60 sec/min, leave 6 hr on 24-hour job
+            timeout=self.__class__.timeout_s,
             n_jobs=n_jobs,
             gc_after_trial=True,
             show_progress_bar=True,
