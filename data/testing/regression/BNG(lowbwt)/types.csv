@@ -1,0 +1,10 @@
+feature_name,type
+LOW,categorical
+AGE,continuous
+LWT,continuous
+RACE,categorical
+SMOKE,categorical
+PTL,categorical
+HT,categorical
+UI,categorical
+FTV,categorical

@@ -1,0 +1,14 @@
+feature_name,type
+X,continuous
+Y,continuous
+month,continuous
+day,categorical
+FFMC,continuous
+DMC,continuous
+DC,continuous
+ISI,continuous
+temp,continuous
+RH,continuous
+wind,continuous
+rain,continuous
+target,continuous

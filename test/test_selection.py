@@ -1,74 +1,424 @@
-import numpy as np
+from __future__ import annotations
+
+# fmt: off
+import sys  # isort: skip
+from pathlib import Path  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent  # isort: skip
+sys.path.append(str(ROOT))  # isort: skip
+# fmt: on
+
+
+from time import perf_counter
+from typing import Any, Callable
+
 from _pytest.capture import CaptureFixture
 
 from src._constants import ROOT
-from src.cleaning import get_clean_data
-from src.feature_selection import select_features
-from src.cli import get_options
+from src.analysis.univariate.associate import CatAssociation, ContAssociation
+from src.cli.cli import ProgramOptions
+from src.enumerables import (
+    ClsScore,
+    EmbedSelectionModel,
+    RegScore,
+    WrapperSelection,
+    WrapperSelectionModel,
+)
+from src.nonsense import silence_spam
+from src.selection.embedded import embed_select_features
+from src.selection.filter import (
+    FilterSelected,
+    filter_by_univariate_associations,
+    filter_by_univariate_predictions,
+)
+from src.selection.stepwise import StepwiseSelector, stepwise_select
+from src.testing.datasets import (
+    ALL_DATASETS,
+    TestDataset,
+    fast_ds,
+    med_ds,
+    slow_ds,
+)
 
 DATA = ROOT / "data/banking/bank.json"
+RUNTIMES = ROOT / "runtimes"
+RUNTIMES.mkdir(exist_ok=True)
 
 
-class TestBasicSelections:
-    def test_multiple_args(self, capsys: CaptureFixture) -> None:
-        selects = [
-            "pca",
-            "pca pca",
-            "pca pca pca",
-        ]
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for select in selects:
-            n = np.random.randint(2, 10)
-            options = get_options(base + args.format(n=n, select=select))
-            df = select_features(options.selection_options, "pca", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
-
-    def test_pca(self, capsys: CaptureFixture) -> None:
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for n in range(2, 5):
-            options = get_options(base + args.format(n=n, select="pca"))
-            df = select_features(options.selection_options, "pca", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
-
-    def test_kpca(self, capsys: CaptureFixture) -> None:
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for n in range(2, 5):
-            options = get_options(base + args.format(n=n, select="kpca"))
-            df = select_features(options.selection_options, "kpca", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
-
-    def test_d(self, capsys: CaptureFixture) -> None:
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for n in range(2, 5):
-            options = get_options(base + args.format(n=n, select="d"))
-            df = select_features(options.selection_options, "d", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
-
-    def test_pearson(self, capsys: CaptureFixture) -> None:
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for n in range(2, 5):
-            options = get_options(base + args.format(n=n, select="pearson"))
-            df = select_features(options.selection_options, "pearson", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
-
-    def test_auc(self, capsys: CaptureFixture) -> None:
-        base = f"--df {DATA} --target y --drop-nan none "
-        args = "--n-feat {n} --feat-select {select}"
-        for n in range(2, 5):
-            options = get_options(base + args.format(n=n, select="auc"))
-            df = select_features(options.selection_options, "auc", classifier=None)
-            assert df.shape[1] == n + 1, "Incorrect number of features"
+def do_association_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
+    dsname, ds = dataset
+    assocs = ds.associations(load_cached=True)
+    prepared = ds.prepared(load_cached=True)
+    for _ in range(25):
+        options = ProgramOptions.random(ds)
+        filtered = filter_by_univariate_associations(
+            prepared=prepared,
+            associations=assocs,
+            cont_metric=ContAssociation.random(),
+            cat_metric=CatAssociation.random(),
+            n_cont=options.n_filter_cont,
+            n_cat=options.n_filter_cat,
+            n_total=options.n_feat_filter,
+        )
+        print(filtered.cont_scores)
+        print(filtered.cat_scores)
+        assert len(filtered.selected) > 0
+    return filtered  # type: ignore
 
 
-def test_stepup(capsys: CaptureFixture) -> None:
-    N = 3
-    args = f"--df {DATA} --target y --drop-nan none --n-feat {N} --feat-select step-up --classifiers svm"
-    options = get_options(args)
-    with capsys.disabled():
-        df = select_features(options.selection_options, "step-up", classifier="svm")
-        assert df.shape[1] == N + 1, "Incorrect number of features"
+def do_predict_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
+    dsname, ds = dataset
+    predictions = ds.predictions(load_cached=True)
+    prepared = ds.prepared(load_cached=True)
+    for _ in range(25):
+        options = ProgramOptions.random(ds)
+        filtered = filter_by_univariate_predictions(
+            prepared=prepared,
+            predictions=predictions,
+            cont_metric=RegScore.random(),
+            cat_metric=ClsScore.random(),
+            n_cont=options.n_filter_cont,
+            n_cat=options.n_filter_cat,
+        )
+        print(filtered.cont_scores)
+        print(filtered.cat_scores)
+        assert len(filtered.selected) > 0
+    return filtered  # pyright: ignore
+
+
+def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0]
+    options = ProgramOptions.random(ds)
+    # options.embed_select = EmbedSelectionModel.Linear
+    # selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
+    # if selected is None or (selected.selected is None):
+    #     raise ValueError("Impossible!")
+    # assert len(selected.selected) > 0
+
+    options.embed_select = EmbedSelectionModel.LGBM
+    selected = embed_select_features(prep_train=prep_train, options=options)
+    if selected is None or (selected.selected is None):
+        raise ValueError("Impossible!")
+    assert len(selected.selected) > 0
+
+
+def estimate_select(
+    dataset: tuple[str, TestDataset],
+    file: Path,
+    forward: bool,
+    model: WrapperSelectionModel,
+    subsample: bool = True,
+) -> float:
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0] if subsample else prepared
+    n, p = prep_train.X.shape
+    m = 10
+
+    options = ProgramOptions.random(ds)
+    options.wrapper_model = model
+    options.wrapper_select = (
+        WrapperSelection.StepUp if forward else WrapperSelection.StepDown
+    )
+    options.n_feat_wrapper = m if forward else p - m
+    if (p <= m) and forward:
+        return float("nan")
+    if (p - m <= 0) and (not forward):
+        return float("nan")
+
+    selector = StepwiseSelector(
+        prep_train=prep_train,
+        options=options,
+        n_features=options.n_feat_wrapper,
+        direction=options.wrapper_select.direction(),
+    )
+    minutes = selector.estimate_runtime()
+    N = prepared.X.shape[0]
+    needs_header = False
+    if file.exists():
+        with open(file, "r") as handle:
+            if handle.readline().strip() == "":
+                needs_header = True
+    else:
+        needs_header = True
+
+    with open(file, "a") as handle:
+        if needs_header:
+            handle.write(
+                f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
+            )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {minutes:3.1f}\n")
+        handle.flush()
+
+    return minutes
+
+
+def estimate_linear_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"linear_forward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.Linear
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
+
+
+def estimate_linear_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"linear_backward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.Linear
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
+
+
+def estimate_lgbm_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"lgbm_forward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.LGBM
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
+
+
+def estimate_lgbm_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"lgbm_backward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.LGBM
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
+
+
+def estimate_knn_forward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"knn_forward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.KNN
+    estimate_select(dataset, file=file, forward=True, model=model, subsample=subsample)
+
+
+def estimate_knn_backward_select(
+    dataset: tuple[str, TestDataset],
+    subsample: bool = True,
+) -> None:
+    extra = "_no_subsample" if not subsample else ""
+    file = RUNTIMES / f"knn_backward_select_runtime_estimates{extra}.txt"
+    model = WrapperSelectionModel.KNN
+    estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
+
+
+def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+    silence_spam()
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0]
+    options = ProgramOptions.random(ds)
+    options.wrapper_model = (
+        WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    )
+    options.wrapper_select = WrapperSelection.StepUp
+    options.n_feat_wrapper = 10
+    if prepared.X.shape[1] <= 10:
+        return
+    results = stepwise_select(prep_train=prep_train, options=options)
+    if results is None:
+        raise ValueError("Impossible")
+    selected, scores = results
+    if len(selected) != options.n_feat_wrapper:
+        raise ValueError("Did not select correct number of features")
+    for fname, score in scores.items():
+        print(f"{fname:>30}  {round(score, 3)}")
+
+
+def do_linear_forward_select(dataset: tuple[str, TestDataset]) -> None:
+    do_forward_select(dataset, linear=True)
+
+
+def do_lgbm_forward_select(dataset: tuple[str, TestDataset]) -> None:
+    do_forward_select(dataset, linear=False)
+
+
+def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+    silence_spam()
+    dsname, ds = dataset
+    prepared = ds.prepared(load_cached=True)
+    prep_train = prepared.representative_subsample()[0]
+    options = ProgramOptions.random(ds)
+    options.wrapper_model = (
+        WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    )
+    options.wrapper_select = WrapperSelection.StepDown
+    options.n_feat_wrapper = prepared.X.shape[1] - 10
+    if options.n_feat_wrapper <= 0:
+        return
+    results = stepwise_select(prep_train=prep_train, options=options)
+    if results is None:
+        raise ValueError("Impossible")
+    selected, scores = results
+    if len(selected) != options.n_feat_wrapper:
+        raise ValueError("Did not select correct number of features")
+    for fname, score in scores.items():
+        print(f"{fname:>30}  {round(score, 3)}")
+
+
+def do_linear_backward_select(dataset: tuple[str, TestDataset]) -> None:
+    do_backward_select(dataset, linear=True)
+
+
+def do_lgbm_backward_select(dataset: tuple[str, TestDataset]) -> None:
+    do_backward_select(dataset, linear=False)
+
+
+def do_logged(
+    f: Callable[[tuple[str, TestDataset]], Any],
+    file: Path,
+    dataset: tuple[str, TestDataset],
+) -> Any:
+    start = perf_counter()
+    f(dataset)
+    elapsed = perf_counter() - start
+    elapsed /= 60
+    elapsed = round(elapsed, 1)
+
+    dsname, ds = dataset
+    prep = ds.prepared(load_cached=True)
+    prep_train = prep.representative_subsample()[0]
+    m = 10
+    N = prep.X.shape[0]
+    n, p = prep_train.X.shape
+    needs_header = False
+
+    if file.exists():
+        with open(file, "r") as handle:
+            if handle.readline().strip() == "":
+                needs_header = True
+    else:
+        needs_header = True
+
+    with open(file, "a") as handle:
+        if needs_header:
+            handle.write(
+                f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
+            )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {elapsed:3.1f}\n")
+
+
+@fast_ds
+def test_associate_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    dsname = dataset[0]
+    if dsname in ["credit-approval_reproduced"]:
+        return
+    do_association_select(dataset)
+
+
+@med_ds
+def test_associate_select_med(dataset: tuple[str, TestDataset]) -> None:
+    do_association_select(dataset)
+
+
+@slow_ds
+def test_associate_select_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_association_select(dataset)
+
+
+@fast_ds
+def test_predict_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    dsname = dataset[0]
+    if dsname in ["credit-approval_reproduced"]:
+        return
+    do_predict_select(dataset)
+
+
+@med_ds
+def test_predict_select_med(dataset: tuple[str, TestDataset]) -> None:
+    do_predict_select(dataset)
+
+
+@slow_ds
+def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
+    do_predict_select(dataset)
+
+
+@fast_ds
+def test_embed_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "lgbm_embed_fast_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_embed_select, file, dataset)
+
+
+@med_ds
+def test_embed_select_med(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "lgbm_embed_med_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_embed_select, file, dataset)
+
+
+@fast_ds
+def test_linear_forward_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "linear_forward_select_fast_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_linear_forward_select, file, dataset)
+
+
+@slow_ds
+def test_linear_forward_select_slow(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "linear_forward_select_slow_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_linear_forward_select, file, dataset)
+
+
+@fast_ds
+def test_lgbm_forward_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "lgbm_forward_select_fast_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_lgbm_forward_select, file, dataset)
+
+
+@fast_ds
+def test_linear_backward_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "linear_backward_select_fast_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_linear_backward_select, file, dataset)
+
+
+@fast_ds
+def test_lgbm_backward_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    file = RUNTIMES / "lgbm_backward_select_fast_runtimes.txt"
+    # with capsys.disabled():
+    do_logged(do_lgbm_backward_select, file, dataset)
+
+
+if __name__ == "__main__":
+    for dsname, ds in ALL_DATASETS:
+        print(dsname)
+        # do_forward_select((dsname, ds))
+        try:
+            # estimate_linear_backward_select((dsname, ds))
+            estimate_linear_forward_select((dsname, ds), subsample=False)
+            # estimate_lgbm_forward_select((dsname, ds))
+            # estimate_lgbm_backward_select((dsname, ds))
+            # estimate_knn_forward_select((dsname, ds))
+            # estimate_knn_backward_select((dsname, ds))
+        except Exception as e:
+            print(e)

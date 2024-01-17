@@ -1,0 +1,38 @@
+feature_name,type
+marital status,categorical
+application mode,categorical
+application order,continuous
+course,categorical
+daytime/evening attendance,categorical
+previous qualification,categorical
+previous qualification (grade),continuous
+nacionality,categorical
+mother's qualification,categorical
+father's qualification,categorical
+mother's occupation,categorical
+father's occupation,categorical
+admission grade,continuous
+displaced,categorical
+educational special needs,categorical
+debtor,categorical
+tuition fees up to date,categorical
+gender,categorical
+scholarship holder,categorical
+age at enrollment,continuous
+international,continuous
+curricular units 1st sem (credited),continuous
+curricular units 1st sem (enrolled),continuous
+curricular units 1st sem (evaluations),continuous
+curricular units 1st sem (approved),continuous
+curricular units 1st sem (grade),continuous
+curricular units 1st sem (without evaluations),continuous
+curricular units 2nd sem (credited),continuous
+curricular units 2nd sem (enrolled),continuous
+curricular units 2nd sem (evaluations),continuous
+curricular units 2nd sem (approved),continuous
+curricular units 2nd sem (grade),continuous
+curricular units 2nd sem (without evaluations),continuous
+unemployment rate,continuous
+inflation rate,continuous
+gdp,continuous
+target,categorical

@@ -1,0 +1,17 @@
+feature_name,type
+A15,continuous
+A14,continuous
+A13,categorical
+A12,categorical
+A11,continuous
+A10,categorical
+A9,categorical
+A8,categorical
+A7,categorical
+A6,categorical
+A5,categorical
+A4,categorical
+A3,continuous
+A2,continuous
+A1,categorical
+target,categorical

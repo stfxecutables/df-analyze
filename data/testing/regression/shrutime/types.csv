@@ -1,0 +1,11 @@
+feature_name,type
+CreditScore,continuous
+Age,continuous
+Balance,continuous
+EstimatedSalary,continuous
+Geography,categorical
+IsActiveMember,categorical
+Tenure,categorical
+Gender,categorical
+HasCrCard,categorical
+NumOfProducts,categorical

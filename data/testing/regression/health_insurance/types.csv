@@ -1,0 +1,12 @@
+feature_name,type
+hhi,categorical
+whi,categorical
+hhi2,categorical
+education,categorical
+race,categorical
+hispanic,categorical
+experience,continuous
+kidslt6,continuous
+kids618,continuous
+husby,continuous
+region,categorical

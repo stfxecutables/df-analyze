@@ -1,27 +1,29 @@
 import os
-import sys
-import traceback
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pprint
 from time import ctime
-from typing import Any, List, Optional
+from typing import List, Optional, TypeVar, Union
 
-import numpy as np
-import optuna
 import pandas as pd
 from pandas import DataFrame
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src._types import CVMethod, Estimator, FeatureSelection
-from src.analyses import full_estimator_analysis
-from src.cli import ProgramOptions, Verbosity, get_options
-from src.io import FileType, try_save
+from src._types import Estimator, FeatureSelection
+from src.analysis.analyses import full_estimator_analysis
+from src.analysis.univariate.associate import target_associations
+from src.analysis.univariate.predict.predict import univariate_predictions
+from src.cli.cli import ProgramOptions, get_options
+from src.preprocessing.inspection.inspection import inspect_data
+from src.preprocessing.prepare import prepare_data
+from src.saving import FileType
 from src.utils import Debug
 
 RESULTS_DIR = Path(__file__).parent / "results"
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -37,41 +39,12 @@ class LoopArgs(Debug):
     # verbosity: Verbosity = optuna.logging.INFO
 
 
-def listify(item: Any) -> List[Any]:
+def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
     if isinstance(item, list):
         return item
     if isinstance(item, tuple):
         return [i for i in item]
     return [item]
-
-
-def pbar_desc(loop_args: LoopArgs) -> str:
-    estimator = loop_args.estimator
-    selection = loop_args.feature_selection
-    n_feat = loop_args.options.selection_options.n_feat
-    htune_val = loop_args.options.htune_val
-    if isinstance(htune_val, int):
-        hv = f"{htune_val}-fold"
-    elif isinstance(htune_val, float):
-        hv = f"{int(100*htune_val)}%-holdout"
-    elif htune_val == "mc":
-        hv = "mc"
-    else:
-        hv = "none"
-    return f"{estimator}|{selection}|{n_feat} features|htune_val={hv}"
-
-
-def save_interim_result(args: LoopArgs, result: DataFrame) -> None:
-    estimator = args.estimator
-    outdir = args.options.outdir
-    prog_dirs = args.options.program_dirs
-    if outdir is None:
-        return
-    step = "step-up" == args.feature_selection
-
-    timestamp = ctime().replace(":", "-").replace("  ", " ").replace(" ", "_")
-    file_stem = f"results__{estimator}{'_step-up' if step else ''}__{timestamp}"
-    try_save(prog_dirs, result, file_stem, FileType.Interim)
 
 
 def sort_df(df: DataFrame) -> DataFrame:
@@ -183,14 +156,43 @@ def log_options(options: ProgramOptions) -> None:
     pprint(opts, indent=2, depth=2, compact=False)
 
 
-if __name__ == "__main__":
+def main() -> None:
     # TODO:
     # get arguments
     # run analyses based on args
     options = get_options()
+    if options.verbosity.value > 0:
+        log_options(options)
 
-    estimators = options.classifiers if options.mode == "classify" else options.regressors
-    feature_selection = options.selection_options.feat_select
+    is_cls = options.is_classification
+    prog_dirs = options.program_dirs
+    target = options.target
+    categoricals = options.categoricals
+    ordinals = options.ordinals
+    # joblib_cache = options.program_dirs.joblib_cache
+    # if joblib_cache is not None:
+    #     memory = Memory(location=joblib_cache)
+
+    df = options.load_df()
+
+    inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
+    prog_dirs.save_inspect_reports(inspection)
+    prog_dirs.save_inspect_tables(inspection)
+
+    prepared = prepare_data(df, target, inspection, is_cls)
+    prog_dirs.save_prepared_raw(prepared)
+    prog_dirs.save_prep_report(prepared.to_markdown())
+
+    associations = target_associations(prepared)
+    prog_dirs.save_univariate_assocs(associations)
+    prog_dirs.save_assoc_report(associations.to_markdown())
+
+    predictions = univariate_predictions(prepared, is_cls)
+    prog_dirs.save_univariate_preds(predictions)
+    prog_dirs.save_pred_report(predictions.to_markdown())
+
+    estimators = options.classifiers if is_cls else options.regressors
+    feature_selection = options.feat_select
     is_stepup = "step-up" in listify(feature_selection)
 
     arg_options = dict(
@@ -199,6 +201,8 @@ if __name__ == "__main__":
         feature_selection=listify(feature_selection),
     )
     loop_args = [LoopArgs(**params) for params in ParameterGrid(arg_options)]
-    if options.verbosity.value > 0:
-        log_options(options)
     run_analysis(loop_args, estimators, is_stepup)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,11 @@
+feature_name,type
+EDUCATION,continuous
+SOUTH,categorical
+SEX,categorical
+EXPERIENCE,continuous
+UNION,categorical
+AGE,continuous
+RACE,categorical
+OCCUPATION,categorical
+SECTOR,categorical
+MARR,categorical

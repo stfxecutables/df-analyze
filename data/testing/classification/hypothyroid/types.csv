@@ -1,0 +1,30 @@
+feature_name,type
+age,continuous
+sex,categorical
+on thyroxine,categorical
+query on thyroxine,categorical
+on antithyroid medication,categorical
+sick,categorical
+pregnant,categorical
+thyroid surgery,categorical
+I131 treatment,categorical
+query hypothyroid,categorical
+query hyperthyroid,categorical
+lithium,categorical
+goitre,categorical
+tumor,categorical
+hypopituitary,categorical
+psych,categorical
+TSH measured,categorical
+TSH,continuous
+T3 measured,categorical
+T3,continuous
+TT4 measured,categorical
+TT4,continuous
+T4U measured,categorical
+T4U,continuous
+FTI measured,categorical
+FTI,continuous
+TBG measured,categorical
+TBG,continuous
+referral source,categorical

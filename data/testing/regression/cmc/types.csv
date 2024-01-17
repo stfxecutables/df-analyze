@@ -1,0 +1,10 @@
+feature_name,type
+Wifes_age,continuous
+Number_of_children_ever_born,continuous
+Wifes_education,categorical
+Husbands_education,categorical
+Wifes_religion,categorical
+Wifes_now_working%3F,categorical
+Husbands_occupation,categorical
+Standard-of-living_index,categorical
+Media_exposure,categorical

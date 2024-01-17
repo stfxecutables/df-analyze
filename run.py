@@ -1,18 +1,16 @@
 import os
-from argparse import ArgumentParser
 from pathlib import Path
 from time import ctime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import optuna
 import pandas as pd
+from analysis.analyses import full_estimator_analysis
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src._constants import CLASSIFIERS
-from src.analyses import full_estimator_analysis
+from src.cli.cli import get_options
 from src.hypertune import Classifier
-from src.cli import get_options
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None

@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import List
 
 from src.hypertune import Classifier
 
@@ -51,9 +50,6 @@ PYTHON=$(which python)
 def generate_script(
     classifier: Classifier = "svm", step_up: bool = False, script_outdir: Path = SCRIPT_OUTDIR
 ) -> str:
-    lines: List[str]
-    mlp_lines: List[str]
-
     pythonfile = "run.py"
     stepup = " --step-up" if step_up else ""
     job_name = classifier if not step_up else f"{classifier}_step-up"
