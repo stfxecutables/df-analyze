@@ -17,15 +17,12 @@
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
   - [`pip` Fallback in Case of Poetry Issues](#pip-fallback-in-case-of-poetry-issues)
 - [Usage](#usage)
-  - [Examples](#examples)
+  - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
     - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
       - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
-- [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
-  - [Singularity Container](#singularity-container)
-    - [Building](#building)
-    - [Running](#running)
-  - [Parallelization Options](#parallelization-options)
+  - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
+    - [Building the Singularity Container](#building-the-singularity-container)
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
     - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
@@ -211,7 +208,7 @@ python df-analyze.py --help
 which will provide a complete description of all options.
 
 
-## Examples
+## Quick Start and Examples
 
 Run a classification analysis on the data in `small_classifier_data.json`:
 
@@ -328,23 +325,30 @@ would run three analyses with the options in `spreadsheet.xlsx` (or default
 values) but with `--n-feat` set to 5, 10, and 20, respectively, regardless of
 what is set for `--n-feat` in `spreadsheet.xlsx`.
 
-# Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
+## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
-## Singularity Container
+If the singularity container `df_analyze.sif` is available in the project
+root, then it can be used to run arbitrary python scripts with the [helper
+script](https://github.com/stfxecutables/df-analyze/blob/master/run_python_with_home.sh)
+inlcluded in the repo. E.g.
 
-TODO.
+```bash
+cd df-analyze
+./run_python_with_home.sh test/test_main.py
+```
 
-### Building
+### Building the Singularity Container
 
-TODO.
+This should be built on a cluster that enables the `--fakeroot` option or on a
+Linux machine where you have `sudo` privileges, and the same architecture as
+the cluster (likely, x86_64).
 
-### Running
+```bash
+cd df-analyze/containers
+./build_container_cc.sh
+```
 
-TODO.
 
-## Parallelization Options
-
-TODO.
 
 # Currently Implemented Program Features and Analyses
 
