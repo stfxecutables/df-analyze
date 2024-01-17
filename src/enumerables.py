@@ -28,9 +28,7 @@ from sklearn.metrics import (
     mean_squared_error,
     median_absolute_error,
     r2_score,
-    roc_auc_score,
 )
-from sklearn.utils import assert_all_finite
 
 from src.scoring import (
     robust_auroc_score,

@@ -28,7 +28,6 @@ from src.hypertune import EvaluationResults
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.saving import ProgramDirs
 from src.selection.embedded import EmbedSelected
-from src.selection.models import ModelSelected
 from src.selection.wrapper import WrapperSelected
 from src.testing.datasets import TestDataset, all_ds
 

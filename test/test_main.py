@@ -28,7 +28,7 @@ from src.nonsense import silence_spam
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
-from src.selection.models import ModelSelected, model_select_features
+from src.selection.models import model_select_features
 from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"

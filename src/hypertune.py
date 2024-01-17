@@ -7,7 +7,7 @@ import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pprint
-from random import choice, randint, uniform
+from random import choice, randint
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -19,7 +19,6 @@ from typing import (
     Tuple,
     Type,
     Union,
-    overload,
 )
 from warnings import warn
 
@@ -66,10 +65,8 @@ from src.scoring import (
     sensitivity,
     specificity,
 )
-from src.selection.embedded import EmbedSelected
 from src.selection.filter import FilterSelected
 from src.selection.models import ModelSelected
-from src.selection.wrapper import WrapperSelected
 
 Splits = Iterable[Tuple[ndarray, ndarray]]
 

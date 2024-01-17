@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from src.preprocessing.prepare import PreparedData
 from src.selection.embedded import EmbedSelected, embed_select_features
-from src.selection.filter import FilterSelected
 from src.selection.wrapper import WrapperSelected, wrap_select_features
 from src.testing.datasets import TestDataset
 
