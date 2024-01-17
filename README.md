@@ -3,15 +3,7 @@
 <!-- omit from toc -->
 # Contents
 
-- [What it Does](#what-it-does)
-  - [Analysis Pipeline](#analysis-pipeline)
-      - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
-      - [Data Preparation](#data-preparation)
-      - [Univariate Feature Analyses](#univariate-feature-analyses)
-      - [Feature Selection and Hyperparameter Tuning](#feature-selection-and-hyperparameter-tuning)
-      - [Final Validation](#final-validation)
-  - [Philosophy](#philosophy)
-    - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
+- [Overview](#overview)
 - [Installation](#installation)
   - [Install Poetry](#install-poetry)
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
@@ -23,6 +15,15 @@
       - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
   - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
     - [Building the Singularity Container](#building-the-singularity-container)
+- [Analysis Pipeline](#analysis-pipeline)
+    - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
+    - [Data Preparation](#data-preparation)
+    - [Univariate Feature Analyses](#univariate-feature-analyses)
+    - [Feature Selection](#feature-selection)
+    - [Hyperparameter Tuning](#hyperparameter-tuning)
+    - [Final Validation](#final-validation)
+  - [Philosophy](#philosophy)
+    - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
     - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
@@ -36,119 +37,25 @@
 - [Limitations](#limitations)
   - [Data Types](#data-types)
 
-# What it Does
 
-TODO
+# Overview
 
-`df-analyze` automates some common, naive machine-learning approaches
+`df-analyze` is a command-line tool for perfoming
+[AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
+on small to medium-sized tabular datasets. In particular, `df-analyze`
+attempts to automate:
 
-## Analysis Pipeline
+- feature type inference
+- feature description (e.g. univariate associations and stats)
+- data cleaning (e.g. NaN handling and imputation)
+- training, validation, and test splitting
+- feature selection
+- hyperparameter tuning
+- model selection and validation
 
-The overall data preparation and analysis process comprises six steps (some
-optional):
-
-1. Feature Type and Cardinalty Inference
-1. Data Preparation and Preprocessing
-1. Univariate Feature Analyses
-1. Feature Selection (optional)
-1. Hyperparameter tuning
-1. Final validation and analyses
-
-#### Feature Type and Cardinality Inference
-
-Features are checked, in order of priority, for useless feature or features
-that cannot be used by `df-anaylze`:
-
-1. Constancy (all values identical or identical except NaNs)
-2. Sequential datetime data
-3. Identifiers (all values unique and not continuous / floats)
-
-Then, features are identified as either (1) binary, or (2), one of:
-
-1. Ordinal
-2. Continuous
-3. Categorical
-
-based on a number of heuristics relating to the unique values and counts of
-these values, and the string representations of the features.
-
-#### Data Preparation
+and saves all key tables and outputs from this process.
 
 
-1. Data Loading
-   1. Type Conversions
-   1. NaN unification (detecting less common NaN representations)
-1. Data Cleaning
-   1. Remove samples with NaN in target variable
-   1. Remove junk features (constant, timeseries, identifiers)
-   1. NaNs: remove or add indicators and interpolate
-   1. Categorical deflation (replace undersampled classes / levels with NaN)
-1. Feature Encoding
-   1. Binary categorical encoding
-      1. represented as single [0, 1] feature if no NaNs
-      1. single NaN indicator feature added if feature is binary plus NaNs
-   1. One-hot encoding of categoricals (NaN = one additional class / level)
-   1. Ordinals treated as continuous
-   1. Robust normalization of continuous features
-2. Target Encoding
-   1. Categorical targets are deflated and label encoded to values in $[0, n]$
-   2. Continuous targets are robustly min-max normalized (to middle 95% of values)
-
-
-#### Univariate Feature Analyses
-
-1. Univariate associations
-2. Univariate predictive performances
-   1. classification task / categorical target
-      - tune
-        [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
-        (equivalent to linear SVM and/or Logistic Regression)
-      - report 5-fold mean accuracy, AUROC, sensitivity and specificity
-   2. regression task / continuous target
-      - tune
-        [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor)
-        (equivalent to regularized linear regression)
-      - report 5-fold mean MAE, MSqE, $R^2$, percent explained variance, and
-        median absolute error
-
-#### Feature Selection and Hyperparameter Tuning
-
-1. Remove junk features
-   1. Remove highly-correlated features
-1. Use filter methods
-   1. Remove features with minimal univariate relation to target
-   1. Keep features with largest filter metrics
-1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
-1. Step-up selection using $X_\text{train}$
-1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
-
-#### Final Validation
-
-1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
-1. Final evaluation of trained model on $X_\text{test}$
-
-
-## Philosophy
-
-1. Data *preparation* is not to be optimized / tuned
-   - i.e. while one might re-run analyses with different normalization options,
-     this is not expected to have a major impact on results, and so normalization
-     options are not included in final comparison tables
-1. Proper validation of a feature selection method requires holdout data NOT to
-   be used during feature selection, i.e. requires preventing [double
-   dipping](https://www.nature.com/articles/nn.2303).
-
-### Recursive / Wrapper Feature Selection and Tuning
-
-- too expensive to do together (e.g. do hyperparameter tuning on each potential
-  feature subset)
-- in general a highly challenging bilevel optimization problem
-- to keep computationally tractable, must choose between:
-  1. using a model with "default" hyperparameters for the wrapper selection process
-  1. tuning on all features, then using the tuned model for wrapper selection
-- neither choice above is likely to be optimal
-
-For this reason we prefer filter-based feature selection [methods]()
 
 # Installation
 
@@ -348,6 +255,115 @@ cd df-analyze/containers
 ./build_container_cc.sh
 ```
 
+# Analysis Pipeline
+
+The overall data preparation and analysis process comprises six steps (some
+optional):
+
+1. [Feature Type and Cardinalty Inference](#feature-type-and-cardinality-inference)
+1. [Data Preparation and Preprocessing](#data-preparation)
+1. [Univariate Feature Analyses](#univariate-feature-analyses)
+1. [Feature Selection (optional)](#feature-selection)
+1. [Hyperparameter tuning](#hyperparameter-tuning)
+1. [Final validation and analyses](#final-validation)
+
+### Feature Type and Cardinality Inference
+
+Features are checked, in order of priority, for useless feature or features
+that cannot be used by `df-anaylze`:
+
+1. Constancy (all values identical or identical except NaNs)
+2. Sequential datetime data
+3. Identifiers (all values unique and not continuous / floats)
+
+Then, features are identified as either (1) binary, or (2), one of:
+
+1. Ordinal
+2. Continuous
+3. Categorical
+
+based on a number of heuristics relating to the unique values and counts of
+these values, and the string representations of the features.
+
+### Data Preparation
+
+
+1. Data Loading
+   1. Type Conversions
+   1. NaN unification (detecting less common NaN representations)
+1. Data Cleaning
+   1. Remove samples with NaN in target variable
+   1. Remove junk features (constant, timeseries, identifiers)
+   1. NaNs: remove or add indicators and interpolate
+   1. Categorical deflation (replace undersampled classes / levels with NaN)
+1. Feature Encoding
+   1. Binary categorical encoding
+      1. represented as single [0, 1] feature if no NaNs
+      1. single NaN indicator feature added if feature is binary plus NaNs
+   1. One-hot encoding of categoricals (NaN = one additional class / level)
+   1. Ordinals treated as continuous
+   1. Robust normalization of continuous features
+2. Target Encoding
+   1. Categorical targets are deflated and label encoded to values in $[0, n]$
+   2. Continuous targets are robustly min-max normalized (to middle 95% of values)
+
+
+### Univariate Feature Analyses
+
+1. Univariate associations
+2. Univariate predictive performances
+   1. classification task / categorical target
+      - tune
+        [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
+        (equivalent to linear SVM and/or Logistic Regression)
+      - report 5-fold mean accuracy, AUROC, sensitivity and specificity
+   2. regression task / continuous target
+      - tune
+        [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor)
+        (equivalent to regularized linear regression)
+      - report 5-fold mean MAE, MSqE, $R^2$, percent explained variance, and
+        median absolute error
+
+### Feature Selection
+
+1. Remove junk features
+   1. Remove highly-correlated features
+1. Use filter methods
+   1. Remove features with minimal univariate relation to target
+   1. Keep features with largest filter metrics
+1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
+1. Step-up selection using $X_\text{train}$
+1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
+
+### Hyperparameter Tuning
+
+### Final Validation
+
+1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
+1. Final evaluation of trained model on $X_\text{test}$
+
+
+## Philosophy
+
+1. Data *preparation* is not to be optimized / tuned
+   - i.e. while one might re-run analyses with different normalization options,
+     this is not expected to have a major impact on results, and so normalization
+     options are not included in final comparison tables
+1. Proper validation of a feature selection method requires holdout data NOT to
+   be used during feature selection, i.e. requires preventing [double
+   dipping](https://www.nature.com/articles/nn.2303).
+
+### Recursive / Wrapper Feature Selection and Tuning
+
+- too expensive to do together (e.g. do hyperparameter tuning on each potential
+  feature subset)
+- in general a highly challenging bilevel optimization problem
+- to keep computationally tractable, must choose between:
+  1. using a model with "default" hyperparameters for the wrapper selection process
+  1. tuning on all features, then using the tuned model for wrapper selection
+- neither choice above is likely to be optimal
+
+For this reason we prefer filter-based feature selection [methods]()
 
 
 # Currently Implemented Program Features and Analyses
