@@ -336,7 +336,7 @@ class ProgramOptions(Debug):
         return clses
 
     @staticmethod
-    def random(ds: TestDataset) -> ProgramOptions:
+    def random(ds: TestDataset, outdir: Optional[Path] = None) -> ProgramOptions:
         n_samples, n_feats = ds.shape
         # feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
@@ -366,7 +366,7 @@ class ProgramOptions(Debug):
         test_val_size: Size = 0.4
         # mc_repeats: int = 0
         sub = "classification" if ds.is_classification else "regression"
-        outdir: Path = (FULL_RESULTS / sub) / ds.dsname
+        outdir = outdir or (FULL_RESULTS / sub) / ds.dsname
         is_spreadsheet: bool = False
         separator: str = ","
         verbosity: Verbosity = Verbosity.ERROR

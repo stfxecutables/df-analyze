@@ -5,7 +5,9 @@ import re
 import traceback
 import warnings
 from dataclasses import dataclass, field
+from pathlib import Path
 from pprint import pprint
+from random import choice, randint, uniform
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -50,6 +52,8 @@ from legacy.src.objectives import (
 from src._constants import SEED, VAL_SIZE
 from src._types import Classifier, CVMethod, EstimationMode, Estimator
 from src.cli.cli import ProgramOptions
+from src.models.dummy import DummyClassifier, DummyRegressor
+from src.testing.datasets import TestDataset
 
 if TYPE_CHECKING:
     from src.models.base import DfAnalyzeModel
@@ -77,11 +81,58 @@ N_SPLITS = 5
 
 @dataclass
 class HtuneResult:
-    selection: str
+    selection: Literal["none", "assoc", "pred", "embed", "wrap"]
+    selected_cols: list[str]
     model_cls: Type[DfAnalyzeModel]
     model: DfAnalyzeModel
     params: dict[str, Any]
     score: float
+    preds_test: Series
+    preds_train: Series
+    probs_test: Optional[ndarray]
+    probs_train: Optional[ndarray]
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HtuneResult):
+            return False
+
+        if (self.probs_test is None) and (other.probs_test is None):
+            probs_test_equal = True
+        elif isinstance(self.probs_test, ndarray) and isinstance(
+            other.probs_test, ndarray
+        ):
+            probs_test_equal = np.all(
+                (self.probs_test.round(8) == other.probs_test.round(8)).ravel()
+            ).item()
+        else:
+            probs_test_equal = False
+
+        if (self.probs_train is None) and (other.probs_train is None):
+            probs_train_equal = True
+        elif isinstance(self.probs_train, ndarray) and isinstance(
+            other.probs_train, ndarray
+        ):
+            probs_train_equal = np.all(
+                (self.probs_train.round(8) == other.probs_train.round(8)).ravel()
+            ).item()
+        else:
+            probs_train_equal = False
+
+        probs_equal = probs_test_equal and probs_train_equal
+
+        ret = (
+            self.selection == other.selection
+            and sorted(self.selected_cols) == sorted(other.selected_cols)
+            and self.model_cls == other.model_cls
+            and
+            # self.model == other.model and  # NOTE: do not check since weights
+            self.params == other.params
+            and round(self.score, 8) == round(other.score, 8)
+            and np.all((self.preds_test.round(8) == other.preds_test.round(8)).ravel())
+            and np.all((self.preds_train.round(8) == other.preds_train.round(8)).ravel())
+            and probs_equal
+        )
+        return bool(ret)
 
     def to_row(self) -> DataFrame:
         return DataFrame(
@@ -94,12 +145,111 @@ class HtuneResult:
             index=[0],
         )
 
+    @staticmethod
+    def random(
+        ds: TestDataset,
+        selection: Optional[Literal["none", "assoc", "pred", "embed", "wrap"]] = None,
+        selected_cols: Optional[list[str]] = None,
+        model_cls: Optional[Type[DfAnalyzeModel]] = None,
+    ) -> HtuneResult:
+        from src.models.base import DfAnalyzeModel
+        from src.models.mlp import MLPEstimator
+
+        n_cols = ds.shape[1]
+        n_sel = randint(1, n_cols)
+
+        selection = selection or choice(["none", "assoc", "pred", "embed", "wrap"])
+        selected = (
+            selected_cols
+            or np.random.choice([f"f{i}" for i in range(n_cols)], size=n_sel).tolist()
+        )
+        model_cls = model_cls or DfAnalyzeModel.random(ds, n=1)
+        if model_cls is MLPEstimator:
+            prep = ds.prepared(load_cached=True)
+            model = model_cls(num_classes=prep.num_classes)  # type: ignore
+        else:
+            model = model_cls()
+        params = {**model.fixed_args, **model.default_args}
+        score = (
+            np.random.uniform(0, 1) if ds.is_classification else np.random.uniform(0, 10)
+        )
+        return HtuneResult(
+            selection=selection,  # type: ignore
+            selected_cols=selected,
+            model_cls=model_cls,
+            model=model,
+            params=params,
+            score=score,
+            preds_test=Series(),
+            preds_train=Series(),
+            probs_test=None,
+            probs_train=None,
+        )
+
 
 @dataclass
 class EvaluationResults:
+    """
     df: DataFrame
+        Has columns: "model", "selection"
+    """
+
+    df: DataFrame
+    X_train: DataFrame
+    y_train: Series
+    X_test: DataFrame
+    y_test: Series
     results: list[HtuneResult]
     is_classification: bool
+
+    @staticmethod
+    def random(ds: TestDataset, options: ProgramOptions) -> EvaluationResults:
+        from src.models.base import DfAnalyzeModel
+
+        prep = ds.prepared(load_cached=True)
+        prep_train, prep_test = prep.split()
+
+        # Build up list of results with random HtuneResult objects
+        selectors = ["assoc", "pred", "embed", "wrap"]
+        n_select = np.random.randint(1, len(selectors))
+        selected = np.random.choice(selectors, replace=False, size=n_select).tolist()
+        selected = ["none"] + selected
+
+        n_model = np.random.randint(2, 5, size=1).item()
+        dummy = DummyClassifier if ds.is_classification else DummyRegressor
+        rands = DfAnalyzeModel.random(ds, n=n_model)
+        models_clses = list(set([dummy, *rands]))
+
+        features = prep.X.columns.to_list()
+
+        results = []
+        dfs = []
+        for selection in selected:
+            for model_cls in models_clses:
+                p = prep.X.shape[1]
+                n_sel = np.random.randint(1, p)
+                selected_cols = np.random.choice(features, size=n_sel, replace=False)
+                selected_cols = selected_cols.tolist()
+                result = HtuneResult.random(
+                    ds=ds,
+                    selection=selection,
+                    selected_cols=selected_cols,
+                    model_cls=model_cls,
+                )
+                df = result.to_row()
+                results.append(result)
+                dfs.append(df)
+        df = pd.concat(dfs, axis=0, ignore_index=True)
+
+        return EvaluationResults(
+            df=df,
+            X_train=prep_train.X,
+            y_train=prep_train.y,
+            X_test=prep_test.X,
+            y_test=prep_test.y,
+            results=results,
+            is_classification=ds.is_classification,
+        )
 
     def hp_table(self) -> DataFrame:
         dfs = []
@@ -143,6 +293,43 @@ class EvaluationResults:
 
     def to_json(self) -> str:
         return str(jsonpickle.encode(self))
+
+    def save(self, root: Path) -> None:
+        self.df.to_csv(root / "performance_long_table.csv", index=False)
+        self.X_train.to_csv(root / "X_train.csv", index=False)
+        self.X_test.to_csv(root / "X_test.csv", index=False)
+        self.y_train.to_frame().to_csv(root / "y_train.csv", index=True)
+        self.y_test.to_frame().to_csv(root / "y_test.csv", index=True)
+        remain = {
+            "results": self.results,
+            "is_classification": self.is_classification,
+        }
+        enc = str(jsonpickle.encode(remain))
+        (root / "eval_htune_results.json").write_text(enc)
+
+    @classmethod
+    def load(cls, root: Path) -> EvaluationResults:
+        df = pd.read_csv(root / "performance_long_table.csv")
+        X_train = pd.read_csv(root / "X_train.csv", engine="python")
+        X_test = pd.read_csv(root / "X_test.csv", engine="python")
+        df_y_tr = pd.read_csv(root / "y_train.csv", index_col=0)
+        df_y_test = pd.read_csv(root / "y_test.csv", index_col=0)
+
+        y_train = Series(data=df_y_tr.values.ravel(), name=df_y_tr.columns.to_list()[0])
+        y_test = Series(
+            data=df_y_test.values.ravel(), name=df_y_test.columns.to_list()[0]
+        )
+        enc = (root / "eval_htune_results.json").read_text()
+        remain: dict[str, Any] = jsonpickle.decode(enc)
+        return EvaluationResults(
+            df=df,
+            X_train=X_train,
+            X_test=X_test,
+            y_train=y_train,
+            y_test=y_test,
+            results=remain["results"],
+            is_classification=remain["is_classification"],
+        )
 
 
 def _get_cols(
@@ -244,7 +431,7 @@ def evaluate_tuned(
                     n_jobs=-1,
                     verbosity=optuna.logging.ERROR,
                 )
-                df = model.htune_eval(
+                df, preds_train, preds_test, probs_train, probs_test = model.htune_eval(
                     X_train=X_train,
                     y_train=prep_train.y,
                     X_test=X_test,
@@ -252,10 +439,15 @@ def evaluate_tuned(
                 )
                 result = HtuneResult(
                     selection=selection,
+                    selected_cols=X_train.columns.to_list(),
                     model_cls=model_cls,
                     model=model,
                     params=study.best_params,
                     score=study.best_value,
+                    preds_train=preds_train,
+                    preds_test=preds_test,
+                    probs_train=probs_train,
+                    probs_test=probs_test,
                 )
                 results.append(result)
             except Exception as e:
@@ -273,10 +465,15 @@ def evaluate_tuned(
                 )
                 result = HtuneResult(
                     selection=selection,
+                    selected_cols=X_train.columns.to_list(),
                     model_cls=model_cls,
                     model=model,
                     params={},
                     score=np.nan,
+                    preds_train=Series(),
+                    preds_test=Series(),
+                    probs_train=None,
+                    probs_test=None,
                 )
                 results.append(result)
             df["model"] = model.shortname
@@ -284,7 +481,13 @@ def evaluate_tuned(
             dfs.append(df)
     df = pd.concat(dfs, axis=0, ignore_index=True)
     return EvaluationResults(
-        df=df, results=results, is_classification=prepared.is_classification
+        df=df,
+        X_train=prep_train.X,
+        X_test=prep_test.X,
+        y_train=prep_train.y,
+        y_test=prep_test.y,
+        results=results,
+        is_classification=prepared.is_classification,
     )
 
 

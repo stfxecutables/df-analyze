@@ -12,7 +12,22 @@ from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Type, Union
+from random import choice
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    overload,
+)
+
+if TYPE_CHECKING:
+    from src.testing.datasets import TestDataset
 
 import numpy as np
 import optuna
@@ -210,7 +225,7 @@ class DfAnalyzeModel(ABC):
         y_train: Series,
         X_test: DataFrame,
         y_test: Series,
-    ) -> DataFrame:
+    ) -> tuple[DataFrame, Series, Series, Optional[ndarray], Optional[ndarray]]:
         from src.hypertune import (
             ClassifierScorer,
             RegressorScorer,
@@ -229,6 +244,7 @@ class DfAnalyzeModel(ABC):
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
         preds_test = self.tuned_predict(X_test)
         preds_train = self.tuned_predict(X_train)
+        probs_train = probs_test = None
         if self.is_classifier:
             probs_test = self.predict_proba(X_test)
             probs_train = self.predict_proba(X_train)
@@ -278,7 +294,7 @@ class DfAnalyzeModel(ABC):
         df = pd.concat([train, holdout, means], axis=1)
         df.index.name = "metric"
         df = df.reset_index()
-        return df
+        return df, preds_train, preds_test, probs_train, probs_test
 
     def score(self, X: DataFrame, y: Series) -> float:
         if self.model is None:
@@ -358,6 +374,59 @@ class DfAnalyzeModel(ABC):
             raise RuntimeError("Need to tune estimator before calling `.predict_proba()`")
 
         return self.tuned_model.predict_proba(X)
+
+    @overload
+    @staticmethod
+    def random(ds: TestDataset, n: Literal[1]) -> Type[DfAnalyzeModel]:
+        ...
+
+    @overload
+    @staticmethod
+    def random(ds: TestDataset, n: int) -> list[Type[DfAnalyzeModel]]:
+        ...
+
+    @staticmethod
+    def random(
+        ds: TestDataset, n: Union[int, Literal[1]] = 1
+    ) -> Union[Type[DfAnalyzeModel], Sequence[Type[DfAnalyzeModel]]]:
+        from src.models.dummy import DummyClassifier, DummyRegressor
+        from src.models.knn import KNNClassifier, KNNRegressor
+        from src.models.lgbm import (
+            LightGBMClassifier,
+            LightGBMRegressor,
+            LightGBMRFClassifier,
+            LightGBMRFRegressor,
+        )
+        from src.models.linear import (
+            ElasticNetRegressor,
+            LRClassifier,
+            SGDClassifier,
+            SGDRegressor,
+        )
+        from src.models.mlp import MLPEstimator
+
+        cls_choices = [
+            DummyClassifier,
+            KNNClassifier,
+            LightGBMClassifier,
+            LightGBMRFClassifier,
+            SGDClassifier,
+            LRClassifier,
+            MLPEstimator,
+        ]
+        reg_choices = [
+            DummyRegressor,
+            KNNRegressor,
+            LightGBMRegressor,
+            LightGBMRFRegressor,
+            SGDRegressor,
+            ElasticNetRegressor,
+            MLPEstimator,
+        ]
+        choices = cls_choices if ds.is_classification else reg_choices
+        if n <= 1:
+            return choice(choices)
+        return np.random.choice(choices, replace=False, size=n).tolist()
 
 
 def get_n_select(

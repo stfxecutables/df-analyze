@@ -19,7 +19,12 @@ from typing import (
     Tuple,
 )
 
+import numpy as np
+from numpy import ndarray
+from pandas import DataFrame, Series
+
 from src.cli.cli import ProgramOptions
+from src.hypertune import EvaluationResults
 from src.preprocessing.inspection.inspection import InspectionResults
 from src.saving import ProgramDirs
 from src.selection.embedded import EmbedSelected
@@ -64,6 +69,10 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
             if not eq:
                 return False
         return True
+    elif isinstance(obj1, ndarray) and isinstance(obj2, ndarray):
+        return (obj1.ravel().round(8) == obj2.ravel().round(8)).all()
+    elif isinstance(obj1, (DataFrame, Series)) and isinstance(obj2, (DataFrame, Series)):
+        return np.all((obj1.round(8).values == obj2.round(8).values)).item()
     else:
         return obj1 == obj2
 
@@ -153,3 +162,32 @@ def test_wrap_json(dataset: Tuple[str, TestDataset]) -> None:
             raise ValueError(
                 f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
             )
+
+
+@all_ds
+def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
+        return  # defective target
+    tempdir = TemporaryDirectory()
+    try:
+        for _ in range(10):
+            options = ProgramOptions.random(ds, outdir=Path(tempdir.name))
+            selected = EvaluationResults.random(ds, options)
+            outdir = Path(tempdir.name)
+
+            selected.save(root=outdir)
+            loaded = EvaluationResults.load(root=outdir)
+
+            assert isinstance(loaded, EvaluationResults)
+            for attr in selected.__dict__:
+                attr1 = getattr(selected, attr)
+                attr2 = getattr(loaded, attr)
+                if not are_equal(attr1, attr2):
+                    raise ValueError(
+                        f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
+                    )
+    except Exception as e:
+        raise ValueError(f"Got error saving eval results for data {dsname}:\n{e}")
+    finally:
+        tempdir.cleanup()
