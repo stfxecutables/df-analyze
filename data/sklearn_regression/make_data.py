@@ -1,21 +1,14 @@
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union, cast, no_type_check
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import pytest
-from numpy import ndarray
-from pandas import DataFrame, Series
+from pandas import DataFrame
 from sklearn.datasets import make_regression
 from sklearn.ensemble import AdaBoostRegressor as ADA
 from sklearn.ensemble import GradientBoostingRegressor as GB
 from sklearn.model_selection import ParameterGrid, cross_val_score
 from sklearn.neural_network import MLPRegressor
-from sklearn.svm import SVR
 from tqdm import tqdm
-from typing_extensions import Literal
 
 ROOT = Path(__file__).resolve().parent
 OUTFILE = ROOT / "data.json"

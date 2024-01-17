@@ -5,18 +5,23 @@ NOTE: We are copying this in from sklearn because sklearn folks are too lazy to 
 such a long computation...
 """
 import numbers
+from typing import Any, Literal, no_type_check
 
 import numpy as np
-
-from sklearn.feature_selection._base import SelectorMixin
+from joblib import Parallel, delayed
+from numpy import ndarray
 from sklearn.base import BaseEstimator, MetaEstimatorMixin, clone
-# from sklearn.utils._tags import _safe_tags
-from src.sklearn_pasta._tags import _safe_tags
-from sklearn.utils.validation import check_is_fitted
+from sklearn.feature_selection._base import SelectorMixin
 from sklearn.model_selection import cross_val_score
+from sklearn.utils.validation import check_is_fitted
 from tqdm import tqdm
 
 
+# from sklearn.utils._tags import _safe_tags
+from src.sklearn_pasta._tags import _safe_tags
+
+
+@no_type_check
 class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator):
     """Transformer that performs Sequential Feature Selection.
 
@@ -121,7 +126,6 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         cv=5,
         n_jobs=None,
     ):
-
         self.estimator = estimator
         self.n_features_to_select = n_features_to_select
         self.direction = direction
@@ -143,8 +147,8 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         -------
         self : object
         """
-        tags = self._get_tags()
-        X, y = self._validate_data(
+        tags = self._get_tags()  # type: ignore
+        X, y = self._validate_data(  # type: ignore
             X,
             y,
             accept_sparse="csc",
@@ -165,11 +169,11 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         if self.n_features_to_select is None:
             self.n_features_to_select_ = n_features // 2
         elif isinstance(self.n_features_to_select, numbers.Integral):
-            if not 0 < self.n_features_to_select < n_features:
+            if not 0 < self.n_features_to_select < n_features:  # type: ignore
                 raise ValueError(error_msg)
             self.n_features_to_select_ = self.n_features_to_select
         elif isinstance(self.n_features_to_select, numbers.Real):
-            if not 0 < self.n_features_to_select <= 1:
+            if not 0 < self.n_features_to_select <= 1:  # type: ignore
                 raise ValueError(error_msg)
             self.n_features_to_select_ = int(n_features * self.n_features_to_select)
         else:
@@ -186,6 +190,7 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         # - that we have already *selected* if we do forward selection
         # - that we have already *excluded* if we do backward selection
         current_mask = np.zeros(shape=n_features, dtype=bool)
+        self.scores = np.full(shape=n_features, fill_value=np.nan)
         n_iterations = (
             self.n_features_to_select_
             if self.direction == "forward"
@@ -193,9 +198,17 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
         )
 
         ddesc = "Step-up" if self.direction == "forward" else "Step-down"
-        for _ in tqdm(range(n_iterations), total=n_iterations, desc=f"{ddesc} feature selection: ", leave=True):
-            new_feature_idx = self._get_best_new_feature(cloned_estimator, X, y, current_mask)
+        for _ in tqdm(
+            range(n_iterations),
+            total=n_iterations,  # type: ignore
+            desc=f"{ddesc} feature selection: ",
+            leave=True,
+        ):  # type: ignore
+            new_feature_idx, score = self._get_best_new_feature(
+                cloned_estimator, X, y, current_mask
+            )
             current_mask[new_feature_idx] = True
+            self.scores[new_feature_idx] = score
 
         if self.direction == "backward":
             current_mask = ~current_mask
@@ -203,22 +216,43 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
 
         return self
 
-    def _get_best_new_feature(self, estimator, X, y, current_mask):
+    def _get_best_new_feature(self, estimator, X, y, current_mask) -> tuple[int, float]:
         # Return the best new feature to add to the current_mask, i.e. return
         # the best new feature to add (resp. remove) when doing forward
         # selection (resp. backward selection)
         candidate_feature_indices = np.flatnonzero(~current_mask)
-        scores = {}
-        for feature_idx in tqdm(candidate_feature_indices, total=len(candidate_feature_indices)):
-            candidate_mask = current_mask.copy()
-            candidate_mask[feature_idx] = True
-            if self.direction == "backward":
-                candidate_mask = ~candidate_mask
-            X_new = X[:, candidate_mask]
-            scores[feature_idx] = cross_val_score(
-                estimator, X_new, y, cv=self.cv, scoring=self.scoring, n_jobs=self.n_jobs
-            ).mean()
-        return max(scores, key=lambda feature_idx: scores[feature_idx])
+        # scores = {}
+
+        scores: list[tuple[float, int]] = Parallel()(
+            delayed(get_score)(
+                estimator=estimator,
+                X=X,
+                y=y,
+                cv=self.cv,
+                scoring=self.scoring,
+                current_mask=current_mask,
+                feature_idx=feature_idx,
+                direction=self.direction,  # type: ignore
+            )
+            for feature_idx in candidate_feature_indices
+        )
+        scores_dict = {idx: score for score, idx in scores}
+
+        # for feature_idx in tqdm(candidate_feature_indices, total=len(candidate_feature_indices)):
+        #     score, idx = get_score(
+        #         estimator=estimator,
+        #         X=X,
+        #         y=y,
+        #         cv=self.cv,
+        #         scoring=self.scoring,
+        #         current_mask=current_mask,
+        #         feature_idx=feature_idx,
+        #         direction=self.direction,  # type: ignore
+        #     )
+        #     scores[idx] = score
+        feature_idx = max(scores_dict, key=lambda feature_idx: scores_dict[feature_idx])
+        score = scores_dict[feature_idx]
+        return feature_idx, score
 
     def _get_support_mask(self):
         check_is_fitted(self)
@@ -227,3 +261,22 @@ class SequentialFeatureSelector(SelectorMixin, MetaEstimatorMixin, BaseEstimator
     def _more_tags(self):
         return {"allow_nan": _safe_tags(self.estimator, key="allow_nan"), "requires_y": True}
 
+
+def get_score(
+    estimator: Any,
+    X: Any,
+    y: Any,
+    cv: Any,
+    scoring: Any,
+    current_mask: ndarray,
+    feature_idx: int,
+    direction: Literal["backward", "forward"],
+) -> tuple[float, int]:
+    candidate_mask = current_mask.copy()
+    candidate_mask[feature_idx] = True
+    if direction == "backward":
+        candidate_mask = ~candidate_mask
+    X_new = X[:, candidate_mask]
+    return cross_val_score(
+        estimator, X_new, y, cv=cv, scoring=scoring, n_jobs=1
+    ).mean(), feature_idx

@@ -1,9 +1,31 @@
 ################################################################################
 ###                             Project-Specific                             ###
 ################################################################################
+data/*.csv
 data/*.rar
+data/testing/**/*.csv
+data/testing/**/*.txt
+data/testing/**/*.parquet
+data/**/*.tar.gz
+data/testing/__*_CACHE__
+data/testing/__TEST*
+data/testing/__FULL*
+
 test_results
+
+results/reports
+runtimes/*.txt
+*runtime*txt
+
 __cache__
+.mplconfig
+mplconfig
+
+poetry.lock
+
+**/*.npy
+**/*.sif
+**/*.tar
 
 
 ################################################################################
@@ -31,7 +53,7 @@ __cache__
 
 ### macOS ###
 # General
-.DS_Store
+**/.DS_Store
 .AppleDouble
 .LSOverride
 

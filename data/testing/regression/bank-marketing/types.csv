@@ -1,0 +1,17 @@
+feature_name,type
+V1,continuous
+V6,continuous
+V10,continuous
+V12,continuous
+V13,continuous
+V14,continuous
+V15,continuous
+V2,categorical
+V3,categorical
+V4,categorical
+V5,categorical
+V7,categorical
+V8,categorical
+V9,categorical
+V11,categorical
+V16,categorical

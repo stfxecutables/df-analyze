@@ -37,12 +37,15 @@ def get_cache_dir() -> Path:
                 "Could not resolve $HOME environment variable. Details above."
             ) from e
         existing = new / DF_CACHE_NAME
+        if not is_writeable(existing):
+            existing = Path.cwd().resolve() / DF_CACHE_NAME
         warn(
             f"""
 No existing environment variable `DF_ANALYZE_CACHE` currently defined. A
 default directory of {existing} will be used.
 """
         )
+
         os.environ[DF_ENV] = str(existing)
 
     cache = Path(existing)

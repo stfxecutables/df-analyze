@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>df-analyze</title>
+</head>
+
+<body>
+  <fieldset>
+    <legend> Options</legend>
+
+    <input type="text" name="--spreadsheet" id="spreadsheet" required>
+    <label for="spreadsheet">Spreadsheet file</label>
+
+    <fieldset id="normalization-options">
+      <legend> Normalization Options</legend>
+      <input type="radio" name="--norm" id="normalization1" data-arg="minmax">
+      <label for="normalization1">MinMax</label>
+
+      <input type="radio" name="--norm" id="normalization2" data-arg="robust">
+      <label for="normalization2">Robust</label>
+
+      <input type="radio" name="--norm" id="normalization3"
+        data-arg="indicator">
+      <label for="normalization3">Robust+Indicator</label>
+
+    </fieldset>
+
+    <fieldset id="feature-selection-options">
+      <legend> Feature Selection Options</legend>
+      <input type="radio" name="--feat-select" id="featselect1"
+        data-arg="minfo">
+      <label for="featselect1">Mutual Information</label>
+
+      <input type="radio" name="--feat-select" id="featselect2"
+        data-arg="relief">
+      <label for="featselect2">Relief (MultiSURF)</label>
+
+      <input type="radio" name="--feat-select" id="featselect3"
+        data-arg="lgbm">
+      <label for="featselect3">Embedded (LightGBM)</label>
+
+      <input type="radio" name="--feat-select" id="featselect4"
+        data-arg="none">
+      <label for="featselect4">None</label>
+
+    </fieldset>
+  </fieldset>
+
+  <pre>
+  <code id="args-display-file"></code>
+  <code id="args-display-norm"></code>
+  <code id="args-display-feat"></code>
+  </pre>
+
+</body>
+
+<script>
+  const norm_form = document.getElementById("normalization-options");
+  const select_form = document.getElementById("feature-selection-options");
+  const file = document.getElementById("spreadsheet")
+
+  const disp_file = document.getElementById("args-display-file")
+  const disp_norm = document.getElementById("args-display-norm")
+  const disp_feat_select = document.getElementById("args-display-feat")
+
+  norm_form.addEventListener("change", (event) => {
+    disp_norm.textContent = `--norm ${event.target.dataset.arg}`;
+  })
+  select_form.addEventListener("change", (event) => {
+    if (event.target.dataset.arg === "none") {
+      disp_feat_select.textContent = "";
+      return
+    }
+    disp_feat_select.textContent = `--feat-select ${event.target.dataset.arg}`;
+  })
+  file.addEventListener("input", (event) => {
+    // disp_file.textContent = `--spreadsheet ${event.target.value}`;
+    if (event.target.value === "") {
+      disp_file.textContent = "";
+    } else {
+      disp_file.textContent = `--spreadsheet ${event.target.value}`;
+    }
+  })
+
+</script>
+
+</html>

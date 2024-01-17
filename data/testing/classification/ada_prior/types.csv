@@ -1,0 +1,15 @@
+feature_name,type
+age,continuous
+workclass,categorical
+fnlwgt,continuous
+education,categorical
+educationNum,continuous
+maritalStatus,categorical
+occupation,categorical
+relationship,categorical
+race,categorical
+sex,categorical
+capitalGain,continuous
+capitalLoss,continuous
+hoursPerWeek,continuous
+nativeCountry,categorical

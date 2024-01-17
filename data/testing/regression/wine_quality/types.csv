@@ -1,0 +1,13 @@
+feature_name,type
+fixed_acidity,continuous
+volatile_acidity,continuous
+citric_acid,continuous
+residual_sugar,continuous
+chlorides,continuous
+free_sulfur_dioxide,continuous
+total_sulfur_dioxide,continuous
+density,continuous
+pH,continuous
+sulphates,continuous
+alcohol,continuous
+target,continuous

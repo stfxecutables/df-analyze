@@ -1,0 +1,11 @@
+feature_name,type
+Upper_Age,continuous
+Lower_Age,continuous
+Reco_Policy_Premium,continuous
+City_Code,categorical
+Accomodation_Type,categorical
+Reco_Insurance_Type,categorical
+Is_Spouse,categorical
+Health Indicator,categorical
+Holding_Policy_Duration,categorical
+Holding_Policy_Type,categorical
