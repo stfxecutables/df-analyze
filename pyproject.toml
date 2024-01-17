@@ -94,6 +94,7 @@ markers = [
   "med: marks tests as medium (deselect with '-m \"not med\"')",
   "medium: marks tests as medium (deselect with '-m \"not medium\"')",
   "fast: marks tests as fast (deselect with '-m \"not fast\"')",
+  "regen: marks tests as being for regenerating cached results",
   "cached: marks tests as using cached results (deselect with '-m \"not cached\"')",
   "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
 ]

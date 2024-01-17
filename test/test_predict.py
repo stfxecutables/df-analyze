@@ -52,7 +52,10 @@ def min_subsample(y: Series) -> int:
 
 
 def print_preds(
-    dsname: str, df_cont: Optional[DataFrame], df_cat: Optional[DataFrame], is_classification: bool
+    dsname: str,
+    df_cont: Optional[DataFrame],
+    df_cat: Optional[DataFrame],
+    is_classification: bool,
 ) -> None:
     sorter = "acc" if is_classification else "var-exp"
 
@@ -68,7 +71,9 @@ def print_preds(
 
 
 def do_predict(dataset: tuple[str, TestDataset]) -> Optional[PredResults]:
-    filterwarnings("ignore", message="Bins whose width are too small", category=UserWarning)
+    filterwarnings(
+        "ignore", message="Bins whose width are too small", category=UserWarning
+    )
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:
         return  # target is constant after dropping NaN
@@ -92,7 +97,9 @@ def do_predict(dataset: tuple[str, TestDataset]) -> Optional[PredResults]:
 def do_predict_cached(
     dataset: tuple[str, TestDataset]
 ) -> Optional[tuple[Optional[DataFrame], Optional[DataFrame]]]:
-    filterwarnings("ignore", message="Bins whose width are too small", category=UserWarning)
+    filterwarnings(
+        "ignore", message="Bins whose width are too small", category=UserWarning
+    )
     dsname, ds = dataset
     if dsname in ["credit-approval_reproduced"]:
         return  # target is constant after dropping NaN
@@ -117,16 +124,19 @@ def do_predict_cached(
         raise ValueError(f"Failed to make univariate predictions for {dsname}") from e
 
 
+@pytest.mark.regen
 @fast_ds
 def test_predict_fast(dataset: tuple[str, TestDataset]) -> None:
     do_predict(dataset)
 
 
+@pytest.mark.regen
 @med_ds
 def test_predict_med(dataset: tuple[str, TestDataset]) -> None:
     do_predict(dataset)
 
 
+@pytest.mark.regen
 @slow_ds
 def test_predict_slow(dataset: tuple[str, TestDataset]) -> None:
     do_predict(dataset)

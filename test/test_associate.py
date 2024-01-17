@@ -52,16 +52,19 @@ def do_associate_cached(dataset: tuple[str, TestDataset]) -> Optional[AssocResul
     return assocs
 
 
+@pytest.mark.regen
 @fast_ds
 def test_associate_fast(dataset: tuple[str, TestDataset]) -> None:
     do_associate(dataset)
 
 
+@pytest.mark.regen
 @med_ds
 def test_associate_med(dataset: tuple[str, TestDataset]) -> None:
     do_associate(dataset)
 
 
+@pytest.mark.regen
 @slow_ds
 def test_associate_slow(dataset: tuple[str, TestDataset]) -> None:
     do_associate(dataset)

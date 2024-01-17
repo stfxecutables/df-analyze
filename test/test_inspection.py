@@ -43,7 +43,9 @@ TIME_DSNAMES = [
     "bank-marketing",
     "kick",
 ]
-TIME_DATASETS = {dsname: ds for dsname, ds in TEST_DATASETS.items() if dsname in TIME_DSNAMES}
+TIME_DATASETS = {
+    dsname: ds for dsname, ds in TEST_DATASETS.items() if dsname in TIME_DSNAMES
+}
 
 
 def do_inspect(dataset: tuple[str, TestDataset]) -> None:
@@ -185,16 +187,19 @@ def test_caching(dataset: tuple[str, TestDataset]) -> None:
     do_caching(dataset)
 
 
+@pytest.mark.regen
 @fast_ds
 def test_inspect_fast(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
 
 
+@pytest.mark.regen
 @med_ds
 def test_inspect_medium(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
 
 
+@pytest.mark.regen
 @slow_ds
 def test_inspect_slow(dataset: tuple[str, TestDataset]) -> None:
     do_inspect(dataset)
@@ -314,7 +319,10 @@ def test_detect_heuristically_ordinal() -> None:
     ).astype(int)
     ords = inspect_str_columns(df, str_cols=["ints"])[1]
     assert "ints" in ords.infos
-    assert "80% or more of unique integer values differ only by 1" in ords.infos["ints"].reason
+    assert (
+        "80% or more of unique integer values differ only by 1"
+        in ords.infos["ints"].reason
+    )
 
     rng = np.random.default_rng(68)
     df = DataFrame(

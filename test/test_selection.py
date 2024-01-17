@@ -97,7 +97,7 @@ def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
     # assert len(selected.selected) > 0
 
     options.embed_select = EmbedSelectionModel.LGBM
-    selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
+    selected = embed_select_features(prep_train=prep_train, options=options)
     if selected is None or (selected.selected is None):
         raise ValueError("Impossible!")
     assert len(selected.selected) > 0
@@ -118,7 +118,9 @@ def estimate_select(
 
     options = ProgramOptions.random(ds)
     options.wrapper_model = model
-    options.wrapper_select = WrapperSelection.StepUp if forward else WrapperSelection.StepDown
+    options.wrapper_select = (
+        WrapperSelection.StepUp if forward else WrapperSelection.StepDown
+    )
     options.n_feat_wrapper = m if forward else p - m
     if (p <= m) and forward:
         return float("nan")
@@ -218,7 +220,9 @@ def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
-    options.wrapper_model = WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    options.wrapper_model = (
+        WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    )
     options.wrapper_select = WrapperSelection.StepUp
     options.n_feat_wrapper = 10
     if prepared.X.shape[1] <= 10:
@@ -247,7 +251,9 @@ def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
-    options.wrapper_model = WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    options.wrapper_model = (
+        WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
+    )
     options.wrapper_select = WrapperSelection.StepDown
     options.n_feat_wrapper = prepared.X.shape[1] - 10
     if options.n_feat_wrapper <= 0:
@@ -341,17 +347,21 @@ def test_predict_select_slow(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
-def test_embed_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_embed_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     file = RUNTIMES / "lgbm_embed_fast_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_embed_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_embed_select, file, dataset)
 
 
 @med_ds
-def test_embed_select_med(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_embed_select_med(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     file = RUNTIMES / "lgbm_embed_med_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_embed_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_embed_select, file, dataset)
 
 
 @fast_ds
@@ -359,8 +369,8 @@ def test_linear_forward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
     file = RUNTIMES / "linear_forward_select_fast_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_linear_forward_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_linear_forward_select, file, dataset)
 
 
 @slow_ds
@@ -368,15 +378,17 @@ def test_linear_forward_select_slow(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
     file = RUNTIMES / "linear_forward_select_slow_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_linear_forward_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_linear_forward_select, file, dataset)
 
 
 @fast_ds
-def test_lgbm_forward_select_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_lgbm_forward_select_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     file = RUNTIMES / "lgbm_forward_select_fast_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_lgbm_forward_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_lgbm_forward_select, file, dataset)
 
 
 @fast_ds
@@ -384,8 +396,8 @@ def test_linear_backward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
     file = RUNTIMES / "linear_backward_select_fast_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_linear_backward_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_linear_backward_select, file, dataset)
 
 
 @fast_ds
@@ -393,8 +405,8 @@ def test_lgbm_backward_select_fast(
     dataset: tuple[str, TestDataset], capsys: CaptureFixture
 ) -> None:
     file = RUNTIMES / "lgbm_backward_select_fast_runtimes.txt"
-    with capsys.disabled():
-        do_logged(do_lgbm_backward_select, file, dataset)
+    # with capsys.disabled():
+    do_logged(do_lgbm_backward_select, file, dataset)
 
 
 if __name__ == "__main__":

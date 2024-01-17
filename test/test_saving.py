@@ -170,11 +170,11 @@ def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
     if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
         return  # defective target
     tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
     try:
         for _ in range(10):
-            options = ProgramOptions.random(ds, outdir=Path(tempdir.name))
+            options = ProgramOptions.random(ds, outdir=outdir)
             selected = EvaluationResults.random(ds, options)
-            outdir = Path(tempdir.name)
 
             selected.save(root=outdir)
             loaded = EvaluationResults.load(root=outdir)

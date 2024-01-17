@@ -366,7 +366,7 @@ class ProgramOptions(Debug):
         test_val_size: Size = 0.4
         # mc_repeats: int = 0
         sub = "classification" if ds.is_classification else "regression"
-        outdir = outdir or (FULL_RESULTS / sub) / ds.dsname
+        outdir = outdir or ((FULL_RESULTS / sub) / ds.dsname)
         is_spreadsheet: bool = False
         separator: str = ","
         verbosity: Verbosity = Verbosity.ERROR

@@ -76,16 +76,19 @@ def do_prep_cached(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
+@pytest.mark.regen
 def test_prepare_fast(dataset: tuple[str, TestDataset]) -> None:
     do_prepare(dataset)
 
 
 @med_ds
+@pytest.mark.regen
 def test_prepare_med(dataset: tuple[str, TestDataset]) -> None:
     do_prepare(dataset)
 
 
 @slow_ds
+@pytest.mark.regen
 def test_prepare_slow(dataset: tuple[str, TestDataset]) -> None:
     do_prepare(dataset)
 
