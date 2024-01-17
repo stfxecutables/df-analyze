@@ -79,50 +79,45 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
 @all_ds
 def test_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
-    tempdir = TemporaryDirectory()
     try:
-        for _ in range(10):
-            opts = ProgramOptions.random(ds)
-            if opts.outdir is not None:
-                rmtree(opts.outdir)
-            root = Path(tempdir.name)
-            opts.program_dirs = ProgramDirs.new(root=root, hsh=opts.hash())
-            opts.to_json()
-            assert root.exists()
-            assert opts.program_dirs.options is not None
-            assert opts.program_dirs.options.exists()
-            opts2 = ProgramOptions.from_json(opts.program_dirs.root)
-            for attr in opts.__dict__:
-                attr1 = getattr(opts, attr)
-                attr2 = getattr(opts2, attr)
-                if not are_equal(attr1, attr2):
-                    raise ValueError(
-                        f"Saved attribute {attr}: {attr2} does not equal initial "
-                        f"value of: {attr1}"
-                    )
+        with TemporaryDirectory() as tempdir:
+            for _ in range(10):
+                outdir = Path(tempdir)
+                opts = ProgramOptions.random(ds, outdir=outdir)
+                opts.to_json()
+                assert outdir.exists()
+                assert opts.program_dirs.options is not None
+                assert opts.program_dirs.options.exists()
+                opts2 = ProgramOptions.from_json(opts.program_dirs.root)
+                for attr in opts.__dict__:
+                    attr1 = getattr(opts, attr)
+                    attr2 = getattr(opts2, attr)
+                    if not are_equal(attr1, attr2):
+                        raise ValueError(
+                            f"Saved attribute {attr}: {attr2} does not equal initial "
+                            f"value of: {attr1}"
+                        )
     except Exception as e:
         raise e
-    finally:
-        tempdir.cleanup()
 
 
 @all_ds
 def test_inspection_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
-    tempdir = TemporaryDirectory()
-    inspections = ds.inspect(load_cached=True, force=False)
-    outdir = Path(tempdir.name)
-    outfile = outdir / "inspections.json"
-    inspections.to_json(outfile)
-    loaded = InspectionResults.from_json(outfile)
-    assert isinstance(loaded, InspectionResults)
-    for attr in inspections.__dict__:
-        attr1 = getattr(inspections, attr)
-        attr2 = getattr(loaded, attr)
-        if not are_equal(attr1, attr2):
-            raise ValueError(
-                f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
-            )
+    with TemporaryDirectory() as tempdir:
+        inspections = ds.inspect(load_cached=True, force=False)
+        outdir = Path(tempdir)
+        outfile = outdir / "inspections.json"
+        inspections.to_json(outfile)
+        loaded = InspectionResults.from_json(outfile)
+        assert isinstance(loaded, InspectionResults)
+        for attr in inspections.__dict__:
+            attr1 = getattr(inspections, attr)
+            attr2 = getattr(loaded, attr)
+            if not are_equal(attr1, attr2):
+                raise ValueError(
+                    f"Saved attribute {attr}: {attr2} does not equal initial value of: {attr1}"
+                )
 
 
 @all_ds
