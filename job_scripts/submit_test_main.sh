@@ -12,7 +12,7 @@
 #SBATCH --profile=all
 #SBATCH --array=0-70
 
-PROJECT=$HOME/projects/def-jlevman/dberger/df-analyze
+PROJECT=$SCRATCH/df-analyze
 
 cd "$PROJECT" || exit 1
 bash run_python_with_home.sh test/test_main.py
