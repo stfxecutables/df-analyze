@@ -3,6 +3,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --job-name=test_main
 #SBATCH --output=test_main__%j_%a.out
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=80
 #SBATCH --mail-user=dberger@stfx.ca
