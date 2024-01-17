@@ -193,9 +193,8 @@ class ProgramDirs(Debug):
             return
         if results is None:
             return
-        out = self.results / "evaluation_results.json"
         try:
-            out.write_text(results.to_json())
+            results.save(self.results)
         except Exception as e:
             warn(
                 "Got exception when attempting to save final evaluation results. "

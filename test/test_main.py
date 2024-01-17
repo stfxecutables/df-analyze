@@ -148,13 +148,25 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 
 if __name__ == "__main__":
-    for dsname, ds in FAST_INSPECTION:
-        if "kdd" in dsname.lower():
-            continue  # all slow as hell
-        if dsname.lower() < "student_dropout":
-            continue
-
+    if os.environ.get("CC_CLUSTER") == "niagara":
+        idx = os.environ.get("SLURM_ARRAY_TASK_ID")
+        if idx is None:
+            raise ValueError("On Niagara but no SLURM_ARRAY_TASK_ID defined")
+        idx = int(idx)
+        dsname, ds = FAST_INSPECTION[idx]
         print("=" * 79)
         print(f"Testing {dsname}")
         print("=" * 79)
         do_main((dsname, ds))
+
+    else:
+        for dsname, ds in FAST_INSPECTION:
+            if "kdd" in dsname.lower():
+                continue  # all slow as hell
+            # if dsname.lower() < "student_dropout":
+            #     continue
+
+            print("=" * 79)
+            print(f"Testing {dsname}")
+            print("=" * 79)
+            do_main((dsname, ds))
