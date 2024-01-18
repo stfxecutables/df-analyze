@@ -1,7 +1,8 @@
 ```txt
+
 usage:
 
-The `df-analyze` program can be used in one of two modes: CLI mode, and
+The df-analyze program can be used in one of two modes: CLI mode, and
 spreadsheet mode. In spreadsheet mode, df-analyze options are specified in a
 special format at the top of a spreadsheet or .csv file, and spreadsheet
 columns are given specific names to identify targets, continuous features,
@@ -15,6 +16,7 @@ specify manually are:
 
     --target (required)
     --mode (required)
+    --outdir
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -29,6 +31,8 @@ optional arguments:
                         column holding the target variable (or feature) can be specified by the
                         `--target` / `-y` argument, but is "target" by default if such a column name
                         exists, or the last column if it does not.
+
+                        For more details, see the README at https://github.com/stfxecutables/df-analyze.
 
   --df DF
                         The dataframe to analyze.
@@ -69,7 +73,7 @@ optional arguments:
                             --ordinals star_rating number_of_purchases times_signed_in
 
                         that specifies which features will be treated as ordinal regardless of the
-                        number of levels or format of the data. If during data cleaning categorical
+                        number of levels or format of the data. If during data cleaning ordinal
                         variables are detected that are NOT specified by the user, a warning will be
                         raised. If the values of the specified variables cannot be interpreted as
                         integers, then df-analyze will exit with an error.
@@ -88,7 +92,7 @@ optional arguments:
 
                         If "classify", do classification. If "regress", do regression.
 
-  --classifiers {knn,lgbm,rf,lr,sgd,mlp,svm,dummy} [{knn,lgbm,rf,lr,sgd,mlp,svm,dummy} ...]
+  --classifiers  [ ...]
 
                         The list of classifiers to use when comparing classification performance.
                         Can be a list of elements from: [dummy knn lgbm lr mlp rf sgd svm].
@@ -100,7 +104,7 @@ optional arguments:
 
   --feat-select  [ ...]
 
-                        The feature selection methods to use. Available options are:
+                        The feature selection method(s) to use. Available options are:
 
                           filter      Select features based on their univariate relationships to the
                                       target variables.
@@ -113,27 +117,16 @@ optional arguments:
                                       step-up (forward) feature selection, or step-down (backward)
                                       feature elimination.
 
+                          none:       Do not perform any selection.
+
+                        NOTE: Multiple selection options can be compared by passing each option, e.g.
+
+                          python df-analyze.py [...] --feat-select filter embed wrap
+
                         NOTE: Feature selection currently uses a training split of the full data
                         provided in the `--df` or `--spreadsheet` argument to `df-analyze.py`. This
                         is to prevent double-dipping / circular analysis that can result in
                         (extremely) biased performance estimates.
-
-  --model-select  [ ...]
-
-                        Methods of model-based feature selection methods to use. Available options are:
-
-                          embed:      Select using an embedded method, i.e. a method where the model
-                                      produces values for each feature that can be interpreted as
-                                      feature importances. Which model is used is determined by
-                                      `--embed-model`.
-
-                          wrap:       Select using a wrapper method, i.e. a method which uses ("wraps")
-                                      a specific model, and then optimizes the feature set via some
-                                      alternation of model evaluations and feature-space search /
-                                      navigation strategy.
-
-                          none:       Do not select features using any model. Always included by
-                                      default.
 
   --embed-select  [ ...]
 
@@ -148,6 +141,11 @@ optional arguments:
 
                           none:       Do not select features based on any model. Always included by
                                       by default.
+
+                        Note: Embedded feature selection is currently performed via scikit-learn's
+                        `feature_selection.SelectFromModel` with the default threshold of "mean",
+                        meaning the number of features selected is automatic and not currently
+                        configurable.
 
   --wrapper-select
                         Wrapper-based feature selection method, i.e. method/optimizer to use to
@@ -169,10 +167,14 @@ optional arguments:
                           stepdown:   Start with the full feature set, and remove the feature
                                       that most improves (or least decreases) prediction of the target
                                       variable. Also called backward / recursive feature slection or
-                                      elimination.
+                                      elimination. High computational complexity.
+
+                          none:       Do not select features using any model. Always included by
+                                      default.
 
   --wrapper-model
-                        Model to use during wrapper-based feature selection. Available options are:
+                        Model to use during wrapper-based (stepwise) feature selection. Available
+                        options are:
 
                           linear:     For classification tasks, `sklearn.linear_model.SGDClassifier`,
                                       and for regression tasks, `sklearn.linear_model.SGDRegressor`
@@ -226,9 +228,9 @@ optional arguments:
                         Number or percentage (as a value in [0, 1]) of total features of any kind
                         (categorical or continuous) to select via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-filter-total`,
+                        Note only two of two of the three options:`--n-feat-filter`,
                         `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-filter-total` argument will be ignored.
+                        otherwise the `--n-feat-filter` argument will be ignored.
 
 
   --n-feat-wrapper N_FEAT_WRAPPER
@@ -243,9 +245,9 @@ optional arguments:
                         Number or percentage (as a value in [0, 1]) of continuous features to select
                         via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-filter-total`,
+                        Note only two of two of the three options:`--n-feat-filter`,
                         `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-filter-total` argument will be ignored.
+                        otherwise the `--n-feat-filter` argument will be ignored.
 
 
   --n-filter-cat N_FILTER_CAT
@@ -253,20 +255,13 @@ optional arguments:
                         Number or percentage (as a value in [0, 1]) of categorical features to select
                         via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-filter-total`,
+                        Note only two of two of the three options:`--n-feat-filter`,
                         `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-filter-total` argument will be ignored.
+                        otherwise the `--n-feat-filter` argument will be ignored.
 
 
   --filter-method
                         Method(s) to use for filter selection.
-
-                        Method 'relief' is the most sophisticated and can detect interactions among
-                        pairs of features without dramatic compute costs (see
-                        https://www.sciencedirect.com/science/article/pii/S1532046418301400 or
-                        https://doi.org/10.1016/j.jbi.2018.07.014 for details and overview). This is
-                        in contrast to the 'assoc' and 'pred' methods (below) which do not detect any
-                        feature interactions.
 
                         Method 'assoc' is the fastest and is based on a measure of association
                         between the feature and the target variable, where the measure of association
@@ -282,27 +277,90 @@ optional arguments:
                         depending on the task. Computing these univariate predictive performances is
                         quite expensive, but because of the internal k-fold validation used, these
                         predictive performance metrics directly asses the potential predictive
-                        utility of each feature.
+                        utility of each feature in isolation.
+
+                        [CURRENTLY UNIMPLEMTED] Method 'relief' is the most sophisticated and can
+                        detect interactions among pairs of features without dramatic compute costs
+                        (see https://www.sciencedirect.com/science/article/pii/S1532046418301400 or
+                        https://doi.org/10.1016/j.jbi.2018.07.014 for details and overview). This is
+                        in contrast to the 'assoc' and 'pred' methods (below) which do not detect any
+                        feature interactions.
 
   --filter-assoc-cont-classify
 
                         Type of association to use for selecting continuous features when the task or
-                        target is classification / categorical.
+                        target is classification / categorical. Options:
+
+                          t           Independent Student's t-test. Tests that means differ between
+                                      classes.
+
+                          U           Mann-Whitney U (theoretically equivalent to AUROC below in this
+                                      case). Assumes equal variance. Tests that medians differ between
+                                      classes.
+
+                          W           Brunner-Munzel W. Like Mann-Whitney U, but no assumption of
+                                      equal variance.
+
+                          corr        Pearson's correlation coefficient. Measures linear association.
+
+                          cohen_d     Cohen's D effect size. A standardized measure of the separation
+                                      between two groups means, where the standardizer is the pooled
+                                      variance.
+
+                          AUROC       Area under the Receiver Operating Characteristic curve. Identical
+                                      to a scaled version of Mann-Whitney U.
+
+                          mut_info    Mutual information. See
+                                      https://scikit-learn.org/stable/modules/generated/
+                                      sklearn.feature_selection.mutual_info_classif.html
 
   --filter-assoc-cat-classify
 
                         Type of association to use for selecting categorical features when the task or
                         target is classification / categorical.
 
+                          mut_info    Mutual information. See
+                                      https://scikit-learn.org/stable/modules/generated/
+                                      sklearn.feature_selection.mutual_info_classif.html
+
+                          H           Kruskal-Wallace H. Extension of Mann-Whitney U test to multiple
+                                      groups, i.e. tests whether one group has a significantly more
+                                      extreme median than the rest.
+
+                          cramer_v    Cramer's V. See https://en.wikipedia.org/w/index.php?title=
+                                      Cram%C3%A9r%27s_V&oldid=1170968029 for details. Can be loosely
+                                      interpreted as a correlation between categorical variables.
+
   --filter-assoc-cont-regress
 
                         Type of association to use for selecting continuous features when the task or
                         target is regression / continuous.
 
+                          pearson_r   Pearson's correlation coefficient. Measures linear association.
+
+                          spearman_r  Spearman's rank correlation coefficient (Pearson's correlation,
+                                      but on the variable ranks). Roughly, measures how strong a
+                                      monotonic relationship is between variables.
+
+                          mut_info    Mutual information. See
+                                      https://scikit-learn.org/stable/modules/generated/
+                                      sklearn.feature_selection.mutual_info_regression.html
+
+                          F           F-test, technically, sklearn.feature_selection.f_regression.
+                                      Only captures linear associations.
+
   --filter-assoc-cat-regress
 
                         Type of association to use for selecting categorical features when the task or
                         target is regression / continuous.
+
+                          mut_info    Mutual information. See
+                                      https://scikit-learn.org/stable/modules/generated/
+                                      sklearn.feature_selection.mutual_info_regression.html
+
+                          H           Kruskal-Wallace H. Extension of Mann-Whitney U test to multiple
+                                      groups, i.e. tests whether one group has a significantly more
+                                      extreme median than the rest.
 
   --filter-pred-regress {mae,msqe,mdae,r2,var-exp}
 
@@ -336,9 +394,9 @@ optional arguments:
 
   --htune-trials HTUNE_TRIALS
 
-                        Specifies number of trials in Optuna study, and for each estimator and feature
+                        Specifies number of trials in Optuna Study, and for each estimator and feature
                         selection method. E.g. fitting two estimators using three feature selection
-                        methods with `--htune-trials=100` will results in 2 x 3 x 100 = 600 trials. If
+                        methods with `--htune-trials=100` will result in 2 x 5 x 100 = 600 trials. If
                         also using e.g. the default 3-fold validation for `--htune-val-sizes`, then the
                         total number of estimator fits from tuning will be 600 x 3.
 
@@ -347,37 +405,37 @@ optional arguments:
                         often will fail to find good fits, given the wide range on hyperparameters
                         needed to make Optuna generally useful.
 
+                        NOTE: Currently, df-analyze configures Optuna to use both early stopping (i.e.
+                        do not keep testing new hyperparameters when model performance has not improved
+                        for a number of trials) and pruning (by not performing the remaining of the five
+                        k-fold fits and evaluations when the first 2 are clearly terrible). Thus, while
+                        the *maximum* number of trials will be the value specified in this argument, in
+                        practice for most models Optuna may stop early at about 50 trials or so.
+
+                        df-analyze also currently configures Optuna with a *timeout* specific to each
+                        model, so that tuning will not exceed a certain amount of time:
+
+                          mlp         60 minutes
+                          lgbm        60 minutes
+                          rf          60 minutes
+                          knn         30 minutes
+                          elastic     30 minutes
+                          sgd         15 minutes
+                          lr          15 minutes
+                          svm         10 minutes  [disabled]
+
+                        Logistic Regression (lr) and Support Vector Machines (svm) are currently given
+                        very little time since certain hyperparameters (namely, the regularization
+                        parameter) can cause extremely large fit times, even on small data.
+
   --test-val-size TEST_VAL_SIZE
 
-                        Specify sizes of test validation sets. Same behavour as for `--htune-val-sizes`
-                        argument (see above), except that multiple sizes can be specified. E.g.
+                        Specify size of final holdout test set (not used for either tuning or feature
+                        selection). A float in (0, 1) specifies the proportion of samples from the
+                        input spreadsheet or table to set aside for evaluating during hyperparameter
+                        tuning.
 
-                          python df-analyze.py <omitted> --test-val=kfold --test-val-sizes 5 10 20
-
-                        will efficiently re-use the same trained model and evaluate 5-, 10-, and
-                        20-fold k-fold estimates of performance, and include these all in the final
-                        results.
-
-                        The meaning of this argument depends on the choice of `--test-val`:
-
-                          holdout:    A float in (0, 1) specifies the proportion of samples from the
-                                      input spreadsheet or table to set aside for evaluating during
-                                      hyperparameter tuning.
-
-                                      An integer specifies the number of samples to set aside for
-                                      testing.
-
-                          kfold:      An integer being one of 3, 5, 10, or 20 specifies the number of
-                                      folds.
-
-                          loocv:      Ignored.
-
-                          mc:         A float in (0, 1) specifies the proportion of samples from the
-                                      input spreadsheet or table to set aside for evaluating during
-                                      each Monte-Carlo repeat evaluation.
-
-                                      An integer specifies the number of samples to set aside for
-                                      each repeat.
+                        An integer specifies the number of samples to set aside for testing.
 
   --outdir OUTDIR
                         Specifies location of all results, as well as cache files for slow
@@ -401,14 +459,21 @@ optional arguments:
 USAGE EXAMPLE (assumes you have run `poetry shell`):
 
     python df-analyze.py \
-        --df="weather_data.json" \
-        --target='temperature' \
+        --df weather_data.json \
+        --target temperature \
+        --categoricals weekday season \
+        --ordinals rainfall_mm \
+        --drops date sample_id \
         --mode=regress \
-        --regressors=svm linear \
-        --drop-nan=rows \
-        --n-feat=5 \
-        --htune \
-        --test-val=kfold \
-        --test-val-size=5 \
+        --regressors=elastic lgbm knn \
+        --feat-select wrap embed filter \
+        --embed-select linear \
+        --wrapper-select step-up \
+        --wrapper-model linear \
+        --norm robust \
+        --nan median \
+        --n-feat-filter 10 \
+        --n-feat-wrappper 10 \
+        --test-val-size=0.25 \
         --outdir='./results'
 ```

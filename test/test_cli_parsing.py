@@ -20,7 +20,7 @@ from src.analysis.univariate.associate import (
     ContClsStats,
     ContRegStats,
 )
-from src.cli.cli import ProgramOptions, Size, Verbosity, get_options
+from src.cli.cli import ProgramOptions, Verbosity, get_options
 from src.enumerables import (
     ClsScore,
     DfAnalyzeClassifier,

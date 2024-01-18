@@ -393,7 +393,7 @@ target is classification / categorical.
               extreme median than the rest.
 
   cramer_v    Cramer's V. See https://en.wikipedia.org/w/index.php?title=
-              Cram%C3%A9r%27s_V&oldid=1170968029 for details. Can be loosely
+              Cram%%C3%%A9r%%27s_V&oldid=1170968029 for details. Can be loosely
               interpreted as a correlation between categorical variables.
 
 """

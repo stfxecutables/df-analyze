@@ -39,8 +39,6 @@ from src.analysis.univariate.associate import (
     ContRegStats,
 )
 from src.cli.parsing import (
-    EnumParser,
-    enum_or_none_parser,
     int_or_percent_parser,
     resolved_path,
     separator,
@@ -60,7 +58,6 @@ from src.cli.text import (
     FILTER_METHOD_HELP,
     HTUNE_TRIALS_HELP,
     MODE_HELP_STR,
-    MODEL_SELECT_HELP,
     N_FEAT_CAT_FILTER_HELP,
     N_FEAT_CONT_FILTER_HELP,
     N_FEAT_TOTAL_FILTER_HELP,
@@ -89,7 +86,6 @@ from src.enumerables import (
     EmbedSelectionModel,
     FeatureSelection,
     FilterSelection,
-    ModelFeatureSelection,
     NanHandling,
     Normalization,
     RegScore,

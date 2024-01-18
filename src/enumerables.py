@@ -13,7 +13,6 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
-    Union,
     no_type_check,
 )
 from warnings import warn

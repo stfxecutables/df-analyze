@@ -2,7 +2,7 @@ from argparse import Action
 from enum import Enum
 from math import isnan
 from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Callable, Optional, TypeVar, Union
 from warnings import warn
 
 E = TypeVar("E")
