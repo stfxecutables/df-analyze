@@ -159,6 +159,7 @@ class DfAnalyzeClassifier(RandEnum, Enum):
             DfAnalyzeClassifier.KNN.value,
             DfAnalyzeClassifier.LGBM.value,
             DfAnalyzeClassifier.SGD.value,
+            DfAnalyzeClassifier.LR.value,
         )
 
 
@@ -201,6 +202,7 @@ class DfAnalyzeRegressor(RandEnum, Enum):
             DfAnalyzeRegressor.KNN.value,
             DfAnalyzeRegressor.LGBM.value,
             DfAnalyzeRegressor.SGD.value,
+            DfAnalyzeRegressor.ElasticNet.value,
         )
 
 
