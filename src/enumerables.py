@@ -10,8 +10,10 @@ from typing import (
     Generic,
     Literal,
     Optional,
+    Sequence,
     Type,
     TypeVar,
+    Union,
     no_type_check,
 )
 from warnings import warn
@@ -66,6 +68,47 @@ class RandEnum(Generic[T]):
     def choices(cls: Type[T]) -> list[str]:
         return [x.value for x in cls]  # type: ignore
 
+    @classmethod
+    def choicesN(cls) -> list[Optional[str]]:
+        # info = " | ".join([e.value for e in cls])  # type: ignore
+        # return f"< {info} | None >"
+        return [None, *[x for x in cls]]
+
+    @classmethod
+    def parse(cls, s: str) -> RandEnum:
+        return cls(s.lower())
+
+    @classmethod
+    def parseN(cls, s: str) -> Optional[RandEnum]:
+        if s.lower() in ["none", ""]:
+            return None
+        return cls(s.lower())
+
+    @classmethod
+    def from_arg(cls: Type[T], arg: str) -> T:
+        return cls(arg)
+
+    @classmethod
+    def from_argN(cls: Type[T], arg: str) -> Optional[T]:
+        if "none" in str(arg).lower():
+            return None
+        return cls(arg)
+
+    @classmethod
+    def from_args(cls: Type[T], args: Sequence[str]) -> tuple[T, ...]:
+        print(type(args), args)
+        if args is None:
+            return tuple()
+        if isinstance(args, list) or isinstance(args, tuple):
+            if all(isinstance(arg, cls) for arg in args):
+                return tuple([cls(arg) for arg in args])
+
+            clean = tuple([s for s in args if "none" not in str(s).lower()])
+            if len(clean) == 0:
+                return tuple()
+            return tuple([cls(s) for s in clean])
+        return (cls(args),)
+
     @no_type_check
     def __lt__(self: T, other: Type[T]) -> bool:
         cls = self.__class__
@@ -110,12 +153,12 @@ class DfAnalyzeClassifier(RandEnum, Enum):
         }[self]
 
     @staticmethod
-    def defaults() -> tuple[DfAnalyzeClassifier, ...]:
+    def defaults() -> tuple[str, ...]:
         return (
-            DfAnalyzeClassifier.Dummy,
-            DfAnalyzeClassifier.KNN,
-            DfAnalyzeClassifier.LGBM,
-            DfAnalyzeClassifier.SGD,
+            DfAnalyzeClassifier.Dummy.value,
+            DfAnalyzeClassifier.KNN.value,
+            DfAnalyzeClassifier.LGBM.value,
+            DfAnalyzeClassifier.SGD.value,
         )
 
 
@@ -152,12 +195,12 @@ class DfAnalyzeRegressor(RandEnum, Enum):
         }[self]
 
     @staticmethod
-    def defaults() -> tuple[DfAnalyzeRegressor, ...]:
+    def defaults() -> tuple[str, ...]:
         return (
-            DfAnalyzeRegressor.Dummy,
-            DfAnalyzeRegressor.KNN,
-            DfAnalyzeRegressor.LGBM,
-            DfAnalyzeRegressor.SGD,
+            DfAnalyzeRegressor.Dummy.value,
+            DfAnalyzeRegressor.KNN.value,
+            DfAnalyzeRegressor.LGBM.value,
+            DfAnalyzeRegressor.SGD.value,
         )
 
 

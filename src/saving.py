@@ -204,20 +204,23 @@ class ProgramDirs(Debug):
     def save_embed_report(self, selected: Optional[ModelSelected]) -> None:
         if selected is None:
             return
-        if selected.embed_selected is None:
+        embeds = selected.embed_selected
+        if embeds is None or (len(embeds) == 0):
             return
         if self.embed is None:
             return
 
-        report = selected.embed_selected.to_markdown()
-        out = self.embed / "embedded_selection_report.md"
-        try:
-            out.write_text(report)
-        except Exception as e:
-            warn(
-                "Got exception when attempting to save embedded selection report. "
-                f"Details:\n{e}\n{traceback.format_exc()}"
-            )
+        for embed_selected in embeds:
+            report = embed_selected.to_markdown()
+            model = embed_selected.model.value
+            out = self.embed / f"{model}_embedded_selection_report.md"
+            try:
+                out.write_text(report)
+            except Exception as e:
+                warn(
+                    f"Got exception when attempting to save embedded selection report for model '{model}'. "
+                    f"Details:\n{e}\n{traceback.format_exc()}"
+                )
 
     def save_wrap_report(self, selected: Optional[ModelSelected]) -> None:
         if selected is None:
@@ -258,20 +261,23 @@ class ProgramDirs(Debug):
     def save_embed_data(self, selected: Optional[ModelSelected]) -> None:
         if selected is None:
             return
-        if selected.embed_selected is None:
+        embeds = selected.embed_selected
+        if embeds is None or (len(embeds) == 0):
             return
         if self.embed is None:
             return
 
-        json = selected.embed_selected.to_json()
-        out = self.embed / "embed_selection_data.json"
-        try:
-            out.write_text(json)
-        except Exception as e:
-            warn(
-                "Got exception when attempting to save embeded selection data. "
-                f"Details:\n{e}\n{traceback.format_exc()}"
-            )
+        for embed_selected in embeds:
+            json = embed_selected.to_json()
+            model = embed_selected.model.value
+            out = self.embed / f"{model}_embed_selection_data.json"
+            try:
+                out.write_text(json)
+            except Exception as e:
+                warn(
+                    "Got exception when attempting to save embeded selection data. "
+                    f"Details:\n{e}\n{traceback.format_exc()}"
+                )
 
     def save_model_selection_reports(self, selected: Optional[ModelSelected]) -> None:
         self.save_embed_report(selected)

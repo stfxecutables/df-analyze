@@ -98,7 +98,27 @@ optional arguments:
                         The list of regressors to use when comparing regression model performance.
                         Can be a list of elements from: [dummy elastic knn lgbm mlp rf sgd svm].
 
-  --model-select {embed,wrap,none} [{embed,wrap,none} ...]
+  --feat-select  [ ...]
+
+                        The feature selection methods to use. Available options are:
+
+                          filter      Select features based on their univariate relationships to the
+                                      target variables.
+
+                          embed:      Select features using a model with implicit feature selection,
+                                      e.g. an L1-regularized model or decision tree. For avaialable
+                                      models, see `--embed-select`.
+
+                          wrap:       Select features by recursive model evaluation, currently either
+                                      step-up (forward) feature selection, or step-down (backward)
+                                      feature elimination.
+
+                        NOTE: Feature selection currently uses a training split of the full data
+                        provided in the `--df` or `--spreadsheet` argument to `df-analyze.py`. This
+                        is to prevent double-dipping / circular analysis that can result in
+                        (extremely) biased performance estimates.
+
+  --model-select  [ ...]
 
                         Methods of model-based feature selection methods to use. Available options are:
 
@@ -115,9 +135,9 @@ optional arguments:
                           none:       Do not select features using any model. Always included by
                                       default.
 
-  --embed-select {lgbm,linear,none} [{lgbm,linear,none} ...]
+  --embed-select  [ ...]
 
-                        Model to use for embedded feature selection. In either case, model is
+                        Model(s) to use for embedded feature selection. In either case, model is
                         hyperparameter tuned on the training split so that only the best-fitting model
                         is used for embedded feature selection. Supported models are:
 
@@ -129,8 +149,7 @@ optional arguments:
                           none:       Do not select features based on any model. Always included by
                                       by default.
 
-  --wrapper-select {step-up,step-down}
-
+  --wrapper-select
                         Wrapper-based feature selection method, i.e. method/optimizer to use to
                         search feature-set space during wrapper-based feature selection. Currently
                         only (recursive) step-down and step-up methods are supported, but future
@@ -152,28 +171,13 @@ optional arguments:
                                       variable. Also called backward / recursive feature slection or
                                       elimination.
 
-  --wrapper-model {linear,lgbm}
-
+  --wrapper-model
                         Model to use during wrapper-based feature selection. Available options are:
 
                           linear:     For classification tasks, `sklearn.linear_model.SGDClassifier`,
                                       and for regression tasks, `sklearn.linear_model.SGDRegressor`
 
                           lgbm:       Use a LightGBM gradient-boosted decision tree model.
-
-                          none:       Do not select features based on any model. Always included by
-                                      by default.
-
-  --embed-model {lgbm,linear}
-
-                        Model to use for embedded feature selection. In either case, model is
-                        hyperparameter tuned on the training split so that only the best-fitting model
-                        is used for embedded feature selection. Supported models are:
-
-                          linear      SGDRegressor or SGDClassifier, in both cases with L1
-                                      regularization.
-
-                          lgbm:       LightGBM regressor or classifier, depending on task.
 
                           none:       Do not select features based on any model. Always included by
                                       by default.
@@ -204,10 +208,10 @@ optional arguments:
                         i.e. one extra one-hot column is created for each categorical feature with a
                         NaN value.
 
-                          drop:      Attempt to remove all non-categorical NaN values. Note this could
-                                     remove all data if a lot of values are missing, which will cause
-                                     errors. Currently unimplemented because of this, and instead
-                                     defaults to `median`.
+                          drop:      [NOT IMPLEMENTED] Attempt to remove all non-categorical NaN
+                                     values. Note this could remove all data if a lot of values are
+                                     missing, which will cause errors. Currently unimplemented
+                                     because of this, and instead defaults to `median`.
 
                           mean:      Replace all NaN values with the feature mean value.
 
@@ -254,8 +258,7 @@ optional arguments:
                         otherwise the `--n-filter-total` argument will be ignored.
 
 
-  --filter-method FILTER_METHOD
-
+  --filter-method
                         Method(s) to use for filter selection.
 
                         Method 'relief' is the most sophisticated and can detect interactions among
@@ -281,22 +284,22 @@ optional arguments:
                         predictive performance metrics directly asses the potential predictive
                         utility of each feature.
 
-  --filter-assoc-cont-classify {t,U,W,corr,cohen_d,AUROC,mut_info}
+  --filter-assoc-cont-classify
 
                         Type of association to use for selecting continuous features when the task or
                         target is classification / categorical.
 
-  --filter-assoc-cat-classify {mut_info,H,cramer_v}
+  --filter-assoc-cat-classify
 
                         Type of association to use for selecting categorical features when the task or
                         target is classification / categorical.
 
-  --filter-assoc-cont-regress {pearson_r,spearman_r,mut_info,F}
+  --filter-assoc-cont-regress
 
                         Type of association to use for selecting continuous features when the task or
                         target is regression / continuous.
 
-  --filter-assoc-cat-regress {mut_info,H}
+  --filter-assoc-cat-regress
 
                         Type of association to use for selecting categorical features when the task or
                         target is regression / continuous.

@@ -140,30 +140,29 @@ Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeReg
 """
 
 FEAT_SELECT_HELP = """
-The feature selection methods to use. Available options are:
+The feature selection method(s) to use. Available options are:
 
-  auc:        Select features with largest AUC values relative to the two
-              classes (classification only).
+  filter      Select features based on their univariate relationships to the
+              target variables.
 
-  d:          Select features with largest Cohen's d values relative to the two
-              classes (classification only).
+  embed:      Select features using a model with implicit feature selection,
+              e.g. an L1-regularized model or decision tree. For avaialable
+              models, see `--embed-select`.
 
-  kpca:       Generate features by using largest components of kernel PCA.
+  wrap:       Select features by recursive model evaluation, currently either
+              step-up (forward) feature selection, or step-down (backward)
+              feature elimination.
 
-  pca:        Generate features by using largest components from a PCA.
+  none:       Do not perform any selection.
 
-  pearson:    Select features with largest Pearson correlations with target.
+NOTE: Multiple selection options can be compared by passing each option, e.g.
 
-  step-up:    Use step-up (forward) feature selection. Costly.
+  python df-analyze.py [...] --feat-select filter embed wrap
 
-  step-up:    Use step-down (backward) feature selection. Also costly.
-
-NOTE: Feature selection currently uses the full data provided in the `--df`
-argument to `df-analyze.py`. Thus, if you take the final reported test results
-following feature selection and hyperparamter tuning as truly cross-validated
-or heldout test results, you are in fact double-dipping and reporting biased
-performance. To properly test the discovered features and optimal estimators,
-you should have held-out test data that never gets passed to `df-analyze`.
+NOTE: Feature selection currently uses a training split of the full data
+provided in the `--df` or `--spreadsheet` argument to `df-analyze.py`. This
+is to prevent double-dipping / circular analysis that can result in
+(extremely) biased performance estimates.
 
 """
 
@@ -207,6 +206,9 @@ Model to use in wrapper-based feature selection. Available options are:
               variable. Also called backward / recursive feature slection or
               elimination.
 
+  none:       Do not select features using any model. Always included by
+              default.
+
 """
 
 WRAP_SELECT_MODEL_HELP = """
@@ -223,7 +225,7 @@ Model to use during wrapper-based feature selection. Available options are:
 """
 
 EMBED_SELECT_MODEL_HELP = """
-Model to use for embedded feature selection. In either case, model is
+Model(s) to use for embedded feature selection. In either case, model is
 hyperparameter tuned on the training split so that only the best-fitting model
 is used for embedded feature selection. Supported models are:
 
@@ -282,10 +284,10 @@ are handled by representing the NaN value as another category level (class),
 i.e. one extra one-hot column is created for each categorical feature with a
 NaN value.
 
-  drop:      Attempt to remove all non-categorical NaN values. Note this could
-             remove all data if a lot of values are missing, which will cause
-             errors. Currently unimplemented because of this, and instead
-             defaults to `median`.
+  drop:      [NOT IMPLEMENTED] Attempt to remove all non-categorical NaN
+             values. Note this could remove all data if a lot of values are
+             missing, which will cause errors. Currently unimplemented
+             because of this, and instead defaults to `median`.
 
   mean:      Replace all NaN values with the feature mean value.
 
@@ -392,14 +394,18 @@ target is regression / continuous.
 
 """
 
-REG_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in RegScore])
+REG_OPTIONS = "".join(
+    [f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in RegScore]
+)
 PRED_SELECT_REG_SCORE = f"""
 Regression score to use for filter-based selection of features. Options:\n
 {REG_OPTIONS}
 
 """
 
-CLS_OPTIONS = "".join([f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in ClsScore])
+CLS_OPTIONS = "".join(
+    [f"  {f'{score.value}:': <11}{score.longname()}\n\n" for score in ClsScore]
+)
 PRED_SELECT_CLS_SCORE = f"""
 Classification score to use for filter-based selection of features. Options:\n
 {CLS_OPTIONS}
