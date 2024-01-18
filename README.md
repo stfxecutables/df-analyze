@@ -103,16 +103,24 @@ python -m pip install -r requirements.txt  # install requirements
 Note the above assumes that the `python3` command is a Python 3.9 or 3.10
 version, which you could check by running `python3 --version` beforehand.
 
+Alternately, [build the Singularity
+container](#building-the-singularity-container) and use this for running the
+code.
+
 
 # Usage
 
-To see how to run `df-analyze` do:
+For full documentation of `df-analyze` run:
 
 ```shell
 python df-analyze.py --help
 ```
 
-which will provide a complete description of all options.
+which will provide a complete description of all options. Alternately, you
+can see what the `--help` option outputs
+[here](https://github.com/stfxecutables/df-analyze/blob/develop/docs/arguments.md),
+but keep mind the actual outputs of the `--help` command are less likely to
+be out of date.
 
 
 ## Quick Start and Examples
