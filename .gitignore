@@ -13,6 +13,7 @@ data/testing/__FULL*
 
 test_results
 
+cc_results
 results/reports
 runtimes/*.txt
 *runtime*txt
