@@ -5,10 +5,10 @@
 
 - [Overview](#overview)
 - [Installation](#installation)
-  - [Install Poetry](#install-poetry)
+  - [By Poetry](#by-poetry)
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
-  - [`pip` Fallback in Case of Poetry Issues](#pip-fallback-in-case-of-poetry-issues)
-  - [Singularity / Apptainer Container](#singularity--apptainer-container)
+  - [By `pip` (in case of Poetry issues)](#by-pip-in-case-of-poetry-issues)
+  - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
 - [Usage](#usage)
   - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
@@ -60,7 +60,7 @@ and saves all key tables and outputs from this process.
 
 # Installation
 
-## Install Poetry
+## By Poetry
 
 This project uses Poetry to manage dependencies, so if you want to reproduce
 the results you should [install Poetry](https://python-poetry.org/docs/). Then
@@ -89,7 +89,7 @@ Then, running the poetry install commands above *should* automatically find
 this Python version.
 
 
-## `pip` Fallback in Case of Poetry Issues
+## By `pip` (in case of Poetry issues)
 
 If there is an issue with the poetry install process, as a fallback, you can
 try creating a new virtual environment and installing the versions listed in
@@ -104,7 +104,7 @@ python -m pip install -r requirements.txt  # install requirements
 Note the above assumes that the `python3` command is a Python 3.9 or 3.10
 version, which you could check by running `python3 --version` beforehand.
 
-## Singularity / Apptainer Container
+## By Singularity / Apptainer Container
 
 Alternately, [build the Singularity
 container](#building-the-singularity-container) and use this for running the
