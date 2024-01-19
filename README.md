@@ -8,6 +8,7 @@
   - [Install Poetry](#install-poetry)
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
   - [`pip` Fallback in Case of Poetry Issues](#pip-fallback-in-case-of-poetry-issues)
+  - [Singularity / Apptainer Container](#singularity--apptainer-container)
 - [Usage](#usage)
   - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
@@ -102,6 +103,8 @@ python -m pip install -r requirements.txt  # install requirements
 
 Note the above assumes that the `python3` command is a Python 3.9 or 3.10
 version, which you could check by running `python3 --version` beforehand.
+
+## Singularity / Apptainer Container
 
 Alternately, [build the Singularity
 container](#building-the-singularity-container) and use this for running the
