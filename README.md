@@ -131,23 +131,16 @@ Run a classification analysis on the data in `small_classifier_data.json`:
 
 ```bash
 python df-analyze.py \
-    --df data/small_classifier_data.json \
-    --mode classify \
-    --classifiers rf svm dtree \
-    --feat-select pca pearson none \
-    --n-feat 5 \
-    --test-val holdout \
-    --test-val-sizes 0.3 \
-    --outdir ./fast_test_results
+    --df=data/small_classifier_data.json \
+    --outdir=./demo_results \
+    --mode=classify \
+    --classifiers knn lgbm rf lr sgd mlp dummy \
+    --embed-select none linear lgbm \
+    --feat-select wrap filter embed
 ```
 
 should work and run quite quickly on the tiny toy dataset included in the repo.
-This will produce a lot of terminal output from Optuna, so if you don't want to
-see as much add the `--verbosity 0` option to above.
-
-Currently, `classifier` can be one of `svm`, `rf`, `mlp`, `bag` or `dtree`. If
-the `--step-up` argument is omitted, instead analyses for other feature
-selection methods are used.
+This will produce a lot of terminal output.
 
 ### Using a `df-analyze`-formatted Spreadsheet
 
@@ -169,16 +162,14 @@ Another valid Excel spreadsheet:
 Example of a `.csv` spreadsheet formatted for `df-analyze`:
 
 ```csv
---categoricals s x0
+--outdir ./results
 --target y
 --mode classify
---classifiers svm mlp dummy
---nan drop
---feat-select stepup pearson
---n-feat 2
---htune
---htune-trials 50
---outdir ./results
+--categoricals s x0
+--classifiers knn lgbm dummy
+--nan median
+--norm robust
+--feat-select wrap embed
 
 
 s,x0,x1,x2,x3,y
@@ -192,25 +183,23 @@ male,2,0.570184,0.289003,1.176338,1
 If you have not been introduced to command-line interfaces (CLIs) before,
 this convention might seem a bit odd, but `df-analyze` primarily functions as
 a CLI program. The logic is that CLI options (e.g. `--mode`) and their
-parameters or values (e.g. `classify`) are specified one-per-line in the file
-top section / header, with spaces separating parameters (e.g. the `svm mlp
-dummy` parameters passed to the `--classifiers` option), and with at least one
-empty line separating these options and parameters from the actual tabular
-data.
+parameters or values (e.g. the `classify` in `--mode classify`) are specified
+one-per-line in the file top section / header, with spaces separating
+parameters (e.g. the `knn lgbm dummy` parameters passed to the `--classifiers`
+option), and with at least one empty line separating these options and
+parameters from the actual tabular data.
 
 Thus, the following is an **INVALIDLY FORMATTED** spreadsheet:
 
 ```csv
---categoricals s x0
+--outdir ./results
 --target y
 --mode classify
---classifiers svm mlp dummy
---nan drop
---feat-select stepup pearson
---n-feat 2
---htune
---htune-trials 50
---outdir ./results
+--categoricals s x0
+--classifiers knn dummy
+--nan median
+--norm minmax
+--feat-select wrap filter none
 s,x0,x1,x2,x3,y
 male,0,0.739547,0.312496,1.129941,0
 female,0,0.094421,0.817089,1.246469,1
@@ -231,14 +220,19 @@ variants to be performed without requiring copies of the formatted data file.
 So for example:
 
 ```shell
-python df-analyze.py --spreadsheet spreadsheet.xlsx --n-feat 5
-python df-analyze.py --spreadsheet spreadsheet.xlsx --n-feat 10
-python df-analyze.py --spreadsheet spreadsheet.xlsx --n-feat 20
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan mean
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan median
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan impute
 ```
 
 would run three analyses with the options in `spreadsheet.xlsx` (or default
-values) but with `--n-feat` set to 5, 10, and 20, respectively, regardless of
-what is set for `--n-feat` in `spreadsheet.xlsx`.
+values) but with the handing of NaN value differing for each run, regardless
+of what is set for `--n-feat` in `spreadsheet.xlsx`. Note that the same
+output directory can be specified each time, as `df-analyze` will ensure that
+all results are saved to a separate subfolder (with a unique hash reflecting
+the unique combinations of options passed to `df-analyze`). This ensures data
+should be overwritten only if the exact same arguments are passed twice (e.g.
+perhaps if manually cleaning your data and re-running).
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
