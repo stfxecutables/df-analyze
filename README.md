@@ -217,8 +217,8 @@ because no newlines (empty lines) separate the options from the data.
 
 #### Overriding Spreadsheet Options
 
-When spreadsheet and CLI options conflict, the `df-analyze` will prefer the CLI
-args. This allows a base spreadsheet to be setup, and for minor analysis
+When spreadsheet and CLI options conflict, then `df-analyze` will prefer the
+CLI args. This allows a base spreadsheet to be setup, and for minor analysis
 variants to be performed without requiring copies of the formatted data file.
 So for example:
 
