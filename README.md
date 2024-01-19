@@ -274,18 +274,19 @@ optional):
 
 ### Feature Type and Cardinality Inference
 
-Features are checked, in order of priority, for useless feature or features
-that cannot be used by `df-anaylze`:
+Features are checked, in order of priority, for features that cannot be used
+by `df-anaylze`. Unusable features are features which are:
 
-1. Constancy (all values identical or identical except NaNs)
-2. Sequential datetime data
+1. Constant (all values identical or identical except NaNs)
+2. Sequential (autocorrellated) datetime data
 3. Identifiers (all values unique and not continuous / floats)
 
-Then, features are identified as either (1) binary, or (2), one of:
+Then, features are identified as one of:
 
-1. Ordinal
-2. Continuous
-3. Categorical
+1. Binary
+2. Ordinal
+3. Continuous
+4. Categorical
 
 based on a number of heuristics relating to the unique values and counts of
 these values, and the string representations of the features.
