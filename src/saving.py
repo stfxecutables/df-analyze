@@ -41,6 +41,7 @@ class ProgramDirs(Debug):
     """Container for various output and caching directories"""
 
     root: Optional[Path] = None
+    terminal: Optional[Path] = None
     options: Optional[Path] = None
     joblib_cache: Optional[Path] = None
     inspection: Optional[Path] = None
@@ -67,6 +68,7 @@ class ProgramDirs(Debug):
         new = ProgramDirs(
             root=root,
             options=root / "options.json",
+            terminal=root / "terminal_outputs.txt",
             joblib_cache=root / "__JOBLIB_CACHE__",
             inspection=root / "inspection",
             prepared=root / "prepared",
@@ -85,8 +87,10 @@ class ProgramDirs(Debug):
             if isinstance(path, Path):
                 if "JOBLIB" in str(path):  # joblib handles creation
                     continue
-                if attr == "options":
+                if attr in ["options"]:
                     continue
+                if attr == "terminal":
+                    path.touch()
                 try:
                     path.mkdir(exist_ok=True, parents=True)
                 except Exception:

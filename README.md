@@ -19,12 +19,31 @@
 - [Analysis Pipeline](#analysis-pipeline)
     - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
     - [Data Preparation](#data-preparation)
+      - [Categorical Deflation](#categorical-deflation)
+        - [Categorical Target Deflation](#categorical-target-deflation)
     - [Univariate Feature Analyses](#univariate-feature-analyses)
     - [Feature Selection](#feature-selection)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
     - [Final Validation](#final-validation)
   - [Philosophy](#philosophy)
     - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
+- [Program Outputs](#program-outputs)
+  - [Order of Reading](#order-of-reading)
+  - [Subdirectories](#subdirectories)
+    - [📂 Hashed Subdirectories](#-hashed-subdirectories)
+    - [`📂 inspection`](#-inspection)
+      - [Destructive Data Changes](#destructive-data-changes)
+    - [`📂 prepared`](#-prepared)
+    - [`📂 features`](#-features)
+      - [`📂 associations`](#-associations)
+      - [`📂 predictions`](#-predictions)
+    - [`📂 selection`](#-selection)
+      - [`📂 embed`](#-embed)
+      - [`📂 filter`](#-filter)
+      - [`📂 wrap`](#-wrap)
+    - [`📂 tuning`](#-tuning)
+    - [`📂 results`](#-results)
+  - [Complete Listing](#complete-listing)
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
     - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
@@ -230,10 +249,10 @@ python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan impute
 
 would run three analyses with the options in `spreadsheet.xlsx` (or default
 values) but with the handing of NaN value differing for each run, regardless
-of what is set for `--n-feat` in `spreadsheet.xlsx`. Note that the same
-output directory can be specified each time, as `df-analyze` will ensure that
-all results are saved to a separate subfolder (with a unique hash reflecting
-the unique combinations of options passed to `df-analyze`). This ensures data
+of what is set for `--nan` in `spreadsheet.xlsx`. Note that the same output
+directory can be specified each time, as `df-analyze` will ensure that all
+results are saved to a separate subfolder (with a unique hash reflecting the
+unique combinations of options passed to `df-analyze`). This ensures data
 should be overwritten only if the exact same arguments are passed twice (e.g.
 perhaps if manually cleaning your data and re-running).
 
@@ -272,6 +291,26 @@ optional):
 1. [Hyperparameter tuning](#hyperparameter-tuning)
 1. [Final validation and analyses](#final-validation)
 
+In pseudocode (which closely approximates the code in the `main()` function of
+[`df-analyze.py`](https://github.com/stfxecutables/df-analyze/blob/develop/df-analyze.py)):
+
+```python
+    options = get_options()
+    df = options.load_df()
+
+    inspection       =  inspect_data(df, options)
+    prepared         =  prepare_data(inspection)
+    train, test      =  prepared.split()
+    associations     =  target_associations(train)
+    predictions      =  univariate_predictions(train)
+    embed_selected   =  embed_select_features(train, options)
+    wrap_selected    =  wrap_select_features(train, options)
+    filter_selected  =  filter_select_features(train, associations, predictions, options)
+    selected         =  (embed_selected, wrap_selected, filter_selected)
+    tuned            =  tune_models(train, selected, options)
+    results          =  eval_tuned(test, tuned, selected, options)
+```
+
 ### Feature Type and Cardinality Inference
 
 Features are checked, in order of priority, for features that cannot be used
@@ -289,10 +328,27 @@ Then, features are identified as one of:
 4. Categorical
 
 based on a number of heuristics relating to the unique values and counts of
-these values, and the string representations of the features.
+these values, and the string representations of the features. These
+heuristics are made explicit in code
+[here](https://github.com/stfxecutables/df-analyze/blob/develop/src/preprocessing/inspection/inference.py).
 
 ### Data Preparation
 
+Input data is transformed so that it can be accepted by most generic ML
+algorithms and/or Python data science libraries (but particularly,
+[NumPy](https://numpy.org/),
+[Pandas](https://pandas.pydata.org/docs/user_guide/10min.html#min),
+[scikit-learn](https://scikit-learn.org/stable/index.html),
+[PyTorch](https://pytorch.org/), and
+[LightGBM](https://lightgbm.readthedocs.io/en/stable/)). This means the
+**_raw_** input data $\mathcal{D}$ (specified by `--df` or `--spreadsheet`
+argument) is represented as
+
+$$\mathcal{D} = (\mathbf{X}, y) = \texttt{(X, y)},$$
+
+ where
+`X` is a Pandas `DataFrame` and the target variable is represented in `y`, a
+Pandas `Series`.
 
 1. Data Loading
    1. Type Conversions
@@ -301,7 +357,8 @@ these values, and the string representations of the features.
    1. Remove samples with NaN in target variable
    1. Remove junk features (constant, timeseries, identifiers)
    1. NaNs: remove or add indicators and interpolate
-   1. Categorical deflation (replace undersampled classes / levels with NaN)
+   1. [Categorical deflation](#categorical-deflation) (replace undersampled
+      classes / levels with NaN)
 1. Feature Encoding
    1. Binary categorical encoding
       1. represented as single [0, 1] feature if no NaNs
@@ -310,8 +367,49 @@ these values, and the string representations of the features.
    1. Ordinals treated as continuous
    1. Robust normalization of continuous features
 2. Target Encoding
-   1. Categorical targets are deflated and label encoded to values in $[0, n]$
-   2. Continuous targets are robustly min-max normalized (to middle 95% of values)
+   1. Categorical [targets are deflated](#categorical-target-deflation) and
+      label encoded to values in $[0, n]$
+   2. Continuous targets are robustly min-max normalized (to middle 95% of
+      values)
+
+#### Categorical Deflation
+
+Categorical variables will frequently contain a large number of classes that
+have only a very small number of samples.
+
+For example, a small, geographically representative survey of households
+(e.g. approximately 5000 samples) might contain region / municipality
+information. Regions or municipalities corresponding to large cities might
+each have over 100 samples, but small rural regions will likely be sampled
+less than 10 or so times each, i.e., they are *undersampled*. Attempting to
+generalize fromn any patterns observed in these undersampled classes is
+generally unwise (undersampled levels in a categorical variable are sort
+of the categorical equivalent of statistical noise).
+
+In addition, leaving these undersampled levels in the data will usually
+significantly increase compute costs (each class of a categorical, in most
+encoding schemes, will increase the number of features by one), but encourage
+overfitting or learning of spurious (ungeneralizable) patterns. It is thus
+wise, usually, for both computational and generalization reasons, to exclude
+these classes from the categorical variable (e.g. replace with NaN, or a
+single "other" class).
+
+We do this in `df-analyze` automatically for any class in a categorical
+variable with less than 20 samples. This is probably not agressive enough
+for most datasets, and, for some features and smaller datasets, perhaps
+overly agressive. However, if later feature selection is used, this selection
+is done on the one-hot encoded data, and so useless classes will be excluded
+in a more principled way there. The choice of 20 is thus somewhat conservative
+in the sense of not prematurely eliminating information, most of the time.
+
+##### Categorical Target Deflation
+
+As above, target categorical variables are deflated, except when a target class
+has less than 30 samples. This deflation arguably be *much* more agressive:
+when doing e.g. 5-fold analyses on a dataset with such a target variable, each
+test fold would be expected to be 20% of the samples, so about 6 representatives
+of this class. This is highly unlikely to result in reliable performance estimates
+for this class, and so only introduces noise to final performance metrics.
 
 
 ### Univariate Feature Analyses
@@ -332,8 +430,6 @@ these values, and the string representations of the features.
 
 ### Feature Selection
 
-1. Remove junk features
-   1. Remove highly-correlated features
 1. Use filter methods
    1. Remove features with minimal univariate relation to target
    1. Keep features with largest filter metrics
@@ -371,6 +467,358 @@ these values, and the string representations of the features.
 
 For this reason we prefer filter-based feature selection [methods]()
 
+# Program Outputs
+
+The output directory structure is as follows:
+
+```
+📂 ./my_output_directory
+└── 📂 fe57fcf2445a2909e688bff847585546/
+    ├── 📂 features/
+    │   ├── 📂 associations/
+    │   └── 📂 predictions/
+    ├── 📂 inspection/
+    ├── 📂 prepared/
+    ├── 📂 results/
+    ├── 📂 selection/
+    │   ├── 📂 embed/
+    │   ├── 📂 filter/
+    │   └── 📂 wrapper/
+    └── 📂 tuning/
+```
+
+The directory `./my_output_directory` is the directory specified by the
+`--outdir` argument.
+
+There are 4 main types of files:
+
+1. Markdown reports (`*.md`)
+1. Plaintext / CSV table files (`*.csv`)
+1. Compressed Parquet tables (`*.parquet`)
+1. Python object representations / serializations (`.json`)
+
+Markdown reports (`*_report.md`) should be considered the main outputs: they
+include text describing certain analysis outputs, and inlined tables of key
+numerical results for that portion of analysis. The inline tables in each
+Markdown report are saved in the same directory of the report always as
+plaintext CSV (`*.csv`) files, and also occasionally additionally as a
+Parquet file (`*.parquet`). This is because CSV is inherently lossy and, to
+be blunt, basically a [trash format for represeting tabular
+data](https://haveagreatdata.com/posts/why-you-dont-want-to-use-csv-files/).
+However, it is human-readable and easy to import into common spreadsheet
+tools (Excel, Google Sheets, LibreOffice Calc, etc ).
+
+The `.json` files are largely for internal use and in general should not need
+to be inspected by the end-user. However, `.json` was chosen over, e.g.,
+`.pickle`, since `.json` is at least fairly human-readable, and in
+particular, the [`options.json` file](#📂-hashed-subdirectories) allows for
+expanding main output tables with additional columns reflecting the program
+options across [multiple runs](#overriding-spreadsheet-options).
+
+## Order of Reading
+
+The subdirectories should generally be read / inspected in the following order:
+
+```
+📂 inspection/
+📂 prepared/
+📂 features/
+📂 selection/
+📂 tuning/
+📂 results/
+```
+
+## Subdirectories
+
+### 📂 Hashed Subdirectories
+
+```
+📂 fe57fcf2445a2909e688bff847585546/
+├── 📂 features/
+│   ...
+└── options.json
+```
+
+This directory is named after a unique hash of all the options used for a
+particular invocation / execution of the `df-analyze` command, and contains
+the single file `options.json`, which is a `.json` representation of these
+options. This is to allow multiple sets of outputs from different options to
+be placed automatically in the same `--outdir` top-level directory, e.g. as
+mentioned [above](#overriding-spreadsheet-options).
+
+So for example, running mutiple options combinations to the same output
+directory will make something like:
+
+```
+📂 ./my_output_directory
+├── 📂 ecc2d425d285807275c0c6ae498a1799/
+├── 📂 fe57fcf2445a2909e688bff847585546/
+└── 📂 7c0797c3e6a6eebf784f33850ed96988/
+```
+
+### `📂 inspection`
+
+```
+📂 inspection/
+├── inferred_types.csv
+└── short_inspection_report.md
+```
+
+This contains the inferred cardinalities (e.g. continuous, ordinal, or categorical)
+of each features, as well as the decision rule used for each inference. Features
+with ambiguous cardinalities are also coerced to some cardinality (usually ordinal,
+since categorical variables are often low-information and increase compute costs),
+and this is detailed here.
+
+#### Destructive Data Changes
+
+Nuisance features (timeseries features or non-categorical
+datetime data, unique identifiers, constant features) are automatically
+removed by `df-anyalze`, and those destructive data changes are documented
+here.
+
+[Deflated categorical variables](#categorical-deflation) are documented here
+as well.
+
+
+### `📂 prepared`
+
+```
+📂 prepared/
+├── info.json
+├── labels.parquet
+├── preparation_report.md
+├── X.parquet
+├── X_cat.parquet
+├── X_cont.parquet
+└── y.parquet
+```
+
+- `preparation_report.md`
+  - shows compute times for processing steps, and documents changes to the data
+    shape following encoding, deflation, and dropping of target NaN values
+- `labels.parquet`
+  - a Pandas Series linking the target label encoding (integer) to the name of
+    the encoded class
+- `X.parquet`
+  - the final encoded complete data (categoricals and numeric)
+- `X_cat.parquet`
+  - the original (unencoded) categoricals
+- `X_cont.parquet`
+  - the continuous features (normalized and NaN imputed)
+- `y.parquet`
+  - the final encoded target variable
+- `info.json`
+  - serialization of internal `InspectionResults` object
+
+
+### `📂 features`
+
+Data for univariate analyses of all features.
+
+#### `📂 associations`
+
+```
+📂 associations/
+├── associations_report.md
+├── categorical_features.csv
+├── categorical_features.parquet
+├── continuous_features.csv
+└── continuous_features.parquet
+```
+
+- `associations_report.md`
+  - tables of feature-target associations
+- `categorical_features.csv`
+  - plaintext table of categorical feature-target associations
+- `categorical_features.parquet`
+  - Parquet table of categorical feature-target associations
+- `continuous_features.csv`
+  - plaintext table of continuous feature-target associations
+- `continuous_features.parquet`
+  - Parquet table of continuous feature-target associations
+
+#### `📂 predictions`
+
+```
+📂 predictions/
+├── categorical_features.csv
+├── categorical_features.parquet
+├── continuous_features.csv
+├── continuous_features.parquet
+└── predictions_report.md
+```
+
+- `categorical_features.csv`
+  - plaintext table of 5-fold predictive performances of each categorical feature
+- `categorical_features.parquet`
+  - Parquet table of 5-fold predictive performances of each categorical feature
+- `continuous_features.csv`
+  - plaintext table of 5-fold predictive performances of each continuous feature
+- `continuous_features.parquet`
+  - Parquet table of 5-fold predictive performances of each continuous feature
+- `predictions_report.md`
+  - summary tables of all feature predictive performances
+
+**Note**: for "large" datasets
+([currently](https://github.com/stfxecutables/df-analyze/blob/17abaa1bde45b9ee288bd027b7b20cd87d8c33d4/src/_constants.py#L130-L131),
+greater than 1500 samples) these predictions are made using a small (1500
+samples) subsample of the full data, for compute time reasons.
+
+For continuous targets (i.e. regression), the subsample is made in a
+representative manner by taking a stratified subsample, where stratification
+is based on discretizing the continuous target variable into 5 bins (via
+scikit-learn `KBinsDiscretizer` and `StratifiedShuffleSplit`, respectively).
+
+For categorical targets (e.g. classification), the subsample is a "viable
+subsample" (see `viable_subsample` in
+[`prepare.py`](https://github.com/stfxecutables/df-analyze/blob/develop/src/preprocessing/prepare.py))
+that first ensures all target classes have the minimum number of samples
+required to avoid deflation and/or problems with 5-fold splits eliminating
+a target class.
+
+### `📂 selection`
+
+Data
+
+
+#### `📂 embed`
+
+```
+📂 embed/
+├── linear_embed_selection_data.json
+├── lgbm_embed_selection_data.json
+└── embedded_selection_report.md
+```
+
+- `embedded_selection_report.md`
+  - summary of features selected by (each) embedded model
+- `[model]_embed_selection_data.json`
+  - feature names and importance scores for `[model]`
+
+#### `📂 filter`
+
+```
+📂 filter/
+├── association_selection_report.md
+└── prediction_selection_report.md
+```
+
+- `association_selection_report.md`
+  - summary of features selected by univariate assocations with the target
+  - also includes which measure of association was used for selection
+- `prediction_selection_report.md`
+  - summary of features selected by univariate predictive performance
+  - also includes which predictive performance metric was used for selection
+
+**Note**: Feature importances are not included here, as these are already
+available in the [`features` directory](#📂-features).
+
+#### `📂 wrap`
+
+```
+📂 wrap/
+├── wrapper_selection_data.json
+└── wrapper_selection_report.md
+```
+
+- `wrapper_selection_data.json`
+  - feature names and predictive performance of each upon selection
+- `wrapper_selection_report.md`
+  - summary of features selected by wrapper (stepwise) selection method
+
+### `📂 tuning`
+
+```
+📂 tuning/
+└── tuned_models.csv
+```
+
+- `tuned_models.csv`
+  - table of all tuned models for each feature selection method, including
+    final performance and final selected hyperparameters (as a .json field)
+
+
+### `📂 results`
+
+```
+📂 results/
+├── eval_htune_results.json
+├── final_performances.csv
+├── performance_long_table.csv
+├── results_report.md
+├── X_test.csv
+├── X_train.csv
+├── y_test.csv
+└── y_train.csv
+```
+
+- `final_performances.csv` and `performance_long_table.csv` [TODO: make one of these wide table]
+  - final summary table of all performances for all models and feature selection methods
+- `results_report.md`
+  - readable report (with wide-form tables of performances) of above information
+- `X_test.csv`
+  - predictors used for final holdout and k-fold evaluations
+- `X_train.csv`
+  - predictors used for training and tuning
+- `y_test.csv`
+  - target samples used for final holdout and k-fold evaluations
+- `y_train.csv`
+  - target samples used for training and tuning
+- `eval_htune_results.json`
+  - serialization of final results object (not human readable, for internal use)
+
+## Complete Listing
+
+The full tree-structure of outputs is as follows:
+
+```
+📂 fe57fcf2445a2909e688bff847585546/
+├── 📂 features/
+│   ├── 📂 associations/
+│   │   ├── associations_report.md
+│   │   ├── categorical_features.csv
+│   │   ├── categorical_features.parquet
+│   │   ├── continuous_features.csv
+│   │   └── continuous_features.parquet
+│   └── 📂 predictions/
+│       ├── categorical_features.csv
+│       ├── categorical_features.parquet
+│       ├── continuous_features.csv
+│       ├── continuous_features.parquet
+│       └── predictions_report.md
+├── 📂 inspection/
+│   ├── inferred_types.csv
+│   └── short_inspection_report.md
+├── 📂 prepared/
+│   ├── info.json
+│   ├── labels.parquet
+│   ├── preparation_report.md
+│   ├── X.parquet
+│   ├── X_cat.parquet
+│   ├── X_cont.parquet
+│   └── y.parquet
+├── 📂 results/
+│   ├── eval_htune_results.json
+│   ├── final_performances.csv
+│   ├── performance_long_table.csv
+│   ├── results_report.md
+│   ├── X_test.csv
+│   ├── X_train.csv
+│   ├── y_test.csv
+│   └── y_train.csv
+├── 📂 selection/
+│   ├── 📂 embed/
+│   │   ├── embed_selection_data.json
+│   │   └── embedded_selection_report.md
+│   ├── 📂 filter/
+│   │   ├── association_selection_report.md
+│   │   └── prediction_selection_report.md
+│   └── 📂 wrapper/
+├── 📂 tuning/
+│   └── tuned_models.csv
+└── options.json
+```
 
 # Currently Implemented Program Features and Analyses
 

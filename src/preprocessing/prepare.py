@@ -19,7 +19,11 @@ from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
 from sklearn.preprocessing import KBinsDiscretizer
 
-from src._constants import N_CAT_LEVEL_MIN, N_TARG_LEVEL_MIN, UNIVARIATE_PRED_MAX_N_SAMPLES
+from src._constants import (
+    N_CAT_LEVEL_MIN,
+    N_TARG_LEVEL_MIN,
+    UNIVARIATE_PRED_MAX_N_SAMPLES,
+)
 from src.enumerables import NanHandling
 from src.preprocessing.cleaning import (
     clean_regression_target,
@@ -237,7 +241,9 @@ class PreparedData:
             return 1
         return len(np.unique(self.y))
 
-    def split(self, train_size: Union[int, float] = 0.6) -> tuple[PreparedData, PreparedData]:
+    def split(
+        self, train_size: Union[int, float] = 0.6
+    ) -> tuple[PreparedData, PreparedData]:
         y = self.y
         if self.is_classification:
             ss = StratifiedShuffleSplit(train_size=train_size, n_splits=1)
@@ -467,7 +473,9 @@ def prepare_data(
     X_cont = normalize_continuous(X_cont, robust=True)
 
     df = timer(deflate_categoricals)(df, results, _warn=_warn)
-    df, X_cat = timer(encode_categoricals)(df, target, results=results, warn_explosion=_warn)
+    df, X_cat = timer(encode_categoricals)(
+        df, target, results=results, warn_explosion=_warn
+    )
 
     X = df.drop(columns=target).reset_index(drop=True)
     return PreparedData(
