@@ -29,7 +29,13 @@ from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
 from src.selection.models import model_select_features
-from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds
+from src.testing.datasets import (
+    FAST_INSPECTION,
+    MEDIUM_INSPECTION,
+    SLOW_INSPECTION,
+    TestDataset,
+    fast_ds,
+)
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
@@ -148,12 +154,13 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 
 if __name__ == "__main__":
+    DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
     if os.environ.get("CC_CLUSTER") == "niagara":
         idx = os.environ.get("SLURM_ARRAY_TASK_ID")
         if idx is None:
             raise ValueError("On Niagara but no SLURM_ARRAY_TASK_ID defined")
         idx = int(idx)
-        dsname, ds = FAST_INSPECTION[idx]
+        dsname, ds = DATASETS[idx]
         print("=" * 79)
         print(f"Testing {dsname}")
         print("=" * 79)
