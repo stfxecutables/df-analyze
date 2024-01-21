@@ -91,6 +91,7 @@ class ProgramDirs(Debug):
                     continue
                 if attr == "terminal":
                     path.touch()
+                    continue
                 try:
                     path.mkdir(exist_ok=True, parents=True)
                 except Exception:

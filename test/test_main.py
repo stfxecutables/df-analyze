@@ -50,7 +50,7 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
         FeatureSelection.Wrapper,
         FeatureSelection.Embedded,
     )
-    options.embed_select = EmbedSelectionModel.LGBM
+    options.embed_select = (EmbedSelectionModel.LGBM, EmbedSelectionModel.Linear)
     # options.embed_select = None
     options.wrapper_model = WrapperSelectionModel.Linear
     options.wrapper_select = WrapperSelection.StepUp
