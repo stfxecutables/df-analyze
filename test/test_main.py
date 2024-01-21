@@ -48,7 +48,7 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     # options.embed_select = None
     options.wrapper_model = WrapperSelectionModel.Linear
     options.wrapper_select = WrapperSelection.StepUp
-    options.wrapper_select = None
+    # options.wrapper_select = None
     options.n_feat_wrapper = 10
 
     if ds.is_classification:

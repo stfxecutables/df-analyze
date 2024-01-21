@@ -55,6 +55,7 @@
   - [To Do (highest priority first):](#to-do-highest-priority-first)
   - [May Not Implement:](#may-not-implement)
 - [Limitations](#limitations)
+  - [One Target Variable per Invocation / Run](#one-target-variable-per-invocation--run)
   - [Data Types](#data-types)
 
 
@@ -74,6 +75,10 @@ attempts to automate:
 - model selection and validation
 
 and saves all key tables and outputs from this process.
+
+Currently, siginifcant efforts have been made to make `df-analyze` robust to
+a wide variety of tabular datasets. However, there are some significant
+[limitations](#limitations).
 
 
 
@@ -989,8 +994,31 @@ The full tree-structure of outputs is as follows:
 
 # Limitations
 
-- single target
-- column names with spaces?
+- there can be only one target variable per program invocation / run
+- small / tiny datasets (e.g. less than 500 samples)
+- malformed data (e.g. quoting, feature names with spaces or commas, malformed `.csv`, etc)
+- inappropriate data (e.g. timeseries or sequence data, NLP data)
+- inappropriate tasks (e.g. unsupervised learning tasks)
+
+
+## One Target Variable per Invocation / Run
+
+Features and targets must be treated fundamentally differently by all aspects
+of analysis. E.g.
+
+- normalization of targets in regression must be different than normalization
+  of continuous features
+- samples with NaNs in the target must be dropped (resulting in a different
+  base dataframe), but samples with NaN features can be imputed
+- data splitting must be stratified in classification to avoid errors, but
+  stratification must be based on the target (e.g. choosing a different
+  target will generally result in different splits)
+
+In addition, feature selection is expensive, and must be done for each target
+variable. Runtimes are often suprisingly sensitive to the distribution of the
+target variable.
+
+
 
 ## Data Types
 
