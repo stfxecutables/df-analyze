@@ -12,6 +12,9 @@ import os
 import sys
 from pathlib import Path
 
+import pandas as pd
+from pandas import DataFrame
+
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions
@@ -155,6 +158,9 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 if __name__ == "__main__":
     DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
+    print(len(FAST_INSPECTION))
+    print(len(MEDIUM_INSPECTION))
+    raise
     if os.environ.get("CC_CLUSTER") == "niagara":
         idx = os.environ.get("SLURM_ARRAY_TASK_ID")
         if idx is None:
