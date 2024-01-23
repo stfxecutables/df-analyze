@@ -287,7 +287,8 @@ cd df-analyze/containers
 The overall data preparation and analysis process comprises six steps (some
 optional):
 
-1. [Feature Type and Cardinalty Inference](#feature-type-and-cardinality-inference)
+1. [Feature Type and Cardinalty
+   Inference](#feature-type-and-cardinality-inference) (Data Inspection)
 1. [Data Preparation and Preprocessing](#data-preparation)
 1. [Univariate Feature Analyses](#univariate-feature-analyses)
 1. [Feature Selection (optional)](#feature-selection)
@@ -385,7 +386,7 @@ For example, a small, geographically representative survey of households
 information. Regions or municipalities corresponding to large cities might
 each have over 100 samples, but small rural regions will likely be sampled
 less than 10 or so times each, i.e., they are *undersampled*. Attempting to
-generalize fromn any patterns observed in these undersampled classes is
+generalize from any patterns observed in these undersampled classes is
 generally unwise (undersampled levels in a categorical variable are sort
 of the categorical equivalent of statistical noise).
 
@@ -399,9 +400,9 @@ single "other" class).
 
 In `df-analyze`, we **automatically deflate categorical variables based on a
 threshold of 20 samples**, i.e. classes with less than 20 samples are
-remapped to the "NaN" class. This is probably not agressive enough for most
+remapped to the "NaN" class. This is probably not aggressive enough for most
 datasets, and, for some features and smaller datasets, perhaps overly
-agressive. However, if later feature selection is used, this selection is
+aggressive. However, if later feature selection is used, this selection is
 done on the one-hot encoded data, and so useless classes will be excluded in
 a more principled way there. The choice of 20 is thus (hopefully) somewhat
 conservative in the sense of not prematurely eliminating information, most of
@@ -411,7 +412,7 @@ the time.
 
 As above, target categorical variables are deflated, except when a target
 class has less than 30 samples. This deflation arguably should be *much* more
-agressive: when doing e.g. 5-fold analyses on a dataset with such a target
+aggressive: when doing e.g. 5-fold analyses on a dataset with such a target
 variable, each test fold would be expected to be 20% of the samples, so about
 6 representatives of this class. This is highly unlikely to result in
 reliable performance estimates for this class, and so only introduces noise
