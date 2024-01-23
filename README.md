@@ -424,8 +424,8 @@ to final performance metrics.
 
 The data $\mathcal{D} = (\mathbf{X}, y)$ is immediately split into
 non-overlapping sets
-$\mathcal{D} = (\mathcal{D}_\text{train}, \mathcal{D}_\text{test})$, where
-$\mathcal{D}_\text{train} = (\mathbf{X}_{\text{train}}, y_{\text{train}})$ and
+$\mathcal{D} = (\mathcal{D}_\text{train}, \mathcal{D}\_\text{test})$, where
+$\mathcal{D}\_\text{train} = (\mathbf{X}_{\text{train}}, y_{\text{train}})$ and
 $\mathcal{D}_\text{test} = (\mathbf{X}_{\text{test}}, y_{\text{test}})$. By
 default $\mathcal{D}_\text{test}$ is chosen to be a (stratified) random 40%
 of the samples. All selection and tuning is done only on
