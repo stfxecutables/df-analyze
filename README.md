@@ -125,6 +125,8 @@ python -m pip install -r requirements.txt  # install requirements
 
 Note the above assumes that the `python3` command is a Python 3.9 or 3.10
 version, which you could check by running `python3 --version` beforehand.
+Also, the `requirements.txt` file does not specify versions (!!), so expect
+things to break with this approach...
 
 ## By Singularity / Apptainer Container
 
@@ -251,7 +253,7 @@ python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan impute
 ```
 
 would run three analyses with the options in `spreadsheet.xlsx` (or default
-values) but with the handing of NaN value differing for each run, regardless
+values) but with the handing of NaN values differing for each run, regardless
 of what is set for `--nan` in `spreadsheet.xlsx`. Note that the same output
 directory can be specified each time, as `df-analyze` will ensure that all
 results are saved to a separate subfolder (with a unique hash reflecting the
@@ -320,7 +322,7 @@ Features are checked, in order of priority, for features that cannot be used
 by `df-anaylze`. Unusable features are features which are:
 
 1. Constant (all values identical or identical except NaNs)
-2. Sequential (autocorrellated) datetime data
+2. Sequential (autocorrelated) datetime data
 3. Identifiers (all values unique and not continuous / floats)
 
 Then, features are identified as one of:
@@ -397,12 +399,13 @@ wise, usually, for both computational and generalization reasons, to exclude
 these classes from the categorical variable (e.g. replace with NaN, or a
 single "other" class).
 
-We do this in `df-analyze` automatically for any class in a categorical
-variable with less than 20 samples. This is probably not agressive enough
-for most datasets, and, for some features and smaller datasets, perhaps
-overly agressive. However, if later feature selection is used, this selection
-is done on the one-hot encoded data, and so useless classes will be excluded
-in a more principled way there. The choice of 20 is thus somewhat conservative
+In `df-analyze`, we **automatically deflate categorical variables based on a
+threshold of 20 samples**, i.e. classes with less than 20 samples are
+remapped to the "NaN" class. This is probably not agressive enough for most
+datasets, and, for some features and smaller datasets, perhaps overly
+agressive. However, if later feature selection is used, this selection is
+done on the one-hot encoded data, and so useless classes will be excluded in
+a more principled way there. The choice of 20 is thus somewhat conservative
 in the sense of not prematurely eliminating information, most of the time.
 
 ##### Categorical Target Deflation
