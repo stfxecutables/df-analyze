@@ -175,6 +175,8 @@ if __name__ == "__main__":
     df["err_n"] = y - y_n
     df["err_h"] = y - y_h
 
+    plt.hist(df["err_h"] / 3600, bins=8, color="black")
+    plt.show()
     mean_np, med_np = df["err_np"].mean(), df["err_np"].median()
     mean_nlogn, med_nlogn = df["err_nlogn"].mean(), df["err_nlogn"].median()
     mean_n, med_n = df["err_n"].mean(), df["err_n"].median()

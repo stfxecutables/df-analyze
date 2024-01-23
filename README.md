@@ -44,21 +44,17 @@
     - [`📂 tuning`](#-tuning)
     - [`📂 results`](#-results)
   - [Complete Listing](#complete-listing)
-- [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
-  - [Completed Features](#completed-features)
-    - [Single Spreadsheet for Configuration and Data](#single-spreadsheet-for-configuration-and-data)
-    - [Automated Data Preproccesing](#automated-data-preproccesing)
-    - [Feature Descriptive Statisics](#feature-descriptive-statisics)
-    - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
-    - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
-  - [In progress / Partially Completed:](#in-progress--partially-completed)
-  - [To Do (highest priority first):](#to-do-highest-priority-first)
-  - [May Not Implement:](#may-not-implement)
 - [Limitations](#limitations)
   - [One Target Variable per Invocation / Run](#one-target-variable-per-invocation--run)
   - [Dataset Size](#dataset-size)
   - [Inappropriate Data](#inappropriate-data)
   - [Inappropriate Tasks](#inappropriate-tasks)
+- [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
+  - [Completed Features](#completed-features)
+    - [Automated Data Preproccesing](#automated-data-preproccesing)
+    - [Feature Descriptive Statisics](#feature-descriptive-statisics)
+    - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
+    - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
 
 
 # Overview
@@ -827,20 +823,135 @@ The full tree-structure of outputs is as follows:
 └── options.json
 ```
 
+# Limitations
+
+- there can be only [one target variable per program invocation /
+  run](#one-target-variable-per-invocation--run)
+- malformed data (e.g. quoting, feature names with spaces or commas,
+  malformed `.csv`, etc)
+- [inappropriate data](#inappropriate-data) (e.g. timeseries or sequence
+  data, NLP data)
+- [inappropriate tasks](#inappropriate-tasks) (e.g. unsupervised learning
+  tasks)
+- dataset size (see [below](#dataset-size))
+- wrapper selection is extremely expensive and the number of selected
+  features (or elminated features, in the case of step-down selection) should
+  not exceed:
+  - for [**FAST** datasets](#dataset-size):
+    - step-up: 20
+    - step-down: 10
+  - for [**MEDIUM** datasets](#dataset-size):
+    - step-up: 15
+    - step-down: 5
+  - for [**SLOW** datasets](#dataset-size):
+    - wrapper selection should not be used at all
+
+
+
+## One Target Variable per Invocation / Run
+
+Features and targets must be treated fundamentally differently by all aspects
+of analysis. E.g.
+
+- normalization of targets in regression must be different than normalization
+  of continuous features
+- samples with NaNs in the target must be dropped (resulting in a different
+  base dataframe), but samples with NaN features can be imputed
+- data splitting must be stratified in classification to avoid errors, but
+  stratification must be based on the target (e.g. choosing a different
+  target will generally result in different splits)
+
+In addition, feature selection is expensive, and must be done for each target
+variable. Runtimes are often suprisingly sensitive to the distribution of the
+target variable.
+
+
+## Dataset Size
+
+Let $p$ be the number of features, and $n$ be the number of samples in the
+tabular data. Based on some experiments with about 70 datasets from the
+[OpenML
+platform](https://www.openml.org/search?type=data&sort=runs&status=active),
+then a simple rule for predicting the runtime, $t$, in seconds, of `df-analyze`
+with all options and models is:
+
+$$ t = n + 20p $$
+
+for $n$ less than $30 000$. This is a slight over-estimate, and runtimes will
+rarely ever be more than 2 hours over this estimate. E.g. if we take $h =
+3600 = 60 \times 60$ to be the number of seconds in an hour, then you should
+almost always the runtime of `df-analyze` on the Niagara cluster to be under
+$n + 20p + 2h$ seconds.
+
+
+
+
+
+
+Datasets in the **FAST** category are highly likely be completely analyzed,
+with all `df-analyze` options (e.g. all classifiers/regressors, and all
+feature selection possibilities) in under two hours on a compute
+cluster.
+
+Datasets in the **MODERATE** category *should* finish in under 24 hours (the
+typical time limit on most Canadian research clusters), but certain estimators
+(e.g. `mlp`, `lgbm`) may cause problems here. Wrapper-based selection may also
+interact badly with some datasets.
+
+Datasets in the **SLOW** category should probably be considered computationally
+intractable for `df-analyze`, and are likely to be unable to complete in under
+24 hours. These datasets *might* complete, however, if the following conditions
+are met:
+
+- only 2-3 models (NOT including the `mlp`) are used, AND
+- $p$ is less than 20, AND
+- wrapper-based feature selection is not used
+
+
+
+## Inappropriate Data
+
+Datasets with any kind of strong spatio-temporal clustering, or
+spatio-temporal autocorrelation, `df-anaylze` *technically* can handle (i.e.
+will produce results for), but the reported results will be deeply invalid
+and misleading. This includes:
+
+- **time-series or sequence data**, especially where the task is
+  *forecasting*,
+  - This means data where the target variable is either a categorical or
+    continuous variable that represents some subsequent or future state of a
+    sequence of samples in the training data, e.g. predicting weather, stock
+    prices, media popularity, and etc., but where a correct predictive model
+    necessarily must know recent target values
+  - naive k-fold splitting is [completely
+    invalid](https://stats.stackexchange.com/a/14109) in these kinds of
+    cases, and k-fold is the basis of most of the main analyses in
+    `df-analyze`
+
+- **spatially autocorrelated** or **autocorrelated data** in general
+  - A generalization of the case above, but the same problem: k-fold is
+    invalid when [the similarity of samples that are close in space is not
+    accounted for in splitting](https://arxiv.org/abs/2005.14263)
+
+- **unencoded text data / natural language processing (NLP) data**
+  - I.e. any data where a sample feature is a word or collection of words
+
+- **image data** (e.g. computer vision prediction tasks)
+  - These datasets not only almost universally fall into the [**SLOW**
+    class](#dataset-size), and years of research and experience have now
+    shown that classic ML models (which are all that `df-analyze` fits)
+    simply are not capable here
+
+## Inappropriate Tasks
+
+Anything beyond simple prediction, e.g. unsupervised tasks like clustering,
+representation learning, dimension reduction, or even semi-supervised tasks,
+are simply beyond the scope of `df-analyze`.
+
+
 # Currently Implemented Program Features and Analyses
 
 ## Completed Features
-
-### Single Spreadsheet for Configuration and Data
-
-- df-analyze can now be completely configured (including data) in a single
-  spreadsheet (.xlsx or .csv)
-- e.g. usage: `python df-analyze.py --spreadsheet df-analyze-formatted.xlsx`
-- CLI args are simply entered as header lines in the sheet
-- user can additionally override spreadsheet args as needed, e.g. `python
-  df-analyze.py --spreadsheet df-analyze-formatted.xlsx --target other_feature`
-  (command line interface remains functional and completely compatible with
-  spreadsheet configuration)
 
 ### Automated Data Preproccesing
 
@@ -965,144 +1076,3 @@ The full tree-structure of outputs is as follows:
       percentage error, R2, percent variance explained
 
 
-## In progress / Partially Completed:
-
-- expanded documentation of df-analyze features, configuration, and pipeline
-- wrapper feature selection methods
-  - will make use of univariate stats and predictions
-
-## To Do (highest priority first):
-
-1. include predictive **confidence measures** (either directly from models that
-   output probabilities, or via Platt-scaling) in final fit model stats
-1. move / **replicate documentation of df-analyze in a Wiki, README**, or
-   other non-code non-CLI source (currently requires user to run `python
-   df-analyze.py --help` and produces a very large amount of text)
-1. test scikit-rebate
-   [MultiSURF](https://epistasislab.github.io/scikit-rebate/using/#multisurf)
-   for modern
-   **[relief-based](https://en.wikipedia.org/wiki/Relief_(feature_selection))
-   filter feature selection**
-1. **containerize df-analyze** for reliable behaviour on HPC cluster
-
-## May Not Implement:
-
-- output **matrix of feature-feature associations**
-  - a single matrix not useful because categorical / continous feature and
-    target pairings mean that such a matrix would be full of different
-    association measures
-  - would thus require three matrices (cont-cat, cont-cont, cat-cat) to avoid
-    above
-
-# Limitations
-
-- there can be only [one target variable per program invocation /
-  run](#one-target-variable-per-invocation--run)
-- malformed data (e.g. quoting, feature names with spaces or commas,
-  malformed `.csv`, etc)
-- inappropriate [data](#inappropriate-data) (e.g. timeseries or sequence
-  data, NLP data)
-- inappropriate [tasks](#inappropriate-tasks) (e.g. unsupervised learning
-  tasks)
-- dataset size (see [below](#dataset-size))
-- wrapper selection is extremely expensive and the number of selected
-  features (or elminated features, in the case of step-down selection) should
-  not exceed:
-  - for [**FAST** datasets](#dataset-size):
-    - step-up: 20
-    - step-down: 10
-  - for [**MEDIUM** datasets](#dataset-size):
-    - step-up: 15
-    - step-down: 5
-  - for [**SLOW** datasets](#dataset-size):
-    - wrapper selection should not be used at all
-
-
-
-## One Target Variable per Invocation / Run
-
-Features and targets must be treated fundamentally differently by all aspects
-of analysis. E.g.
-
-- normalization of targets in regression must be different than normalization
-  of continuous features
-- samples with NaNs in the target must be dropped (resulting in a different
-  base dataframe), but samples with NaN features can be imputed
-- data splitting must be stratified in classification to avoid errors, but
-  stratification must be based on the target (e.g. choosing a different
-  target will generally result in different splits)
-
-In addition, feature selection is expensive, and must be done for each target
-variable. Runtimes are often suprisingly sensitive to the distribution of the
-target variable.
-
-
-## Dataset Size
-
-Let $p$ be the number of features, and $n$ be the number of samples in the
-tabular data. Consider the following very rough categories:
-
-- **FAST**: $p$ less than 60, $n$ less than 15 000
-- **MODERATE**: $n$ less than 30 000, and not in FAST
-- **SLOW**: $n$ greater than 30 000
-
-Datasets in the **FAST** category are highly likely be completely analyzed,
-with all `df-analyze` options (e.g. all classifiers/regressors, and all
-feature selection possibilities) in under two hours on a compute
-cluster.
-
-Datasets in the **MODERATE** category *should* finish in under 24 hours (the
-typical time limit on most Canadian research clusters), but certain estimators
-(e.g. `mlp`, `lgbm`) may cause problems here. Wrapper-based selection may also
-interact badly with some datasets.
-
-Datasets in the **SLOW** category should probably be considered computationally
-intractable for `df-analyze`, and are likely to be unable to complete in under
-24 hours. These datasets *might* complete, however, if the following conditions
-are met:
-
-- only 2-3 models (NOT including the `mlp`) are used, AND
-- $p$ is less than 20, AND
-- wrapper-based feature selection is not used
-
-
-
-## Inappropriate Data
-
-`df-anaylze` currently cannot handle:
-
-- **time-series or sequence data**, especially where the task is
-  *forecasting*,
-  - When the target variable is either a categorical or continuous variable
-    that represents some subsequent or future state of a sequence of samples
-    in the training data
-  - naive k-fold splitting is [completely
-    invalid](https://stats.stackexchange.com/a/14109) when the task is
-    forecasting, and k-fold is the basis of most of the main analyses in
-    `df-analyze`
-
-- **spatially autocorrelated** or **autocorrelated data** in general
-  - This is just a generalization case of above, but the problem is the same:
-    k-fold is [the similarity of samples that are close in space is not
-    accounted for in splitting](https://arxiv.org/abs/2005.14263)
-
-- **unencoded text data / natural language processing (NLP) data**
-  - This includes data where a sample feature is a collection of words, like
-    a sentence
-  - This also includes data where each sample of each feature is a single
-    word, with implied ordering among features (e.g. the data is sentences,
-    and feature1 is word1, feature2 is word2, and so on, with longer
-    sentences getting a special padding token, e.g. short sentences become
-    "[PAD]", "[PAD]", ..., "[PAD]", and long sentences are truncated)
-
-- **image data** (e.g. computer vision prediction tasks)
-  - These datasets not only almost universally fall into the **SLOW** class,
-    but years of research and experience have shown that deep neural network
-    models like Transformers or Convolutional Neural Networks are needed to
-    correctly handle this kind of data. Classic ML models simply are not
-    capable here.
-
-## Inappropriate Tasks
-
-- unsupervised tasks (e.g. clustering, representation learning, dimension
-  reduction)
