@@ -833,18 +833,14 @@ The full tree-structure of outputs is as follows:
   data, NLP data)
 - [inappropriate tasks](#inappropriate-tasks) (e.g. unsupervised learning
   tasks)
-- dataset size (see [below](#dataset-size))
+- dataset size: **expected max runtime should be well under 24 hours** (see
+  [below](#dataset-size) for how to estimate your expected runtime on the
+  Compute Canada / DRAC Niagara cluster)
 - wrapper selection is extremely expensive and the number of selected
   features (or elminated features, in the case of step-down selection) should
-  not exceed:
-  - for [**FAST** datasets](#dataset-size):
+  *not* exceed:
     - step-up: 20
     - step-down: 10
-  - for [**MEDIUM** datasets](#dataset-size):
-    - step-up: 15
-    - step-down: 5
-  - for [**SLOW** datasets](#dataset-size):
-    - wrapper selection should not be used at all
 
 
 
@@ -869,42 +865,46 @@ target variable.
 ## Dataset Size
 
 Let $p$ be the number of features, and $n$ be the number of samples in the
-tabular data. Based on some experiments with about 70 datasets from the
-[OpenML
-platform](https://www.openml.org/search?type=data&sort=runs&status=active),
-then a simple rule for predicting the runtime, $t$, in seconds, of `df-analyze`
-with all options and models is:
+tabular data. Also, let $h = 3600 = 60 \times 60$ be the number of seconds in
+an hour.
 
-$$ t = n + 20p $$
+Based on some experiments with about 70 datasets from the [OpenML
+platform](https://www.openml.org/search?type=data&sort=runs&status=active)
+and on the [Niagara compute
+cluster](https://docs.alliancecan.ca/wiki/Niagara#Node_characteristics), and
+limiting wrapper-based selection to step-up selection of 10 features, then a
+simple rule for predicting the maximum expected runtime, $t_{\text{max}}$, in
+seconds, of `df-analyze` with all options and models is:
 
-for $n$ less than $30 000$. This is a slight over-estimate, and runtimes will
-rarely ever be more than 2 hours over this estimate. E.g. if we take $h =
-3600 = 60 \times 60$ to be the number of seconds in an hour, then you should
-almost always the runtime of `df-analyze` on the Niagara cluster to be under
-$n + 20p + 2h$ seconds.
+$$ t_{\text{max}} = n + 20p + 2h $$
 
+for $n$ less than $30\;000$ and for $p$ less than $200$ or so. Doubling the
+amount of selected features should probably roughly double the expected max
+runtime, but this is not confirmed by experiments.
 
+The expected runtime on your machine will be quite different. If $n <
+10\;000$ and $p < 60$, and you have a recent machine (e.g. M1/M2/M3 series
+Mac) then it is likely that your runtimes will be significantly faster than
+the above estimate.
 
+Also, it is extremely challenging to predict the runtimes of AutoML
+approaches like `df-analyze`: besides machine characteristics, the structure
+of the data (beyond just the number of samples and features) and
+hyperparameter values (e.g. for [support vector
+machines](https://scikit-learn.org/stable/auto_examples/svm/plot_rbf_parameters.html#sphx-glr-auto-examples-svm-plot-rbf-parameters-py))
+also have a significant impact on fit times.
 
+**Datasets with $n > 30\;000$, i.e. over 30 000 samples should probably be
+considered computationally intractable for `df-analyze`**. They are unlikely
+to complete in under 24 hours, and may in fact cause out-of-memory errors
+(the average Niagara node has only about 190GB of RAM, and to use all 40
+cores, the dataset must be copied 40 times due to Python's inability to
+properly share memory).
 
-
-Datasets in the **FAST** category are highly likely be completely analyzed,
-with all `df-analyze` options (e.g. all classifiers/regressors, and all
-feature selection possibilities) in under two hours on a compute
-cluster.
-
-Datasets in the **MODERATE** category *should* finish in under 24 hours (the
-typical time limit on most Canadian research clusters), but certain estimators
-(e.g. `mlp`, `lgbm`) may cause problems here. Wrapper-based selection may also
-interact badly with some datasets.
-
-Datasets in the **SLOW** category should probably be considered computationally
-intractable for `df-analyze`, and are likely to be unable to complete in under
-24 hours. These datasets *might* complete, however, if the following conditions
-are met:
+If you have a dataset where the expected runtime is getting close to 24 hours,
+then you should strongly consider limiting the `df-analyze` options such that:
 
 - only 2-3 models (NOT including the `mlp`) are used, AND
-- $p$ is less than 20, AND
 - wrapper-based feature selection is not used
 
 

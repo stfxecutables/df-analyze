@@ -76,6 +76,7 @@ if __name__ == "__main__":
     df["elapsed"] = pd.to_timedelta(df["elapsed"])
     df["elapsed"] = df["elapsed"].apply(lambda t: t.seconds)
     df = df.rename(columns={"elapsed": "seconds"})
+    print(df)
     y = df["seconds"]
     n, p = df["n"], df["p"]
     degree = 3
