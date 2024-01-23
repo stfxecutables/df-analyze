@@ -878,12 +878,12 @@ seconds, of `df-analyze` with all options and models is:
 
 $$ t_{\text{max}} = n + 20p + 2h $$
 
-for $n$ less than $30\;000$ and for $p$ less than $200$ or so. Doubling the
+for $n$ less than $30 000$ and for $p$ less than $200$ or so. Doubling the
 amount of selected features should probably roughly double the expected max
 runtime, but this is not confirmed by experiments.
 
 The expected runtime on your machine will be quite different. If $n <
-10\;000$ and $p < 60$, and you have a recent machine (e.g. M1/M2/M3 series
+10 000$ and $p < 60$, and you have a recent machine (e.g. M1/M2/M3 series
 Mac) then it is likely that your runtimes will be significantly faster than
 the above estimate.
 
@@ -894,7 +894,7 @@ hyperparameter values (e.g. for [support vector
 machines](https://scikit-learn.org/stable/auto_examples/svm/plot_rbf_parameters.html#sphx-glr-auto-examples-svm-plot-rbf-parameters-py))
 also have a significant impact on fit times.
 
-**Datasets with $n > 30\;000$, i.e. over 30 000 samples should probably be
+**Datasets with $n > 30 000$, i.e. over 30 000 samples should probably be
 considered computationally intractable for `df-analyze`**. They are unlikely
 to complete in under 24 hours, and may in fact cause out-of-memory errors
 (the average Niagara node has only about 190GB of RAM, and to use all 40
