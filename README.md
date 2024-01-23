@@ -21,6 +21,7 @@
     - [Data Preparation](#data-preparation)
       - [Categorical Deflation](#categorical-deflation)
         - [Categorical Target Deflation](#categorical-target-deflation)
+    - [Data Splitting](#data-splitting)
     - [Univariate Feature Analyses](#univariate-feature-analyses)
     - [Feature Selection](#feature-selection)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
@@ -290,6 +291,7 @@ optional):
 1. [Feature Type and Cardinalty
    Inference](#feature-type-and-cardinality-inference) (Data Inspection)
 1. [Data Preparation and Preprocessing](#data-preparation)
+1. [Data Splitting](#data-splitting)
 1. [Univariate Feature Analyses](#univariate-feature-analyses)
 1. [Feature Selection (optional)](#feature-selection)
 1. [Hyperparameter tuning](#hyperparameter-tuning)
@@ -418,6 +420,21 @@ variable, each test fold would be expected to be 20% of the samples, so about
 reliable performance estimates for this class, and so only introduces noise
 to final performance metrics.
 
+### Data Splitting
+
+The data $\mathcal{D} = (\mathbf{X}, y)$ is immediately split into non-overlapping
+sets $\mathcal{D} = (\mathcal{D}_\text{train}, \mathcal{D}_\text{test})$, where
+
+$$
+\mathcal{D}_\text{train} = (\mathbf{X}_{\text{train}}, y_{\text{train}}) \\
+\mathcal{D}_\text{test} = (\mathbf{X}_{\text{test}}, y_{\text{test}}) \\
+$$
+
+By default $\mathcal{D}_\text{test}$ is chosen to be a (stratified) random
+40% of the samples. All selection and tuning is done only on
+$\mathcal{D}_\text{train}$, to prevent circular analysis / double-dipping /
+leakage.
+
 
 ### Univariate Feature Analyses
 
@@ -440,19 +457,18 @@ to final performance metrics.
 - Use filter methods
    - Remove features with minimal univariate relation to target
    - Keep features with largest filter metrics
-- Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
-- Wrapper (stepwise) selection using $X_\text{train}$
-- Filter selection using $X_\text{train}$
+- Wrapper (stepwise) selection
+- Filter selection
 
 ### Hyperparameter Tuning
 
 - Bayesian (Optuna) hyperparameter optimization with internal 5-fold
-  validation on $X_\text{train}$
+  validation
 
 ### Final Validation
 
-- Final k-fold of model tuned and trained on selected features from $X_\text{train}$
-- Final evaluation of trained model on $X_\text{test}$
+- Final k-fold of model tuned and trained on selected features from $\mathcal{D}_\text{train}$
+- Final evaluation of trained model on $\mathcal{D}_\text{test}$
 
 
 # Program Outputs
