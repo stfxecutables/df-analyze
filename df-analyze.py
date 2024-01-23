@@ -1,8 +1,10 @@
+import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 from pathlib import Path
 from pprint import pprint
 from typing import List, TypeVar, Union
+from warnings import warn
 
 from pandas import DataFrame
 
@@ -140,7 +142,13 @@ def main() -> None:
         model_selected=selected,
         options=options,
     )
-    print(eval_results.to_markdown())
+    try:
+        print(eval_results.to_markdown())
+    except ValueError as e:
+        warn(
+            f"Got error when attempting to print final report:\n{e}\n"
+            f"Details:\n{traceback.format_exc()}"
+        )
     prog_dirs.save_eval_report(eval_results)
     prog_dirs.save_eval_tables(eval_results)
     prog_dirs.save_eval_data(eval_results)
