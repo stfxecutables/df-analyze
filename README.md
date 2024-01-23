@@ -25,8 +25,6 @@
     - [Feature Selection](#feature-selection)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
     - [Final Validation](#final-validation)
-  - [Philosophy](#philosophy)
-    - [Recursive / Wrapper Feature Selection and Tuning](#recursive--wrapper-feature-selection-and-tuning)
 - [Program Outputs](#program-outputs)
   - [Order of Reading](#order-of-reading)
   - [Subdirectories](#subdirectories)
@@ -405,17 +403,19 @@ remapped to the "NaN" class. This is probably not agressive enough for most
 datasets, and, for some features and smaller datasets, perhaps overly
 agressive. However, if later feature selection is used, this selection is
 done on the one-hot encoded data, and so useless classes will be excluded in
-a more principled way there. The choice of 20 is thus somewhat conservative
-in the sense of not prematurely eliminating information, most of the time.
+a more principled way there. The choice of 20 is thus (hopefully) somewhat
+conservative in the sense of not prematurely eliminating information, most of
+the time.
 
 ##### Categorical Target Deflation
 
-As above, target categorical variables are deflated, except when a target class
-has less than 30 samples. This deflation arguably be *much* more agressive:
-when doing e.g. 5-fold analyses on a dataset with such a target variable, each
-test fold would be expected to be 20% of the samples, so about 6 representatives
-of this class. This is highly unlikely to result in reliable performance estimates
-for this class, and so only introduces noise to final performance metrics.
+As above, target categorical variables are deflated, except when a target
+class has less than 30 samples. This deflation arguably should be *much* more
+agressive: when doing e.g. 5-fold analyses on a dataset with such a target
+variable, each test fold would be expected to be 20% of the samples, so about
+6 representatives of this class. This is highly unlikely to result in
+reliable performance estimates for this class, and so only introduces noise
+to final performance metrics.
 
 
 ### Univariate Feature Analyses
@@ -425,53 +425,34 @@ for this class, and so only introduces noise to final performance metrics.
    1. classification task / categorical target
       - tune
         [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
-        (equivalent to linear SVM and/or Logistic Regression)
+        (an approximation of linear SVM and/or Logistic Regression)
       - report 5-fold mean accuracy, AUROC, sensitivity and specificity
    2. regression task / continuous target
       - tune
         [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor)
-        (equivalent to regularized linear regression)
+        (an approximation of regularized linear regression)
       - report 5-fold mean MAE, MSqE, $R^2$, percent explained variance, and
         median absolute error
 
 ### Feature Selection
 
-1. Use filter methods
-   1. Remove features with minimal univariate relation to target
-   1. Keep features with largest filter metrics
-1. Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
-1. Step-up selection using $X_\text{train}$
-1. Bayesian (Optuna) with internal 3-fold validation on $X_\text{train}$
+- Use filter methods
+   - Remove features with minimal univariate relation to target
+   - Keep features with largest filter metrics
+- Split data $X$ into $X_\text{train}$, $X_\text{test}$, with $X_\text{test}$
+- Wrapper (stepwise) selection using $X_\text{train}$
+- Filter selection using $X_\text{train}$
 
 ### Hyperparameter Tuning
 
+- Bayesian (Optuna) hyperparameter optimization with internal 5-fold
+  validation on $X_\text{train}$
+
 ### Final Validation
 
-1. Final k-fold of model tuned and trained on selected features from $X_\text{train}$
-1. Final evaluation of trained model on $X_\text{test}$
+- Final k-fold of model tuned and trained on selected features from $X_\text{train}$
+- Final evaluation of trained model on $X_\text{test}$
 
-
-## Philosophy
-
-1. Data *preparation* is not to be optimized / tuned
-   - i.e. while one might re-run analyses with different normalization options,
-     this is not expected to have a major impact on results, and so normalization
-     options are not included in final comparison tables
-1. Proper validation of a feature selection method requires holdout data NOT to
-   be used during feature selection, i.e. requires preventing [double
-   dipping](https://www.nature.com/articles/nn.2303).
-
-### Recursive / Wrapper Feature Selection and Tuning
-
-- too expensive to do together (e.g. do hyperparameter tuning on each potential
-  feature subset)
-- in general a highly challenging bilevel optimization problem
-- to keep computationally tractable, must choose between:
-  1. using a model with "default" hyperparameters for the wrapper selection process
-  1. tuning on all features, then using the tuned model for wrapper selection
-- neither choice above is likely to be optimal
-
-For this reason we prefer filter-based feature selection [methods]()
 
 # Program Outputs
 
