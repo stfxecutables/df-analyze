@@ -436,7 +436,7 @@ def evaluate_tuned(
                 study = model.htune_optuna(
                     X_train=X_train,
                     y_train=prep_train.y,
-                    n_trials=100,
+                    n_trials=options.htune_trials,
                     n_jobs=-1,
                     verbosity=optuna.logging.ERROR,
                 )
