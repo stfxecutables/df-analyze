@@ -12,6 +12,9 @@ import os
 import sys
 from pathlib import Path
 
+import pandas as pd
+from pandas import DataFrame
+
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions
@@ -29,7 +32,13 @@ from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
 from src.selection.models import model_select_features
-from src.testing.datasets import FAST_INSPECTION, TestDataset, fast_ds
+from src.testing.datasets import (
+    FAST_INSPECTION,
+    MEDIUM_INSPECTION,
+    SLOW_INSPECTION,
+    TestDataset,
+    fast_ds,
+)
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
@@ -44,11 +53,11 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
         FeatureSelection.Wrapper,
         FeatureSelection.Embedded,
     )
-    options.embed_select = EmbedSelectionModel.LGBM
+    options.embed_select = (EmbedSelectionModel.LGBM, EmbedSelectionModel.Linear)
     # options.embed_select = None
     options.wrapper_model = WrapperSelectionModel.Linear
     options.wrapper_select = WrapperSelection.StepUp
-    options.wrapper_select = None
+    # options.wrapper_select = None
     options.n_feat_wrapper = 10
 
     if ds.is_classification:
@@ -148,12 +157,13 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 
 if __name__ == "__main__":
+    DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
     if os.environ.get("CC_CLUSTER") == "niagara":
         idx = os.environ.get("SLURM_ARRAY_TASK_ID")
         if idx is None:
             raise ValueError("On Niagara but no SLURM_ARRAY_TASK_ID defined")
         idx = int(idx)
-        dsname, ds = FAST_INSPECTION[idx]
+        dsname, ds = DATASETS[idx]
         print("=" * 79)
         print(f"Testing {dsname}")
         print("=" * 79)

@@ -12,7 +12,6 @@ import sys
 from copy import deepcopy
 from dataclasses import is_dataclass
 from pathlib import Path
-from shutil import rmtree
 from tempfile import TemporaryDirectory
 from typing import (
     Any,
@@ -26,7 +25,6 @@ from pandas import DataFrame, Series
 from src.cli.cli import ProgramOptions
 from src.hypertune import EvaluationResults
 from src.preprocessing.inspection.inspection import InspectionResults
-from src.saving import ProgramDirs
 from src.selection.embedded import EmbedSelected
 from src.selection.wrapper import WrapperSelected
 from src.testing.datasets import TestDataset, all_ds

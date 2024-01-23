@@ -65,6 +65,7 @@ from src.scoring import (
     sensitivity,
     specificity,
 )
+from src.selection.embedded import EmbedSelectionModel
 from src.selection.filter import FilterSelected
 from src.selection.models import ModelSelected
 
@@ -80,6 +81,7 @@ N_SPLITS = 5
 class HtuneResult:
     selection: Literal["none", "assoc", "pred", "embed", "wrap"]
     selected_cols: list[str]
+    embed_select_model: Optional[EmbedSelectionModel]
     model_cls: Type[DfAnalyzeModel]
     model: DfAnalyzeModel
     params: dict[str, Any]
@@ -121,6 +123,7 @@ class HtuneResult:
             self.selection == other.selection
             and sorted(self.selected_cols) == sorted(other.selected_cols)
             and self.model_cls == other.model_cls
+            and self.embed_select_model == other.embed_select_model
             and
             # self.model == other.model and  # NOTE: do not check since weights
             self.params == other.params
@@ -132,9 +135,12 @@ class HtuneResult:
         return bool(ret)
 
     def to_row(self) -> DataFrame:
+        selector = self.embed_select_model
+        embed = "none" if selector is None else selector.value
         return DataFrame(
             {
                 "selection": self.selection,
+                "embed_selector": embed,
                 "model": self.model.shortname,
                 "params": str(jsonpickle.encode(self.params)),
                 "score": self.score,
@@ -173,6 +179,7 @@ class HtuneResult:
         return HtuneResult(
             selection=selection,  # type: ignore
             selected_cols=selected,
+            embed_select_model=EmbedSelectionModel.random(),
             model_cls=model_cls,
             model=model,
             params=params,
@@ -263,7 +270,11 @@ class EvaluationResults:
         col = valset
         df = (
             self.df.drop(columns=cols)
-            .pivot(columns="metric", values=col, index=["model", "selection"])
+            .pivot(
+                columns="metric",
+                values=col,
+                index=["model", "selection", "embed_selector"],
+            )
             .reset_index()
         )
         sorter = "acc" if self.is_classification else "mae"
@@ -330,7 +341,7 @@ class EvaluationResults:
 
 
 def _get_cols(
-    selection: Literal["none", "assoc", "pred", "embed", "wrap"],
+    selection: Union[Literal["none", "assoc", "pred", "embed", "wrap"], str],
     selected: Optional[list[str]],
 ) -> Union[list[str], slice]:
     if selection == "none" or (selected is None):
@@ -384,15 +395,16 @@ def evaluate_tuned(
     results: list[HtuneResult]
     dfs: list[DataFrame]
 
-    selections: dict[
-        Literal["none", "assoc", "pred", "embed", "wrap"], Optional[list[str]]
-    ] = {
+    selections: dict[str, Optional[list[str]]] = {
         "none": None,
         "assoc": assoc_filtered.selected,
         "pred": pred_filtered.selected,
     }
+    embed_models: dict[str, EmbedSelectionModel] = {}
     if model_selected.embed_selected is not None:
-        selections["embed"] = model_selected.embed_selected.selected
+        for selected in model_selected.embed_selected:
+            selections[f"embed_{selected.model.value}"] = selected.selected
+            embed_models[f"embed_{selected.model.value}"] = selected.model
     if model_selected.wrap_selected is not None:
         selections["wrap"] = model_selected.wrap_selected.selected
 
@@ -434,9 +446,12 @@ def evaluate_tuned(
                     X_test=X_test,
                     y_test=prep_test.y,
                 )
+                is_embed = "embed" in selection
+                embed_model = embed_models[selection] if is_embed else None
                 result = HtuneResult(
-                    selection=selection,
+                    selection="embed" if is_embed else selection,  # type: ignore
                     selected_cols=X_train.columns.to_list(),
+                    embed_select_model=embed_model,
                     model_cls=model_cls,
                     model=model,
                     params=study.best_params,
@@ -460,9 +475,12 @@ def evaluate_tuned(
                     {"trainset": nulls, "holdout": nulls, "5-fold": nulls},
                     index=Index(data=nulls.values, name=nulls.name),
                 )
+                is_embed = "embed" in selection
+                embed_model = embed_models[selection] if is_embed else None
                 result = HtuneResult(
-                    selection=selection,
+                    selection="embed" if is_embed else selection,  # type: ignore
                     selected_cols=X_train.columns.to_list(),
+                    embed_select_model=embed_model,
                     model_cls=model_cls,
                     model=model,
                     params={},
@@ -475,6 +493,9 @@ def evaluate_tuned(
                 results.append(result)
             df["model"] = model.shortname
             df["selection"] = selection
+            df["embed_selector"] = (
+                embed_model.value if embed_model is not None else "none"
+            )
             dfs.append(df)
     df = pd.concat(dfs, axis=0, ignore_index=True)
     return EvaluationResults(

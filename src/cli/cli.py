@@ -58,7 +58,6 @@ from src.cli.text import (
     FILTER_METHOD_HELP,
     HTUNE_TRIALS_HELP,
     MODE_HELP_STR,
-    MODEL_SELECT_HELP,
     N_FEAT_CAT_FILTER_HELP,
     N_FEAT_CONT_FILTER_HELP,
     N_FEAT_TOTAL_FILTER_HELP,
@@ -87,7 +86,6 @@ from src.enumerables import (
     EmbedSelectionModel,
     FeatureSelection,
     FilterSelection,
-    ModelFeatureSelection,
     NanHandling,
     Normalization,
     RegScore,
@@ -161,8 +159,7 @@ class SelectionOptions(Debug):
     classifiers: Tuple[DfAnalyzeClassifier, ...]
     regressors: Tuple[DfAnalyzeRegressor, ...]
     feat_select: Tuple[FeatureSelection, ...]
-    model_select: Optional[DfAnalyzeModel]
-    embed_select: Optional[EmbedSelectionModel]
+    embed_select: Optional[Tuple[EmbedSelectionModel, ...]]
     wrapper_select: Optional[WrapperSelection]
     wrapper_model: Optional[WrapperSelectionModel]
     # n_feat: int
@@ -202,8 +199,7 @@ class ProgramOptions(Debug):
         norm: Normalization,
         # feat_clean: Tuple[FeatureCleaning, ...],
         feat_select: Tuple[FeatureSelection, ...],
-        model_select: Optional[DfAnalyzeModel],
-        embed_select: Optional[EmbedSelectionModel],
+        embed_select: Optional[tuple[EmbedSelectionModel, ...]],
         wrapper_select: Optional[WrapperSelection],
         wrapper_model: WrapperSelectionModel,
         # n_feat: int,
@@ -246,8 +242,7 @@ class ProgramOptions(Debug):
         self.norm: Normalization = norm
         # self.feat_clean: Tuple[FeatureCleaning, ...] = tuple(sorted(set(feat_clean)))
         self.feat_select: Tuple[FeatureSelection, ...] = tuple(sorted(set(feat_select)))
-        self.model_select: Optional[DfAnalyzeModel] = model_select
-        self.embed_select: Optional[EmbedSelectionModel] = embed_select
+        self.embed_select: Optional[tuple[EmbedSelectionModel, ...]] = embed_select
         self.wrapper_select: Optional[WrapperSelection] = wrapper_select
         self.wrapper_model: WrapperSelectionModel = wrapper_model
         # self.n_feat: int = n_feat
@@ -303,7 +298,6 @@ class ProgramOptions(Debug):
             classifiers=self.classifiers,
             regressors=self.regressors,
             feat_select=self.feat_select,
-            model_select=self.model_select,
             embed_select=self.embed_select,
             wrapper_select=self.wrapper_select,
             wrapper_model=self.wrapper_model,
@@ -342,8 +336,7 @@ class ProgramOptions(Debug):
         feat_select = FeatureSelection.random_n()
         wrap_select = WrapperSelection.random()
         wrap_model = WrapperSelectionModel.random()
-        model_select = ModelFeatureSelection.random()
-        embed_select = EmbedSelectionModel.random_none()
+        embed_select = (EmbedSelectionModel.random_none(),)
         # n_feat = n_feats
         n_feat_filter = uniform(0.5, 0.95)
         n_feat_wrapper = choice([uniform(0.2, 0.5), None])
@@ -381,7 +374,6 @@ class ProgramOptions(Debug):
             norm=Normalization.random(),
             # feat_clean=feat_clean,
             feat_select=feat_select,
-            model_select=model_select,
             embed_select=embed_select,
             wrapper_select=wrap_select,
             wrapper_model=wrap_model,
@@ -623,9 +615,11 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     parser.add_argument(
         "--classifiers",
         nargs="+",
+        # type=DfAnalyzeClassifier.parse,
         type=str,
         choices=DfAnalyzeClassifier.choices(),
         default=DfAnalyzeClassifier.defaults(),
+        metavar="",
         help=CLS_HELP_STR,
     )
     parser.add_argument(
@@ -639,47 +633,49 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     parser.add_argument(
         "--feat-select",
         nargs="+",
-        type=FeatureSelection,  # applied to each spaced element in arg
-        choices=[f.value for f in FeatureSelection],
+        type=FeatureSelection.parseN,  # applied to each spaced element in arg
+        choices=FeatureSelection.choicesN(),
         default=(FeatureSelection.Filter,),
+        metavar="",  # silences ugly options spam related to enums
         help=FEAT_SELECT_HELP,
     )
-    parser.add_argument(
-        "--model-select",
-        nargs="+",
-        type=ModelFeatureSelection,  # applied to each spaced element in arg
-        choices=[m.value for m in ModelFeatureSelection],
-        default=(ModelFeatureSelection.Embedded,),
-        help=MODEL_SELECT_HELP,
-    )
+    # parser.add_argument(
+    #     "--model-select",
+    #     nargs="+",
+    #     type=ModelFeatureSelection.parseN,  # applied to each spaced element in arg
+    #     choices=ModelFeatureSelection.choicesN(),
+    #     default=(ModelFeatureSelection.Embedded,),
+    #     metavar="",  # silences ugly options spam related to enums
+    #     help=MODEL_SELECT_HELP,
+    # )
     parser.add_argument(
         "--embed-select",
         nargs="+",
-        type=lambda x: None if "none" in x.lower() else EmbedSelectionModel(x),
-        choices=[m.value for m in EmbedSelectionModel] + ["none"],
-        default=(EmbedSelectionModel.LGBM,),
+        # type=enum_or_none_parser(EmbedSelectionModel),
+        type=EmbedSelectionModel.parseN,
+        # choices=[m.value for m in EmbedSelectionModel]
+        # + ["none"]
+        # + [EmbedSelectionModel.LGBM, EmbedSelectionModel.Linear, None],
+        choices=EmbedSelectionModel.choicesN(),
+        default=(EmbedSelectionModel.Linear,),
         help=EMBED_SELECT_MODEL_HELP,
+        metavar="",
     )
     parser.add_argument(
         "--wrapper-select",
-        type=WrapperSelection,
-        choices=[w.value for w in WrapperSelection],
-        default=WrapperSelection.StepUp,
+        type=WrapperSelection.parseN,
+        choices=WrapperSelection.choicesN(),
+        default=None,
+        metavar="",
         help=WRAP_SELECT_HELP,
     )
     parser.add_argument(
         "--wrapper-model",
-        type=WrapperSelectionModel,
-        choices=[w.value for w in WrapperSelectionModel],
+        type=WrapperSelectionModel.parseN,
+        choices=WrapperSelectionModel.choicesN(),
         default=WrapperSelectionModel.Linear,
+        metavar="",
         help=WRAP_SELECT_MODEL_HELP,
-    )
-    parser.add_argument(  # TODO UNIMPLEMENTED!
-        "--embed-model",
-        type=EmbedSelectionModel,
-        choices=[s.value for s in EmbedSelectionModel],
-        default=(EmbedSelectionModel.LGBM,),
-        help=EMBED_SELECT_MODEL_HELP,
     )
     # parser.add_argument(  # TODO UNIMPLEMENTED!
     #     "--n-selection-tune-rounds",
@@ -697,16 +693,16 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     # )
     parser.add_argument(
         "--norm",
-        choices=[n.value for n in Normalization],
+        choices=Normalization.choices(),
         default=Normalization.Robust,
         type=Normalization,
         help=NORM_HELP,
     )
     parser.add_argument(
         "--nan",
-        choices=[n.value for n in NanHandling],
+        choices=NanHandling.choices(),
         default=NanHandling.Mean,
-        type=NanHandling,
+        type=NanHandling.parse,
         help=NAN_HELP,
     )
     # parser.add_argument(
@@ -741,49 +737,55 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     )
     parser.add_argument(
         "--filter-method",
-        type=FilterSelection,
-        default=FilterSelection.Relief,
+        type=FilterSelection.parse,
+        choices=FilterSelection.choices(),
+        default=FilterSelection.Association,
+        metavar="",
         help=FILTER_METHOD_HELP,
     )
     parser.add_argument(
         "--filter-assoc-cont-classify",
-        choices=[c.value for c in ContClsStats],
-        type=ContClsStats,
+        choices=ContClsStats.choices(),
+        type=ContClsStats.parse,
         default=ContClsStats.default(),
+        metavar="",
         help=ASSOC_SELECT_CONT_CLS_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cat-classify",
-        choices=[c.value for c in CatClsStats],
-        type=CatClsStats,
+        choices=CatClsStats.choices(),
+        type=CatClsStats.parse,
         default=CatClsStats.default(),
+        metavar="",
         help=ASSOC_SELECT_CAT_CLS_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cont-regress",
-        choices=[c.value for c in ContRegStats],
-        type=ContRegStats,
+        choices=ContRegStats.choices(),
+        type=ContRegStats.parse,
         default=ContRegStats.default(),
+        metavar="",
         help=ASSOC_SELECT_CONT_REG_STATS,
     )
     parser.add_argument(
         "--filter-assoc-cat-regress",
-        choices=[c.value for c in CatRegStats],
-        type=CatRegStats,
+        choices=CatRegStats.choices(),
+        type=CatRegStats.parse,
         default=CatRegStats.default(),
+        metavar="",
         help=ASSOC_SELECT_CAT_REG_STATS,
     )
     parser.add_argument(
         "--filter-pred-regress",
-        choices=[s.value for s in RegScore],
-        type=RegScore,
+        choices=RegScore.choices(),
+        type=RegScore.parse,
         default=RegScore.default(),
         help=PRED_SELECT_REG_SCORE,
     )
     parser.add_argument(
         "--filter-pred-classify",
-        choices=[s.value for s in ClsScore],
-        type=ClsScore,
+        choices=ClsScore.choices(),
+        type=ClsScore.parse,
         default=ClsScore.default(),
         help=PRED_SELECT_CLS_SCORE,
     )
@@ -867,27 +869,26 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         categoricals=sorted(cats),
         ordinals=sorted(ords),
         drops=cli_args.drops,
-        norm=cli_args.norm,
-        nan_handling=cli_args.nan,
-        feat_select=cli_args.feat_select,
-        model_select=cli_args.model_select,
-        embed_select=cli_args.embed_select,
-        wrapper_select=cli_args.wrapper_select,
-        wrapper_model=cli_args.wrapper_model,
+        norm=Normalization.from_arg(cli_args.norm),
+        nan_handling=NanHandling.from_arg(cli_args.nan),
+        feat_select=FeatureSelection.from_args(cli_args.feat_select),
+        embed_select=EmbedSelectionModel.from_args(cli_args.embed_select),
+        wrapper_select=WrapperSelection.from_argN(cli_args.wrapper_select),
+        wrapper_model=WrapperSelectionModel.from_arg(cli_args.wrapper_model),
         # n_feat=cli_args.n_feat,
         n_feat_wrapper=cli_args.n_feat_wrapper,
         n_feat_filter=cli_args.n_feat_filter,
         n_filter_cont=cli_args.n_filter_cont,
         n_filter_cat=cli_args.n_filter_cat,
-        filter_assoc_cont_cls=cli_args.filter_assoc_cont_classify,
-        filter_assoc_cat_cls=cli_args.filter_assoc_cat_classify,
-        filter_assoc_cont_reg=cli_args.filter_assoc_cont_regress,
-        filter_assoc_cat_reg=cli_args.filter_assoc_cat_regress,
-        filter_pred_cls_score=cli_args.filter_pred_classify,
-        filter_pred_reg_score=cli_args.filter_pred_regress,
+        filter_assoc_cont_cls=ContClsStats.from_arg(cli_args.filter_assoc_cont_classify),
+        filter_assoc_cat_cls=CatClsStats.from_arg(cli_args.filter_assoc_cat_classify),
+        filter_assoc_cont_reg=ContRegStats.from_arg(cli_args.filter_assoc_cont_regress),
+        filter_assoc_cat_reg=CatRegStats.from_arg(cli_args.filter_assoc_cat_regress),
+        filter_pred_cls_score=ClsScore.from_arg(cli_args.filter_pred_classify),
+        filter_pred_reg_score=RegScore.from_arg(cli_args.filter_pred_regress),
         is_classification=cli_args.mode,
-        classifiers=cli_args.classifiers,
-        regressors=cli_args.regressors,
+        classifiers=DfAnalyzeClassifier.from_args(cli_args.classifiers),
+        regressors=DfAnalyzeRegressor.from_args(cli_args.regressors),
         # htune=cli_args.htune,
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,

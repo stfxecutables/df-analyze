@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from random import randint, uniform
 from typing import TYPE_CHECKING, Optional, cast
+from warnings import warn
 
 import jsonpickle
 import numpy as np
@@ -12,6 +14,7 @@ from sklearn.feature_selection import SelectFromModel
 
 if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
+    from src.models.base import DfAnalyzeModel
 from src.enumerables import EmbedSelectionModel
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from src.models.linear import SGDClassifierSelector, SGDRegressorSelector
@@ -52,8 +55,10 @@ class EmbedSelected:
         return cast(EmbedSelected, jsonpickle.decode(path.read_text()))
 
     @staticmethod
-    def random(ds: TestDataset) -> EmbedSelected:
-        model = EmbedSelectionModel.random()
+    def random(
+        ds: TestDataset, model: Optional[EmbedSelectionModel] = None
+    ) -> EmbedSelected:
+        model = model or EmbedSelectionModel.random()
         df = ds.load()
         x = df.drop(columns="target", errors="ignore")
         cols = x.columns.to_list()
@@ -71,40 +76,55 @@ class EmbedSelected:
 def embed_select_features(
     prep_train: PreparedData,
     options: ProgramOptions,
-) -> Optional[EmbedSelected]:
-    ...
+) -> list[EmbedSelected]:
     y = prep_train.y
     X_train = prep_train.X
     is_cls = options.is_classification
 
     if options.embed_select is None:
-        return None
+        return []
 
-    if options.embed_select is EmbedSelectionModel.Linear:
-        model = SGDClassifierSelector() if is_cls else SGDRegressorSelector()
+    embed_models = sorted(set([e for e in options.embed_select if e is not None]))
+    models = []
+    for embed_model in embed_models:
+        if embed_model is EmbedSelectionModel.Linear:
+            model = SGDClassifierSelector() if is_cls else SGDRegressorSelector()
 
-    else:
-        model = LightGBMClassifier() if is_cls else LightGBMRegressor()
+        else:
+            model = LightGBMClassifier() if is_cls else LightGBMRegressor()
+        models.append(model)
 
-    model.htune_optuna(X_train=X_train, y_train=y, n_trials=100, n_jobs=-1)
-    # `coefs` are floats if Linear, int32 if LGBM
-    scores = np.ravel(
-        model.tuned_model.coef_  # type: ignore
-        if options.embed_select is EmbedSelectionModel.Linear
-        else model.tuned_model.feature_importances_  # type: ignore
-    )
-    fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
+    model: DfAnalyzeModel
+    results: list[EmbedSelected] = []
+    for model, embed_model in zip(models, embed_models):
+        try:
+            model.htune_optuna(X_train=X_train, y_train=y, n_trials=100, n_jobs=-1)
+            # `coefs` are floats if Linear, int32 if LGBM
+            scores = np.ravel(
+                model.tuned_model.coef_  # type: ignore
+                if embed_model is EmbedSelectionModel.Linear
+                else model.tuned_model.feature_importances_  # type: ignore
+            )
+            fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
 
-    selector = SelectFromModel(
-        model.tuned_model,
-        prefit=True,
-    )
-    idx = np.array(selector.get_support()).astype(bool)
-    selected = X_train.loc[:, idx].columns.to_list()  # type: ignore
+            selector = SelectFromModel(
+                model.tuned_model,
+                prefit=True,
+            )
+            idx = np.array(selector.get_support()).astype(bool)
+            selected = X_train.loc[:, idx].columns.to_list()  # type: ignore
+            result = EmbedSelected(
+                model=embed_model,
+                selected=selected,
+                scores=fscores,
+                is_classification=prep_train.is_classification,
+            )
+            results.append(result)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to perform embedded selection "
+                f"via model '{model.__class__.__name__}'. Details:\n{e}\n"
+                f"{traceback.format_exc()}"
+            )
 
-    return EmbedSelected(
-        model=options.embed_select,
-        selected=selected,
-        scores=fscores,
-        is_classification=prep_train.is_classification,
-    )
+    return results

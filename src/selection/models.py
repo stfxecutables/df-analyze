@@ -9,20 +9,34 @@ from warnings import warn
 if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from src.preprocessing.prepare import PreparedData
-from src.selection.embedded import EmbedSelected, embed_select_features
+from src.selection.embedded import (
+    EmbedSelected,
+    EmbedSelectionModel,
+    embed_select_features,
+)
 from src.selection.wrapper import WrapperSelected, wrap_select_features
 from src.testing.datasets import TestDataset
 
 
 @dataclass
 class ModelSelected:
-    embed_selected: Optional[EmbedSelected]
+    embed_selected: Optional[list[EmbedSelected]]
     wrap_selected: Optional[WrapperSelected]
 
     @staticmethod
     def random(ds: TestDataset) -> ModelSelected:
-        embed_selected = choice([None, *[EmbedSelected.random(ds) for _ in range(4)]])
-        wrap_selected = choice([None, *[WrapperSelected.random(ds) for _ in range(4)]])
+        embeds = [
+            None,
+            [EmbedSelected.random(ds, model=EmbedSelectionModel.Linear)],
+            [EmbedSelected.random(ds, model=EmbedSelectionModel.LGBM)],
+            [
+                EmbedSelected.random(ds, model=EmbedSelectionModel.Linear),
+                EmbedSelected.random(ds, model=EmbedSelectionModel.LGBM),
+            ],
+        ]
+        wraps = [WrapperSelected.random(ds) for _ in range(4)]
+        embed_selected = choice(embeds)
+        wrap_selected = choice([None, *wraps])
         return ModelSelected(embed_selected=embed_selected, wrap_selected=wrap_selected)
 
 

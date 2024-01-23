@@ -359,14 +359,20 @@ class AssocResults:
             cats_table = cats_table.replace("nan", "   ")
 
             conts_table = (
-                f"# Continuous associations\n\n{conts_table}\n\n" if self.conts is not None else ""
+                f"# Continuous associations\n\n{conts_table}\n\n"
+                if self.conts is not None
+                else ""
             )
             cats_table = (
-                f"# Categorical associations\n\n{cats_table}" if self.cats is not None else ""
+                f"# Categorical associations\n\n{cats_table}"
+                if self.cats is not None
+                else ""
             )
             tables = conts_table + cats_table
             if tables.replace("\n", "") != "":
-                tables = f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
+                tables = (
+                    f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
+                )
                 if path is not None:
                     path.write_text(tables)
                 return tables
@@ -427,7 +433,9 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
     t, t_p = tt_res.statistic, tt_res.pvalue  # type: ignore
     U_res = mannwhitneyu(g0, g1)
     U, U_p = U_res.statistic, U_res.pvalue
-    W_res = brunnermunzel(g0, g1, distribution="normal")  # avoid errors for `distribution="t"`
+    W_res = brunnermunzel(
+        g0, g1, distribution="normal"
+    )  # avoid errors for `distribution="t"`
     W, W_p = W_res.statistic, W_res.pvalue
     r_res = pearsonr(x, y_bin)
     r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
@@ -507,7 +515,9 @@ def continuous_feature_target_stats(
     x = continuous[column]
     y = target
     if len(x) != len(y):
-        raise ValueError("Continuous features and target do not have same number of samples.")
+        raise ValueError(
+            "Continuous features and target do not have same number of samples."
+        )
     if is_classification:
         levels = np.unique(y).tolist()
         descs = []
@@ -547,7 +557,9 @@ def cat_feature_cont_target_stats(x: Series, y: Series) -> DataFrame:
     )
 
 
-def cat_feature_cat_target_level_stats(x: Series, y: Series, level: str, label: str) -> DataFrame:
+def cat_feature_cat_target_level_stats(
+    x: Series, y: Series, level: str, label: str
+) -> DataFrame:
     stats = ["cramer_v", "H", "H_p", "mut_info"]
     idx_level = y == level
     y_bin = idx_level.astype(np.int64)

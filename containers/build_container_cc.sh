@@ -4,4 +4,4 @@ cd "$THIS_SCRIPT_PARENT" || exit 1
 
 apptainer build --fakeroot --force debian_app.sif build_debian.def
 echo "Copying container to project root..."
-cp debian_app.sif ../
+cp debian_app.sif ../df_analyze.sif
