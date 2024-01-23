@@ -479,6 +479,11 @@ class ProgramOptions(Debug):
         obj = jsonpickle.decode(options.read_text())
         return cast(ProgramOptions, obj)
 
+    @staticmethod
+    def from_jsonfile(file: Path) -> ProgramOptions:
+        obj = jsonpickle.decode(file.read_text())
+        return cast(ProgramOptions, obj)
+
     def load_df(self) -> DataFrame:
         if self.is_spreadsheet:
             return load_spreadsheet(self.datapath, self.separator)[0]
