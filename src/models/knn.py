@@ -2,19 +2,17 @@ from __future__ import annotations
 
 # fmt: off
 import sys  # isort: skip
-from pathlib import Path
-from typing import Any, Mapping, Type
-
-import optuna
-from optuna import Study, Trial
-from pandas import DataFrame, Series
-
+from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-from typing import Optional
+import platform
+from typing import Any, Mapping, Optional, Type
 
+import optuna
+from optuna import Study, Trial
+from pandas import DataFrame, Series
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 
 from src.models.base import DfAnalyzeModel
@@ -27,9 +25,10 @@ class KNNEstimator(DfAnalyzeModel):
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
         super().__init__(model_args)
+        n_jobs = 1 if platform.system().lower() == "darwin" else -1
         self.is_classifier = False
         self.needs_calibration = False
-        self.fixed_args = dict(n_jobs=1)
+        self.fixed_args = dict(n_jobs=n_jobs)
         self.model_cls: Type[Any] = type(None)
         self.grid = {
             "n_neighbors": [1, 5, 10, 25, 50],
@@ -62,6 +61,7 @@ class KNNEstimator(DfAnalyzeModel):
         n_hp = 1
         for opts in self.grid.values():
             n_hp *= len(opts)
+        n_jobs = -1 if self.fixed_args["n_jobs"] == 1 else 1
         return super().htune_optuna(
             X_train, y_train, n_trials=n_hp, n_jobs=n_jobs, verbosity=verbosity
         )

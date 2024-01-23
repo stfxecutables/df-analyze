@@ -615,6 +615,12 @@ as well.
 
 ### `📂 features`
 
+```
+📂 features/
+├── 📂 associations/
+├── 📂 predictions/
+```
+
 Data for univariate analyses of all features.
 
 #### `📂 associations`
@@ -680,7 +686,14 @@ a target class.
 
 ### `📂 selection`
 
-Data
+```
+📂 selection/
+├── 📂 embed/
+├── 📂 filter/
+└── 📂 wrap/
+```
+
+Data describing the features selected by each feature selection method.
 
 
 #### `📂 embed`
@@ -935,8 +948,8 @@ and misleading. This includes:
   - I.e. any data where a sample feature is a word or collection of words
 
 - **image data** (e.g. computer vision prediction tasks)
-  - These datasets not only almost universally fall into the [**SLOW**
-    class](#dataset-size), and years of research and experience have now
+  - These datasets will almost always be too expensive for the ML algorithms
+    in `df-analyze` to process, and years of research and experience have now
     shown that classic ML models (which are all that `df-analyze` fits)
     simply are not capable here
 
