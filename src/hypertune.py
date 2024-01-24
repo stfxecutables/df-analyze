@@ -268,8 +268,10 @@ class EvaluationResults:
         cols = ["trainset", "holdout", "5-fold"]
         cols.remove(valset)
         col = valset
+        idx = ~self.df.mean(axis=1, numeric_only=True).isna()
         df = (
-            self.df.drop(columns=cols)
+            self.df.loc[idx]
+            .drop(columns=cols)
             .pivot(
                 columns="metric",
                 values=col,
