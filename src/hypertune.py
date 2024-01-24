@@ -19,6 +19,7 @@ from typing import (
     Tuple,
     Type,
     Union,
+    cast,
 )
 from warnings import warn
 
@@ -85,6 +86,7 @@ class HtuneResult:
     model_cls: Type[DfAnalyzeModel]
     model: DfAnalyzeModel
     params: dict[str, Any]
+    metric: Union[ClassifierScorer, RegressorScorer]
     score: float
     preds_test: Series
     preds_train: Series
@@ -128,6 +130,7 @@ class HtuneResult:
             # self.model == other.model and  # NOTE: do not check since weights
             self.params == other.params
             and round(self.score, 8) == round(other.score, 8)
+            and self.metric == other.metric
             and np.all((self.preds_test.round(8) == other.preds_test.round(8)).ravel())
             and np.all((self.preds_train.round(8) == other.preds_train.round(8)).ravel())
             and probs_equal
@@ -143,6 +146,7 @@ class HtuneResult:
                 "embed_selector": embed,
                 "model": self.model.shortname,
                 "params": str(jsonpickle.encode(self.params)),
+                "metric": self.metric.value,
                 "score": self.score,
             },
             index=[0],
@@ -159,6 +163,7 @@ class HtuneResult:
         from src.models.mlp import MLPEstimator
 
         n_cols = ds.shape[1]
+        is_cls = ds.is_classification
         n_sel = randint(1, n_cols)
 
         selection = selection or choice(["none", "assoc", "pred", "embed", "wrap"])
@@ -173,6 +178,8 @@ class HtuneResult:
         else:
             model = model_cls()
         params = {**model.fixed_args, **model.default_args}
+        # AUROC is handled automatically and changed to BalancedAcc with a warning
+        metric = ClassifierScorer.random() if is_cls else RegressorScorer.random()
         score = (
             np.random.uniform(0, 1) if ds.is_classification else np.random.uniform(0, 10)
         )
@@ -183,6 +190,7 @@ class HtuneResult:
             model_cls=model_cls,
             model=model,
             params=params,
+            metric=metric,
             score=score,
             preds_test=Series(),
             preds_train=Series(),
@@ -330,7 +338,7 @@ class EvaluationResults:
             data=df_y_test.values.ravel(), name=df_y_test.columns.to_list()[0]
         )
         enc = (root / "eval_htune_results.json").read_text()
-        remain: dict[str, Any] = jsonpickle.decode(enc)
+        remain = cast(dict[str, Any], jsonpickle.decode(enc))
         return EvaluationResults(
             df=df,
             X_train=X_train,
@@ -366,6 +374,7 @@ def _get_splits(
         X_test = prep_test.X
     else:
         # clunky way to deal with renames and indicators
+        # should be safe since we sanitize names
         try:
             X_train = prep_train.X.filter(regex="|".join(cols))
             X_test = prep_test.X.filter(regex="|".join(cols))

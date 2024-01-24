@@ -6,7 +6,6 @@ File for defining all options passed to `df-analyze.py`.
 import os
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from copy import deepcopy
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from random import choice, randint, uniform
@@ -122,59 +121,6 @@ class Verbosity(Enum):
     DEBUG = 2
 
 
-@dataclass
-class CleaningOptions(Debug):
-    """Container for HASHABLE arguments used to check whether a memoized cleaning
-    function needs to be re-computed or not. Because a change in the source file
-    results in a change in the results, that file path must be duplicated here.
-    """
-
-    datapath: Path
-    target: str
-    categoricals: list[str]
-    ordinals: list[str]
-    drops: list[str]
-    # feat_clean: Tuple[FeatureCleaning, ...]
-    nan_handling: NanHandling
-    norm: Normalization
-
-
-@dataclass
-class SelectionOptions(Debug):
-    """Container for HASHABLE arguments used to check whether a memoized feature selection
-    function needs to be re-computed or not. Because a change in the source file results
-    in a change in the results, that file path must be duplicated here.
-
-    Also, since feature selection depends on the cleaning choices, those must be included
-    here as well. Note that *nesting does work* with immutable dataclasses and
-    `joblib.Memory`.
-
-    However, the reason we have separate classes from ProgramOptions is also that we don't
-    want to e.g. recompute an expensive feature cleaning step (like removing correlated
-    features), just because some set of arguments *later* in the pipeline changed.
-    """
-
-    cleaning_options: CleaningOptions
-    is_classification: bool
-    classifiers: Tuple[DfAnalyzeClassifier, ...]
-    regressors: Tuple[DfAnalyzeRegressor, ...]
-    feat_select: Tuple[FeatureSelection, ...]
-    embed_select: Optional[Tuple[EmbedSelectionModel, ...]]
-    wrapper_select: Optional[WrapperSelection]
-    wrapper_model: Optional[WrapperSelectionModel]
-    # n_feat: int
-    n_filter_cont: Union[int, float]
-    n_filter_cat: Union[int, float]
-    n_feat_filter: Union[int, float]
-    n_feat_wrapper: Union[int, float, None]
-    filter_assoc_cont_cls: ContClsStats
-    filter_assoc_cat_cls: CatClsStats
-    filter_assoc_cont_reg: ContRegStats
-    filter_assoc_cat_reg: CatRegStats
-    filter_pred_cls_score: ClsScore
-    filter_pred_reg_score: RegScore
-
-
 class ProgramOptions(Debug):
     """Just a container for handling CLI options and default logic (while also
     providing better typing than just using the `Namespace` from the
@@ -230,8 +176,6 @@ class ProgramOptions(Debug):
         no_warn_explosion: bool,
     ) -> None:
         # memoization-related
-        self.cleaning_options: CleaningOptions
-        self.selection_options: SelectionOptions
         # other
         self.datapath: Path = self.validate_datapath(datapath)
         self.target: str = target
@@ -281,38 +225,6 @@ class ProgramOptions(Debug):
             self.classifiers = (DfAnalyzeClassifier.Dummy, *self.classifiers)
         if DfAnalyzeRegressor.Dummy not in self.regressors:
             self.regressors = (DfAnalyzeRegressor.Dummy, *self.regressors)
-
-        self.cleaning_options = CleaningOptions(
-            datapath=self.datapath,
-            target=self.target,
-            categoricals=self.categoricals,
-            ordinals=self.ordinals,
-            drops=self.drops,
-            # feat_clean=self.feat_clean,
-            nan_handling=self.nan_handling,
-            norm=self.norm,
-        )
-        self.selection_options = SelectionOptions(
-            cleaning_options=self.cleaning_options,
-            is_classification=self.is_classification,
-            classifiers=self.classifiers,
-            regressors=self.regressors,
-            feat_select=self.feat_select,
-            embed_select=self.embed_select,
-            wrapper_select=self.wrapper_select,
-            wrapper_model=self.wrapper_model,
-            # n_feat=self.n_feat,
-            n_filter_cont=self.n_filter_cont,
-            n_filter_cat=self.n_filter_cat,
-            n_feat_filter=self.n_feat_filter,
-            n_feat_wrapper=self.n_feat_wrapper,
-            filter_assoc_cont_cls=self.filter_assoc_cont_cls,
-            filter_assoc_cat_cls=self.filter_assoc_cat_cls,
-            filter_assoc_cont_reg=self.filter_assoc_cont_reg,
-            filter_assoc_cat_reg=self.filter_assoc_cat_reg,
-            filter_pred_cls_score=self.filter_pred_cls_score,
-            filter_pred_reg_score=self.filter_pred_reg_score,
-        )
 
         is_cls = self.is_classification
         self.comparables = {
@@ -374,7 +286,7 @@ class ProgramOptions(Debug):
             norm=Normalization.random(),
             # feat_clean=feat_clean,
             feat_select=feat_select,
-            embed_select=embed_select,
+            embed_select=embed_select,  # type: ignore
             wrapper_select=wrap_select,
             wrapper_model=wrap_model,
             # n_feat=n_feat,

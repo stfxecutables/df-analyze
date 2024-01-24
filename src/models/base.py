@@ -45,7 +45,7 @@ from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
 
 from src._constants import SEED
-from src.enumerables import WrapperSelection
+from src.enumerables import ClassifierScorer, RegressorScorer, Scorer, WrapperSelection
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -53,8 +53,6 @@ OPT_LOGGER = _get_library_root_logger()
 
 
 class EarlyStopping:
-    # TODO: return k-fold values as they come in and do early stopping on
-    # trials with a bad initial fold?
     def __init__(self, patience: int = 10, min_trials: int = 50) -> None:
         self.patience: int = patience
         self.min_trials: int = min_trials
@@ -124,7 +122,11 @@ class DfAnalyzeModel(ABC):
         ...
 
     def optuna_objective(
-        self, X_train: DataFrame, y_train: Series, n_folds: int = 5
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        metric: Scorer,
+        n_folds: int = 5,
     ) -> Callable[[Trial], float]:
         X = np.asarray(X_train)
         y = np.asarray(y_train)
@@ -142,9 +144,7 @@ class DfAnalyzeModel(ABC):
                 estimator = model_cls(**clean_args)
                 estimator.fit(X_tr, y_tr)
                 preds = estimator.predict(X_test)
-                scorer = acc if self.is_classifier else mae
-                score = scorer(preds, y_test)
-                score = score if self.is_classifier else -score
+                score = metric.tuning_score(y_test, preds)
                 scores.append(score)
                 # allows pruning
                 trial.report(float(np.mean(scores)), step=step)
@@ -162,6 +162,7 @@ class DfAnalyzeModel(ABC):
         self,
         X_train: DataFrame,
         y_train: Series,
+        metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
@@ -172,13 +173,14 @@ class DfAnalyzeModel(ABC):
             )
 
         grid = self.grid
+        direction = "maximize" if metric.higher_is_better() else "minimize"
         study = create_study(
-            direction="maximize",  # handled in objective
+            direction=direction,
             sampler=GridSampler(grid) if grid is not None else TPESampler(),
             pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
         )
         optuna.logging.set_verbosity(verbosity)
-        objective = self.optuna_objective(X_train=X_train, y_train=y_train)
+        objective = self.optuna_objective(X_train=X_train, y_train=y_train, metric=metric)
         cbs = [EarlyStopping(patience=15, min_trials=50)]
         study.optimize(
             objective,
