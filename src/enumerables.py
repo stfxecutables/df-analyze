@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod, abstractstaticmethod
 from dataclasses import dataclass
 from enum import Enum, EnumMeta
 from math import isnan
@@ -13,6 +14,7 @@ from typing import (
     Sequence,
     Type,
     TypeVar,
+    Union,
     no_type_check,
 )
 from warnings import warn
@@ -67,7 +69,7 @@ class RandEnum(Generic[T]):
     def choicesN(cls) -> list[Optional[str]]:
         # info = " | ".join([e.value for e in cls])  # type: ignore
         # return f"< {info} | None >"
-        return [None, *[x for x in cls]]
+        return [None, *[x for x in cls]]  # type: ignore
 
     @classmethod
     def parse(cls, s: str) -> RandEnum:
@@ -115,6 +117,28 @@ class RandEnum(Generic[T]):
         return not (self < other)
 
 
+class Scorer:
+    def tuning_score(
+        self, y_true: Union[Series, ndarray], y_pred: Union[Series, ndarray]
+    ) -> float:
+        ...
+
+    def higher_is_better(self) -> bool:
+        ...
+
+    @staticmethod
+    def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
+        ...
+
+    @staticmethod
+    def null_scores() -> dict[str, float]:
+        ...
+
+    @staticmethod
+    def default() -> Scorer:
+        ...
+
+
 class DfAnalyzeClassifier(RandEnum, Enum):
     KNN = "knn"
     LGBM = "lgbm"
@@ -158,7 +182,7 @@ class DfAnalyzeClassifier(RandEnum, Enum):
         )
 
 
-class DfAnalyzeRegressor(RandEnum, Enum):
+class DfAnalyzeRegressor(Scorer, RandEnum, Enum):
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
@@ -202,7 +226,7 @@ class DfAnalyzeRegressor(RandEnum, Enum):
 
 
 @dataclass
-class ClassifierScorer(RandEnum, Enum):
+class ClassifierScorer(Scorer, RandEnum, Enum):
     Accuracy = "acc"
     AUROC = "auroc"
     Sensitivity = "sens"
@@ -211,6 +235,41 @@ class ClassifierScorer(RandEnum, Enum):
     NPV = "npv"
     F1 = "f1"
     BalancedAccuracy = "bal-acc"
+
+    @abstractmethod
+    def default() -> ClassifierScorer:
+        return ClassifierScorer.Accuracy
+
+    def tuning_score(self, y_true: Series, y_pred: Series) -> float:
+        item = self.value
+        if self is ClassifierScorer.AUROC:
+            warn(
+                "AUROC cannot be used for tuning as it requires probabilities, "
+                "which requires classifier calibration. This is too expensive "
+                "to perform on each tuning trial. Defaulting to balanced "
+                "accuracy instead. "
+            )
+            item = ClassifierScorer.BalancedAccuracy.value
+        if np.isnan(y_true).ravel().any():
+            raise ValueError("Impossible! NaNs in y_true.")
+        if np.isnan(y_pred).ravel().any():
+            raise ValueError("NaNs in y_pred")
+
+        raws = {
+            ClassifierScorer.Accuracy.value: accuracy_score,
+            ClassifierScorer.Sensitivity.value: sensitivity,
+            ClassifierScorer.Specificity.value: specificity,
+            ClassifierScorer.PPV.value: ppv,
+            ClassifierScorer.NPV.value: npv,
+            ClassifierScorer.F1.value: f1_score,
+            ClassifierScorer.BalancedAccuracy.value: balanced_accuracy_score,
+        }
+        scorer = raws[item]
+        kwargs = dict(average="macro") if self is ClassifierScorer.F1 else {}
+        return scorer(y_true, y_pred, **kwargs)
+
+    def higher_is_better(self) -> bool:
+        return True
 
     @staticmethod
     def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
@@ -258,6 +317,30 @@ class RegressorScorer(RandEnum, Enum):
     MdAE = "mdae"
     R2 = "r2"
     VarExp = "var-exp"
+
+    @abstractmethod
+    def default() -> RegressorScorer:
+        return RegressorScorer.MAE
+
+    def tuning_score(self, y_true: Series, y_pred: Series) -> float:
+        raws = {
+            RegressorScorer.MAE.value: mean_absolute_error,
+            RegressorScorer.MSqE.value: mean_squared_error,
+            RegressorScorer.MdAE.value: median_absolute_error,
+            RegressorScorer.R2.value: r2_score,
+            RegressorScorer.VarExp.value: explained_variance_score,
+        }
+        scorer = raws[self.value]
+        return scorer(y_true, y_pred)
+
+    def higher_is_better(self) -> bool:
+        return {
+            RegressorScorer.MAE.value: False,
+            RegressorScorer.MSqE.value: False,
+            RegressorScorer.MdAE.value: False,
+            RegressorScorer.R2.value: True,
+            RegressorScorer.VarExp.value: True,
+        }[self.value]
 
     @staticmethod
     def get_scores(y_true: Series, y_pred: Series) -> dict[str, float]:

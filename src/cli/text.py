@@ -553,6 +553,49 @@ parameter) can cause extremely large fit times, even on small data.
 
 """
 
+CLS_TUNE_METRIC = """
+Metric to use for tuning classifiers during hyperparameter tuning via Optuna.
+Available options:
+
+  acc         Accuracy
+
+  sens        Sensitivity
+
+  spec        Specificity
+
+  ppv         Positive Predictive Value
+
+  npv         Negative Predictive Value
+
+  f1          F1 score
+
+  bal-acc     Balanced accuracy (average of recall for each class)
+
+Note: Option `auroc` is a valid argument, but is INVALID for tuning. AUROC
+requires that the classifier output probabilities. This can be forced only by
+performing classifier calibration, which requires another internal k-fold,
+and is thus too expensive for the tuning process. If passing `auroc` as an
+argument, a warning will be raised and `bal-acc` (balanced accuracy) will be
+used instead.
+
+"""
+
+REG_TUNE_METRIC = """
+Metric to use for tuning regressors during hyperparameter tuning via Optuna.
+Available options:
+
+  mae         Mean Absolute Error
+
+  msqe        Mean Squared Error
+
+  mdae        Median Absolute Error
+
+  r2          R-squared
+
+  var-exp     Percent variance explained
+
+"""
+
 # TEST_VAL_HELP = """
 # Specify which validation method to use for testing. Same behavour as for
 # `--htune-val` argument (see above).

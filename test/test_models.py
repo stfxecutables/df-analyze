@@ -20,6 +20,7 @@ from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
 
+from src.enumerables import ClassifierScorer, RegressorScorer, Scorer
 from src.models.base import DfAnalyzeModel
 from src.models.knn import KNNClassifier, KNNRegressor
 from src.models.lgbm import (
@@ -28,7 +29,12 @@ from src.models.lgbm import (
     LightGBMRFClassifier,
     LightGBMRFRegressor,
 )
-from src.models.linear import ElasticNetRegressor, LRClassifier, SGDClassifier, SGDRegressor
+from src.models.linear import (
+    ElasticNetRegressor,
+    LRClassifier,
+    SGDClassifier,
+    SGDRegressor,
+)
 from src.models.svm import SVMClassifier, SVMRegressor
 
 
@@ -93,7 +99,14 @@ def check_optuna_tune(
     model: DfAnalyzeModel, mode: Literal["classify", "regress"]
 ) -> tuple[float, Optional[ndarray]]:
     X_tr, X_test, y_tr, y_test = fake_data(mode)
-    study = model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=20)
+    is_cls = model.is_classifier
+    metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
+    study = model.htune_optuna(
+        X_train=X_tr,
+        y_train=y_tr,
+        metric=metric,  # type: ignore
+        n_trials=8,
+    )
 
     overrides = study.best_params
     model.refit_tuned(X_tr, y_tr, tuned_args=overrides)

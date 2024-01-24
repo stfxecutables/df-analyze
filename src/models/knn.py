@@ -15,6 +15,7 @@ from optuna import Study, Trial
 from pandas import DataFrame, Series
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 
+from src.enumerables import Scorer
 from src.models.base import DfAnalyzeModel
 
 
@@ -52,6 +53,7 @@ class KNNEstimator(DfAnalyzeModel):
         self,
         X_train: DataFrame,
         y_train: Series,
+        metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
@@ -63,61 +65,13 @@ class KNNEstimator(DfAnalyzeModel):
             n_hp *= len(opts)
         n_jobs = -1 if self.fixed_args["n_jobs"] == 1 else 1
         return super().htune_optuna(
-            X_train, y_train, n_trials=n_hp, n_jobs=n_jobs, verbosity=verbosity
+            X_train,
+            y_train,
+            metric=metric,
+            n_trials=n_hp,
+            n_jobs=n_jobs,
+            verbosity=verbosity,
         )
-
-    # def optuna_objective(
-    #     self, X_train: DataFrame, y_train: DataFrame, n_folds: int = 3
-    # ) -> Callable[[Trial], float]:
-    #     # precompute to save huge amounts of compute at cost of potentially GBs
-    #     # of memory
-    #     distances = {
-    #         "cosine": cosine_distances(X_train),
-    #         "l1": manhattan_distances(X_train),
-    #         "l2": euclidean_distances(X_train),
-    #         "correlation": np.abs(np.corrcoef(X_train)),
-    #     }
-    #     y = np.asarray(y_train)
-
-    #     def objective(trial: Trial) -> float:
-    #         kf = StratifiedKFold if self.is_classifier else KFold
-    #         _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
-    #         opt_args = self.optuna_args(trial)
-    #         metric = str(opt_args.pop("metric"))
-    #         clean_args = {**self.fixed_args, **self.default_args, **opt_args}
-    #         clean_args["metric"] = "precomputed"
-    #         # NOTE: we force precomputed for repeated trials
-    #         X = distances[metric]
-
-    #         scores = []
-    #         for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
-    #             X_tr, y_tr = X[idx_train][:, idx_train], y[idx_train]
-    #             X_test, y_test = X[idx_test][:, idx_test], y[idx_test]
-    #             estimator = self.model_cls(**clean_args)
-    #             estimator.fit(X_tr, y_tr)
-    #             score = estimator.score(np.copy(X_test), np.copy(y_test))
-    #             score = score if self.is_classifier else -score
-    #             scores.append(score)
-    #             # allows pruning
-    #             trial.report(float(np.mean(scores)), step=step)
-    #             if trial.should_prune():
-    #                 raise optuna.TrialPruned()
-    #         return float(np.mean(scores))
-
-    #         estimator = self.model_cls(**full_args)
-
-    #         scoring = "accuracy" if self.is_classifier else NEG_MAE
-    #         scores = cv(
-    #             estimator,  # type: ignore
-    #             X=distances[metric],
-    #             y=y_train,
-    #             scoring=scoring,
-    #             cv=_cv,
-    #             n_jobs=1,
-    #         )
-    #         return float(np.mean(scores["test_score"]))
-
-    #     return objective
 
 
 class KNNClassifier(KNNEstimator):

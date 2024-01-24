@@ -60,6 +60,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
 from src._constants import SEED
+from src.enumerables import Scorer
 from src.models.base import DfAnalyzeModel
 
 """
@@ -367,7 +368,7 @@ class MLPEstimator(DfAnalyzeModel):
         return final_args
 
     def optuna_objective(
-        self, X_train: DataFrame, y_train: Series, n_folds: int = 3
+        self, X_train: DataFrame, y_train: Series, metric: Scorer, n_folds: int = 3
     ) -> Callable[[Trial], float]:
         X, y = self._to_torch(X_train, y_train)
 
@@ -384,9 +385,7 @@ class MLPEstimator(DfAnalyzeModel):
                 estimator = self.model_cls(**full_args)
                 estimator.fit(X_tr, y_tr)
                 preds = estimator.predict(X_test)
-                scorer = acc if self.is_classifier else mae
-                score = scorer(preds, y_test)
-                score = score if self.is_classifier else -score
+                score = metric.tuning_score(y_test.numpy(), preds)
                 scores.append(score)
                 # allows pruning
                 trial.report(float(np.mean(scores)), step=step)
@@ -423,6 +422,7 @@ class MLPEstimator(DfAnalyzeModel):
         self,
         X_train: DataFrame,
         y_train: Series,
+        metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
@@ -460,6 +460,7 @@ class MLPEstimator(DfAnalyzeModel):
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
+            metric=metric,
             n_trials=n_trials,
             verbosity=verbosity,
             n_jobs=override_jobs,

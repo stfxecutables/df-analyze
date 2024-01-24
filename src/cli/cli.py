@@ -6,7 +6,6 @@ File for defining all options passed to `df-analyze.py`.
 import os
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from copy import deepcopy
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from random import choice, randint, uniform
@@ -50,6 +49,7 @@ from src.cli.text import (
     ASSOC_SELECT_CONT_REG_STATS,
     CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
+    CLS_TUNE_METRIC,
     DF_HELP_STR,
     DROP_HELP_STR,
     EMBED_SELECT_MODEL_HELP,
@@ -69,6 +69,7 @@ from src.cli.text import (
     PRED_SELECT_CLS_SCORE,
     PRED_SELECT_REG_SCORE,
     REG_HELP_STR,
+    REG_TUNE_METRIC,
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
@@ -80,6 +81,7 @@ from src.cli.text import (
     WRAP_SELECT_MODEL_HELP,
 )
 from src.enumerables import (
+    ClassifierScorer,
     ClsScore,
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
@@ -88,6 +90,7 @@ from src.enumerables import (
     FilterSelection,
     NanHandling,
     Normalization,
+    RegressorScorer,
     RegScore,
     WrapperSelection,
     WrapperSelectionModel,
@@ -120,59 +123,6 @@ class Verbosity(Enum):
     ERROR = 0
     INFO = 1
     DEBUG = 2
-
-
-@dataclass
-class CleaningOptions(Debug):
-    """Container for HASHABLE arguments used to check whether a memoized cleaning
-    function needs to be re-computed or not. Because a change in the source file
-    results in a change in the results, that file path must be duplicated here.
-    """
-
-    datapath: Path
-    target: str
-    categoricals: list[str]
-    ordinals: list[str]
-    drops: list[str]
-    # feat_clean: Tuple[FeatureCleaning, ...]
-    nan_handling: NanHandling
-    norm: Normalization
-
-
-@dataclass
-class SelectionOptions(Debug):
-    """Container for HASHABLE arguments used to check whether a memoized feature selection
-    function needs to be re-computed or not. Because a change in the source file results
-    in a change in the results, that file path must be duplicated here.
-
-    Also, since feature selection depends on the cleaning choices, those must be included
-    here as well. Note that *nesting does work* with immutable dataclasses and
-    `joblib.Memory`.
-
-    However, the reason we have separate classes from ProgramOptions is also that we don't
-    want to e.g. recompute an expensive feature cleaning step (like removing correlated
-    features), just because some set of arguments *later* in the pipeline changed.
-    """
-
-    cleaning_options: CleaningOptions
-    is_classification: bool
-    classifiers: Tuple[DfAnalyzeClassifier, ...]
-    regressors: Tuple[DfAnalyzeRegressor, ...]
-    feat_select: Tuple[FeatureSelection, ...]
-    embed_select: Optional[Tuple[EmbedSelectionModel, ...]]
-    wrapper_select: Optional[WrapperSelection]
-    wrapper_model: Optional[WrapperSelectionModel]
-    # n_feat: int
-    n_filter_cont: Union[int, float]
-    n_filter_cat: Union[int, float]
-    n_feat_filter: Union[int, float]
-    n_feat_wrapper: Union[int, float, None]
-    filter_assoc_cont_cls: ContClsStats
-    filter_assoc_cat_cls: CatClsStats
-    filter_assoc_cont_reg: ContRegStats
-    filter_assoc_cat_reg: CatRegStats
-    filter_pred_cls_score: ClsScore
-    filter_pred_reg_score: RegScore
 
 
 class ProgramOptions(Debug):
@@ -220,6 +170,8 @@ class ProgramOptions(Debug):
         # htune_val: ValMethod,
         # htune_val_size: Size,
         htune_trials: int,
+        htune_cls_metric: ClassifierScorer,
+        htune_reg_metric: RegressorScorer,
         # test_val: ValMethod,
         test_val_size: Size,
         # mc_repeats: int,
@@ -230,8 +182,6 @@ class ProgramOptions(Debug):
         no_warn_explosion: bool,
     ) -> None:
         # memoization-related
-        self.cleaning_options: CleaningOptions
-        self.selection_options: SelectionOptions
         # other
         self.datapath: Path = self.validate_datapath(datapath)
         self.target: str = target
@@ -265,6 +215,8 @@ class ProgramOptions(Debug):
         # self.htune_val: ValMethod = htune_val
         # self.htune_val_size: Size = htune_val_size
         self.htune_trials: int = htune_trials
+        self.htune_cls_metric: ClassifierScorer = htune_cls_metric
+        self.htune_reg_metric: RegressorScorer = htune_reg_metric
         # self.test_val: ValMethod = test_val
         self.test_val_size: Size = test_val_size
         # self.mc_repeats: int = mc_repeats
@@ -281,38 +233,6 @@ class ProgramOptions(Debug):
             self.classifiers = (DfAnalyzeClassifier.Dummy, *self.classifiers)
         if DfAnalyzeRegressor.Dummy not in self.regressors:
             self.regressors = (DfAnalyzeRegressor.Dummy, *self.regressors)
-
-        self.cleaning_options = CleaningOptions(
-            datapath=self.datapath,
-            target=self.target,
-            categoricals=self.categoricals,
-            ordinals=self.ordinals,
-            drops=self.drops,
-            # feat_clean=self.feat_clean,
-            nan_handling=self.nan_handling,
-            norm=self.norm,
-        )
-        self.selection_options = SelectionOptions(
-            cleaning_options=self.cleaning_options,
-            is_classification=self.is_classification,
-            classifiers=self.classifiers,
-            regressors=self.regressors,
-            feat_select=self.feat_select,
-            embed_select=self.embed_select,
-            wrapper_select=self.wrapper_select,
-            wrapper_model=self.wrapper_model,
-            # n_feat=self.n_feat,
-            n_filter_cont=self.n_filter_cont,
-            n_filter_cat=self.n_filter_cat,
-            n_feat_filter=self.n_feat_filter,
-            n_feat_wrapper=self.n_feat_wrapper,
-            filter_assoc_cont_cls=self.filter_assoc_cont_cls,
-            filter_assoc_cat_cls=self.filter_assoc_cat_cls,
-            filter_assoc_cont_reg=self.filter_assoc_cont_reg,
-            filter_assoc_cat_reg=self.filter_assoc_cat_reg,
-            filter_pred_cls_score=self.filter_pred_cls_score,
-            filter_pred_reg_score=self.filter_pred_reg_score,
-        )
 
         is_cls = self.is_classification
         self.comparables = {
@@ -355,6 +275,8 @@ class ProgramOptions(Debug):
         # htune_val: ValMethod = "kfold"
         # htune_val_size: Size = 5
         htune_trials: int = randint(20, 100)
+        htune_cls_metric = ClassifierScorer.random()
+        htune_reg_metric = RegressorScorer.random()
         # test_val: ValMethod = "kfold"
         test_val_size: Size = 0.4
         # mc_repeats: int = 0
@@ -374,7 +296,7 @@ class ProgramOptions(Debug):
             norm=Normalization.random(),
             # feat_clean=feat_clean,
             feat_select=feat_select,
-            embed_select=embed_select,
+            embed_select=embed_select,  # type: ignore
             wrapper_select=wrap_select,
             wrapper_model=wrap_model,
             # n_feat=n_feat,
@@ -395,6 +317,8 @@ class ProgramOptions(Debug):
             # htune_val=htune_val,
             # htune_val_size=htune_val_size,
             htune_trials=htune_trials,
+            htune_cls_metric=htune_cls_metric,
+            htune_reg_metric=htune_reg_metric,
             # test_val=test_val,
             test_val_size=test_val_size,
             outdir=outdir,
@@ -818,6 +742,20 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=100,
         help=HTUNE_TRIALS_HELP,
     )
+    parser.add_argument(
+        "--htune-cls-metric",
+        choices=ClassifierScorer.choices(),
+        type=ClassifierScorer.parse,
+        default=ClassifierScorer.default(),
+        help=CLS_TUNE_METRIC,
+    )
+    parser.add_argument(
+        "--htune-reg-metric",
+        choices=RegressorScorer.choices(),
+        type=RegressorScorer.parse,
+        default=RegressorScorer.default(),
+        help=REG_TUNE_METRIC,
+    )
     # parser.add_argument(
     #     "--mc-repeats",
     #     type=int,
@@ -898,6 +836,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
+        htune_cls_metric=cli_args.htune_cls_metric,
+        htune_reg_metric=cli_args.htune_reg_metric,
         # test_val=cli_args.test_val,
         test_val_size=cli_args.test_val_size,
         # mc_repeats=cli_args.mc_repeats,

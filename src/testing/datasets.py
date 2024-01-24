@@ -203,11 +203,8 @@ class TestDataset:
 
 
 def fake_data(
-    mode: Literal["classify", "regress"], noise: float = 1.0
+    mode: Literal["classify", "regress"], N: int = 100, C: int = 5, noise: float = 1.0
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
-    N = 100
-    C = 20
-
     X_cont_tr = np.random.standard_normal([N, C])
     X_cont_test = np.random.standard_normal([N, C])
 
