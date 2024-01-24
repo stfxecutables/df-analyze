@@ -537,15 +537,22 @@ The subdirectories should generally be read / inspected in the following order:
 📂 fe57fcf2445a2909e688bff847585546/
 ├── 📂 features/
 │   ...
+├── features_renamings.md
 └── options.json
 ```
 
 This directory is named after a unique hash of all the options used for a
-particular invocation / execution of the `df-analyze` command, and contains
-the single file `options.json`, which is a `.json` representation of these
-options. This is to allow multiple sets of outputs from different options to
-be placed automatically in the same `--outdir` top-level directory, e.g. as
-mentioned [above](#overriding-spreadsheet-options).
+particular invocation / execution of the `df-analyze` command.
+
+This directory contains two files. The `feature_renamings.md` file indicates
+which features have been renames due to problematic characters or duplicate
+feature names.
+
+The single file `options.json` is a `.json` representation of the specific
+invocation or spreadsheet options. This is to allow multiple sets of outputs
+from different options to be placed automatically in the same `--outdir`
+top-level directory, e.g. as mentioned
+[above](#overriding-spreadsheet-options).
 
 So for example, running mutiple options combinations to the same output
 directory will make something like:

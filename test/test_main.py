@@ -28,6 +28,7 @@ from src.enumerables import (
 )
 from src.hypertune import evaluate_tuned
 from src.nonsense import silence_spam
+from src.preprocessing.cleaning import sanitize_names
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
@@ -91,6 +92,8 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     ordinals = options.ordinals
 
     df = options.load_df()
+    df, renames = sanitize_names(df)
+    prog_dirs.save_renames(renames)
 
     inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
     prog_dirs.save_inspect_reports(inspection)

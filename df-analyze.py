@@ -13,6 +13,7 @@ from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions, get_options
 from src.hypertune import evaluate_tuned
 from src.nonsense import silence_spam
+from src.preprocessing.cleaning import sanitize_names
 from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
@@ -100,6 +101,9 @@ def main() -> None:
 
     df = options.load_df()
 
+    df, renames = sanitize_names(df)
+    prog_dirs.save_renames(renames)
+
     inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
@@ -142,6 +146,9 @@ def main() -> None:
         model_selected=selected,
         options=options,
     )
+    prog_dirs.save_eval_report(eval_results)
+    prog_dirs.save_eval_tables(eval_results)
+    prog_dirs.save_eval_data(eval_results)
     try:
         print(eval_results.to_markdown())
     except ValueError as e:
@@ -149,9 +156,6 @@ def main() -> None:
             f"Got error when attempting to print final report:\n{e}\n"
             f"Details:\n{traceback.format_exc()}"
         )
-    prog_dirs.save_eval_report(eval_results)
-    prog_dirs.save_eval_tables(eval_results)
-    prog_dirs.save_eval_data(eval_results)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from src.analysis.univariate.associate import AssocResults
     from src.analysis.univariate.predict.predict import PredResults
     from src.hypertune import EvaluationResults
+    from src.preprocessing.cleaning import RenameInfo
     from src.preprocessing.inspection.inspection import InspectionResults
     from src.preprocessing.prepare import PreparedData
     from src.selection.filter import FilterSelected
@@ -44,6 +45,7 @@ class ProgramDirs(Debug):
     terminal: Optional[Path] = None
     options: Optional[Path] = None
     joblib_cache: Optional[Path] = None
+    renames: Optional[Path] = None
     inspection: Optional[Path] = None
     prepared: Optional[Path] = None
     features: Optional[Path] = None
@@ -70,6 +72,7 @@ class ProgramDirs(Debug):
             options=root / "options.json",
             terminal=root / "terminal_outputs.txt",
             joblib_cache=root / "__JOBLIB_CACHE__",
+            renames=root / "feature_renamings.md",
             inspection=root / "inspection",
             prepared=root / "prepared",
             features=root / "features",
@@ -87,7 +90,7 @@ class ProgramDirs(Debug):
             if isinstance(path, Path):
                 if "JOBLIB" in str(path):  # joblib handles creation
                     continue
-                if attr in ["options"]:
+                if attr in ["options", "renames"]:
                     continue
                 if attr == "terminal":
                     path.touch()
@@ -161,6 +164,21 @@ class ProgramDirs(Debug):
                 f"{traceback.format_exc()}"
             )
             return None, False
+
+    def save_renames(self, renames: RenameInfo) -> None:
+        if self.renames is None:
+            return
+        out = self.renames
+        try:
+            report = renames.to_markdown()
+            if report is None:
+                return
+            out.write_text(report)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save feature renames. "
+                f"Details:\n{e}\n{traceback.format_exc()}"
+            )
 
     def save_eval_report(self, results: Optional[EvaluationResults]) -> None:
         if self.results is None:
