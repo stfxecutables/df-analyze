@@ -352,6 +352,9 @@ FAST_INSPECTION = sorted(FAST_INSPECTION, key=lambda d: str(d[0]).lower())
 MEDIUM_INSPECTION = sorted(MEDIUM_INSPECTION, key=lambda d: str(d[0]).lower())
 SLOW_INSPECTION = sorted(SLOW_INSPECTION, key=lambda d: str(d[0]).lower())
 ALL_DATASETS = sorted(ALL_DATASETS, key=lambda d: str(d[0]).lower())
+DATASET_LIST = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
+
+FASTEST = [DATASET_LIST[6], DATASET_LIST[19], DATASET_LIST[51]]
 
 
 # https://stackoverflow.com/a/5409569
