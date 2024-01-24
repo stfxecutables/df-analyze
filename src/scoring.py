@@ -29,10 +29,44 @@ def sensitivity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) 
 
 def specificity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
     mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    if mat.shape[0] == 2:  # binary case:
+        mat = mat[0].reshape(1, *mat.shape[1:])
     tns = mat[:, 0, 0]
     fps = mat[:, 0, 1]
-    specs = tns / (tns + fps)
+    denom = tns + fps
+    if np.all(denom == 0):
+        return float("nan")
+    idx = denom > 0
+    specs = tns[idx] / denom[idx]
     return specs.mean()
+
+
+def ppv(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
+    mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    if mat.shape[0] == 2:  # binary case:
+        mat = mat[0].reshape(1, *mat.shape[1:])
+    tps = mat[:, 1, 1]  # shape is (n_classes,)
+    fps = mat[:, 0, 1]
+    denom = tps + fps
+    if np.all(denom == 0):
+        return float("nan")
+    idx = denom > 0
+    value = tps[idx] / denom[idx]
+    return value.mean()
+
+
+def npv(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
+    mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    if mat.shape[0] == 2:  # binary case:
+        mat = mat[0].reshape(1, *mat.shape[1:])
+    tns = mat[:, 0, 0]
+    fns = mat[:, 1, 0]
+    denom = tns + fns
+    if np.all(denom == 0):
+        return float("nan")
+    idx = denom > 0
+    value = tns[idx] / denom[idx]
+    return value.mean()
 
 
 def silent_scorer(f: Callable) -> Callable:

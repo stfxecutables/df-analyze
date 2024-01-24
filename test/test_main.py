@@ -35,6 +35,7 @@ from src.selection.filter import filter_select_features
 from src.selection.models import model_select_features
 from src.testing.datasets import (
     FAST_INSPECTION,
+    FASTEST,
     MEDIUM_INSPECTION,
     SLOW_INSPECTION,
     TestDataset,
@@ -83,6 +84,7 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
             # DfAnalyzeRegressor.SVM,
         )
         # options.regressors = (DfAnalyzeRegressor.MLP,)
+    options.htune_trials = 20
     options.to_json()
 
     is_cls = options.is_classification
@@ -160,6 +162,14 @@ def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
 
 
 if __name__ == "__main__":
+    for dsname, ds in FASTEST[:1]:
+        print("=" * 79)
+        print(f"Testing {dsname}")
+        print("=" * 79)
+        do_main((dsname, ds))
+
+    sys.exit()
+
     DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
     if os.environ.get("CC_CLUSTER") == "niagara":
         idx = os.environ.get("SLURM_ARRAY_TASK_ID")
