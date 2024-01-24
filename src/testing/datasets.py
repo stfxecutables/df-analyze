@@ -193,6 +193,12 @@ class TestDataset:
         num_classes = len(np.unique(y)) if self.is_classification else 1
         return X_tr, X_test, y_tr, y_test, num_classes
 
+    @staticmethod
+    def from_name(name: str) -> TestDataset:
+        if name in TEST_DATASETS:
+            return TEST_DATASETS[name]
+        raise KeyError(f"Dataset with name: {name} not found in current test datasets.")
+
     __test__ = False  # https://stackoverflow.com/a/59888230
 
 
@@ -248,7 +254,9 @@ def fake_data(
 
 __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
 
-TEST_DATASETS: dict[str, TestDataset] = dict(sorted(__UNSORTED, key=lambda p: p[1].load().shape[0]))
+TEST_DATASETS: dict[str, TestDataset] = dict(
+    sorted(__UNSORTED, key=lambda p: p[1].load().shape[0])
+)
 TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
 
 INSPECTION_TIMES = {

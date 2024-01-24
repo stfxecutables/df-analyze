@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 from shutil import get_terminal_size
@@ -32,10 +33,124 @@ class DataCleaningWarning(UserWarning):
         cols = get_terminal_size((81, 24))[0]
         sep = "=" * cols
         underline = "." * (len(self.__class__.__name__) + 1)
-        self.message = f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
+        self.message = (
+            f"\n{sep}\n{self.__class__.__name__}\n{underline}\n{message}\n{sep}"
+        )
 
     def __str__(self) -> str:
         return str(self.message)
+
+
+class RenameInfo:
+    def __init__(self, renames: list[tuple[str, str]]) -> None:
+        self.renames = renames
+        self.changed: list[tuple[str, str]] = []
+        for original, renamed in self.renames:
+            if original != renamed:
+                self.changed.append((original, renamed))
+
+    def to_markdown(self) -> Optional[str]:
+        if len(self.changed) == 0:
+            return None
+        lines = []
+        lines.append("# Feature Renames\n\n")
+        lines.append(
+            "Some of your feature names contained characters that are problems\n"
+            "for either regular expressions or the LightGBM estimator, or\n"
+            "which are duplicated. These have been renamed to resolve this\n"
+            "issue. Duplicated column renames are given an integer suffix based\n"
+            "on the order in which they appeared in the original data, except\n"
+            "for the first instance of a duplicated name, which is left as is.\n"
+            "\n\n"
+        )
+        originals, renamed = list(zip(*self.changed))
+        table = DataFrame({"New name": renamed, "Original name": originals})
+        lines.append(table.to_markdown(index=False))
+
+        return "".join(lines)
+
+
+def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, str]]]:
+    y = df[target]
+    df = df.drop(columns=target)
+    dupe_cols = set(df.columns[df.columns.duplicated()])
+    counts = {col: 0 for col in dupe_cols}
+    renames: list[tuple[str, str]] = []
+    for col in df.columns:
+        if col not in dupe_cols:
+            renames.append((col, col))
+            continue
+        if counts[col] == 0:  # leave name unchanged
+            renames.append((col, col))
+        else:
+            renames.append((col, f"{col}_{counts[col]}"))
+        counts[col] += 1
+    newnames = [new for old, new in renames]
+    df.columns = newnames
+    df[target] = y
+    return df, renames
+
+
+def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
+    """Rename trashy feature names (e.g. with regex characters, spaces)
+    to be less problematic
+
+    Returns
+    -------
+    df: DataFrame
+        Renamed DataFrame
+
+    info: RenameInfo
+        Container holding tuples of renamed columns. Does NOT include target
+        (which is never renamed).
+    """
+
+    names = df.columns.to_series().apply(str).to_list()
+    # https://docs.python.org/3/library/re.html
+    if target not in names:
+        raise RuntimeError(
+            f"Unrecoverable error. Specified target: `{target}` not found in "
+            f"data with feature names: {names}."
+        )
+    names.remove(target)
+
+    # if `target` still in names, there was a dupe
+    if target in names:
+        raise RuntimeError(
+            f"Unrecoverable error. Specified target: `{target}` appears "
+            f"multiple times as a column name. Column names: {names}."
+        )
+
+    trash = r"[\\\.\^\$\*\+\?\{\}\[\]\(\)\| ]"
+    lgbm = r"[,:\"]"
+
+    renames = {}
+    for name in names:
+        renamed = re.sub(trash, "_", name)
+        renamed = re.sub(lgbm, "_", renamed)
+        renamed = re.sub(r"[_]+", "_", renamed)  # readability
+        if renamed[-1] == "_":  # ugly dangling
+            renamed = renamed[:-1]
+        renames[name] = renamed
+
+    # At this point we have a serious problem if any features have the same
+    # name as the target. We have to decide between renaming the target or
+    # renaming the conflicting features. Obviously we rename the features.
+    if target in renames.values():
+        for original, renamed in renames.items():
+            if renamed != target:
+                continue
+            renames[original] = f"feat_{renamed}"
+
+    df = df.rename(columns=renames)
+    df, renames = dedup_names(df, target=target)
+    info = RenameInfo(renames)
+    return df, info
+
+
+def restore_names(df: DataFrame, renames: list[tuple[str, str]]) -> DataFrame:
+    for original, renamed in renames:
+        raise NotImplementedError()
 
 
 def cleaning_inform(message: str) -> None:
@@ -264,7 +379,11 @@ def encode_target(
     encoded = np.array(enc.fit_transform(target))
     classes = enc.classes_.tolist()
     ints = np.asarray(enc.transform(classes)).tolist()
-    return df, Series(encoded, name=target.name), {i: cls for i, cls in zip(ints, classes)}
+    return (
+        df,
+        Series(encoded, name=target.name),
+        {i: cls for i, cls in zip(ints, classes)},
+    )
 
 
 def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
@@ -327,7 +446,9 @@ def floatify(df: DataFrame) -> DataFrame:
     return df
 
 
-def drop_unusable(df: DataFrame, results: InspectionResults, _warn: bool = False) -> DataFrame:
+def drop_unusable(
+    df: DataFrame, results: InspectionResults, _warn: bool = False
+) -> DataFrame:
     """Drops identifiers, datetime, constants"""
     df = drop_cols(df, "identifiers", results.ids, _warn=_warn)
     df = drop_cols(df, "datetime data", results.times, _warn=_warn)
@@ -359,7 +480,9 @@ def deflate_categoricals(
     else:
         w = 0
     if _warn and len(infos) > 0:
-        message = "\n".join([f"{info.col:<{w}} {info.n_total} --> {info.n_keep}" for info in infos])
+        message = "\n".join(
+            [f"{info.col:<{w}} {info.n_total} --> {info.n_keep}" for info in infos]
+        )
         messy_inform(
             "Found and 'deflated' a number of categorical variables with "
             "levels that are unlikely to be reliable or useful in prediction. "
