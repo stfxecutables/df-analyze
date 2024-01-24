@@ -31,11 +31,7 @@ from sklearn.metrics import (
     r2_score,
 )
 
-from src.scoring import (
-    robust_auroc_score,
-    sensitivity,
-    specificity,
-)
+from src.scoring import npv, ppv, robust_auroc_score, sensitivity, specificity
 
 if TYPE_CHECKING:
     from src.models.base import DfAnalyzeModel
@@ -211,8 +207,10 @@ class ClassifierScorer(RandEnum, Enum):
     AUROC = "auroc"
     Sensitivity = "sens"
     Specificity = "spec"
+    PPV = "ppv"
+    NPV = "npv"
     F1 = "f1"
-    BalanceAccuracy = "bal-acc"
+    BalancedAccuracy = "bal-acc"
 
     @staticmethod
     def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
@@ -229,8 +227,10 @@ class ClassifierScorer(RandEnum, Enum):
             ClassifierScorer.AUROC.value: robust_auroc_score(y_true, y_prob),
             ClassifierScorer.Sensitivity.value: sensitivity(y_true, y_pred),
             ClassifierScorer.Specificity.value: specificity(y_true, y_pred),
+            ClassifierScorer.PPV.value: ppv(y_true, y_pred),
+            ClassifierScorer.NPV.value: npv(y_true, y_pred),
             ClassifierScorer.F1.value: f1_score(y_true, y_pred, average="macro"),
-            ClassifierScorer.BalanceAccuracy.value: balanced_accuracy_score(
+            ClassifierScorer.BalancedAccuracy.value: balanced_accuracy_score(
                 y_true, y_pred
             ),
         }
@@ -243,8 +243,10 @@ class ClassifierScorer(RandEnum, Enum):
             ClassifierScorer.AUROC.value: np.nan,
             ClassifierScorer.Sensitivity.value: np.nan,
             ClassifierScorer.Specificity.value: np.nan,
+            ClassifierScorer.PPV.value: np.nan,
+            ClassifierScorer.NPV.value: np.nan,
             ClassifierScorer.F1.value: np.nan,
-            ClassifierScorer.BalanceAccuracy.value: np.nan,
+            ClassifierScorer.BalancedAccuracy.value: np.nan,
         }
         return {raw: float(value) for raw, value in raws.items()}
 
