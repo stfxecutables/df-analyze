@@ -101,7 +101,7 @@ def main() -> None:
 
     df = options.load_df()
 
-    df, renames = sanitize_names(df)
+    df, renames = sanitize_names(df, target)
     prog_dirs.save_renames(renames)
 
     inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
