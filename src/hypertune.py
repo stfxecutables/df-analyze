@@ -419,6 +419,11 @@ def evaluate_tuned(
     if model_selected.wrap_selected is not None:
         selections["wrap"] = model_selected.wrap_selected.selected
 
+    if prepared.is_classification:
+        metric = options.htune_cls_metric
+    else:
+        metric = options.htune_reg_metric
+
     dfs, results = [], []
     for model_cls in options.models:
         for selection, cols in selections.items():
@@ -448,6 +453,7 @@ def evaluate_tuned(
                     X_train=X_train,
                     y_train=prep_train.y,
                     n_trials=options.htune_trials,
+                    metric=metric,  # type: ignore
                     n_jobs=-1,
                     verbosity=optuna.logging.ERROR,
                 )

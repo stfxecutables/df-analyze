@@ -49,6 +49,7 @@ from src.cli.text import (
     ASSOC_SELECT_CONT_REG_STATS,
     CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
+    CLS_TUNE_METRIC,
     DF_HELP_STR,
     DROP_HELP_STR,
     EMBED_SELECT_MODEL_HELP,
@@ -68,6 +69,7 @@ from src.cli.text import (
     PRED_SELECT_CLS_SCORE,
     PRED_SELECT_REG_SCORE,
     REG_HELP_STR,
+    REG_TUNE_METRIC,
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
@@ -79,6 +81,7 @@ from src.cli.text import (
     WRAP_SELECT_MODEL_HELP,
 )
 from src.enumerables import (
+    ClassifierScorer,
     ClsScore,
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
@@ -87,6 +90,7 @@ from src.enumerables import (
     FilterSelection,
     NanHandling,
     Normalization,
+    RegressorScorer,
     RegScore,
     WrapperSelection,
     WrapperSelectionModel,
@@ -166,6 +170,8 @@ class ProgramOptions(Debug):
         # htune_val: ValMethod,
         # htune_val_size: Size,
         htune_trials: int,
+        htune_cls_metric: ClassifierScorer,
+        htune_reg_metric: RegressorScorer,
         # test_val: ValMethod,
         test_val_size: Size,
         # mc_repeats: int,
@@ -209,6 +215,8 @@ class ProgramOptions(Debug):
         # self.htune_val: ValMethod = htune_val
         # self.htune_val_size: Size = htune_val_size
         self.htune_trials: int = htune_trials
+        self.htune_cls_metric: ClassifierScorer = htune_cls_metric
+        self.htune_reg_metric: RegressorScorer = htune_reg_metric
         # self.test_val: ValMethod = test_val
         self.test_val_size: Size = test_val_size
         # self.mc_repeats: int = mc_repeats
@@ -267,6 +275,8 @@ class ProgramOptions(Debug):
         # htune_val: ValMethod = "kfold"
         # htune_val_size: Size = 5
         htune_trials: int = randint(20, 100)
+        htune_cls_metric = ClassifierScorer.random()
+        htune_reg_metric = RegressorScorer.random()
         # test_val: ValMethod = "kfold"
         test_val_size: Size = 0.4
         # mc_repeats: int = 0
@@ -307,6 +317,8 @@ class ProgramOptions(Debug):
             # htune_val=htune_val,
             # htune_val_size=htune_val_size,
             htune_trials=htune_trials,
+            htune_cls_metric=htune_cls_metric,
+            htune_reg_metric=htune_reg_metric,
             # test_val=test_val,
             test_val_size=test_val_size,
             outdir=outdir,
@@ -730,6 +742,20 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         default=100,
         help=HTUNE_TRIALS_HELP,
     )
+    parser.add_argument(
+        "--htune-cls-metric",
+        choices=ClassifierScorer.choices(),
+        type=ClassifierScorer.parse,
+        default=ClassifierScorer.default(),
+        help=CLS_TUNE_METRIC,
+    )
+    parser.add_argument(
+        "--htune-reg-metric",
+        choices=RegressorScorer.choices(),
+        type=RegressorScorer.parse,
+        default=RegressorScorer.default(),
+        help=REG_TUNE_METRIC,
+    )
     # parser.add_argument(
     #     "--mc-repeats",
     #     type=int,
@@ -810,6 +836,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
+        htune_cls_metric=cli_args.htune_cls_metric,
+        htune_reg_metric=cli_args.htune_reg_metric,
         # test_val=cli_args.test_val,
         test_val_size=cli_args.test_val_size,
         # mc_repeats=cli_args.mc_repeats,
