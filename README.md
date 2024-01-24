@@ -77,6 +77,21 @@ Currently, siginifcant efforts have been made to make `df-analyze` robust to
 a wide variety of tabular datasets. However, there are some significant
 [limitations](#limitations).
 
+If you have any questions about:
+
+- how to get `df-analyze` installed and working on your machine
+- understanding `df-analyze` outputs
+- making good choices about `df-analyze` options for your dataset
+- any problems you might run into using `df-analyze`
+- general issues with the approach and/or code of `df-analyze`
+- contributing to `df-analyze`
+- anything else that you think is relevant to the `df-analyze` software
+  specifically (and not course-related issue or complaints, if encountering
+  `df-analyze` as part of a university/college course)
+
+Don't be shy about asking for help in the
+[Discussions](https://github.com/stfxecutables/df-analyze/discussions)!
+
 
 
 # Installation
