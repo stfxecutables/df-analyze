@@ -9,7 +9,13 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import pytest
 
-from src._constants import COMPLEX_XLSX, COMPLEX_XLSX2, SIMPLE_CSV, SIMPLE_CSV2, SIMPLE_XLSX
+from src._constants import (
+    COMPLEX_XLSX,
+    COMPLEX_XLSX2,
+    SIMPLE_CSV,
+    SIMPLE_CSV2,
+    SIMPLE_XLSX,
+)
 from src.loading import load_csv, load_excel
 
 
@@ -27,7 +33,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX)
     assert (
         meta
-        == "--target y --categoricals s x0 --mode classify --classifiers svm mlp dummy --nan drop --feat-select stepup pearson --n-feat 2 --htune --htune-trials 50 --outdir ./results"
+        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan median --norm robust --classifiers knn lgbm dummy --feat-select filter embed"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)
@@ -36,7 +42,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX2)
     assert (
         meta
-        == "--target y --categoricals s x0 --mode classify --classifiers svm mlp dummy --nan drop --feat-select stepup pearson --n-feat 2 --htune --htune-trials 50 --outdir ./results"
+        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan mean --norm minmax --classifiers knn lgbm dummy --feat-select filter wrap"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)

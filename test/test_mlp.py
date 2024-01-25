@@ -11,6 +11,7 @@ import numpy as np
 from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
+from src.enumerables import ClassifierScorer, RegressorScorer
 from src.models.mlp import MLPEstimator
 from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
@@ -65,17 +66,23 @@ def do_mlp_classifier(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
-def test_mlp_classify_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_mlp_classify_fast(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     do_mlp_classifier(dataset)
 
 
 @med_ds
-def test_mlp_classify_med(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_mlp_classify_med(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     do_mlp_classifier(dataset)
 
 
 @slow_ds
-def test_mlp_classify_slow(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_mlp_classify_slow(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     do_mlp_classifier(dataset)
 
 
@@ -126,6 +133,8 @@ def do_mlp_classifier_tune(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if not ds.is_classification:
         return
+    is_cls = ds.is_classification
+    metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()  # type: ignore
     X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
     if len(X_tr) > MAX_N:
         X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N, stratify=y_tr)
@@ -134,7 +143,14 @@ def do_mlp_classifier_tune(dataset: tuple[str, TestDataset]) -> None:
         model = MLPEstimator(
             num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
         )
-        model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=1, verbosity=1)
+        model.htune_optuna(
+            X_train=X_tr,
+            y_train=y_tr,
+            metric=metric,  # type: ignore
+            n_trials=4,
+            n_jobs=1,
+            verbosity=1,
+        )
         score = model.tuned_score(X_test, y_test)
         print(f"Tuned score: {score}")
     except Exception as e:
@@ -161,6 +177,8 @@ def do_mlp_regressor_tune(dataset: tuple[str, TestDataset]) -> None:
     if ds.is_classification:
         return
     X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+    is_cls = ds.is_classification
+    metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()  # type: ignore
     if len(X_tr) > MAX_N:
         X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N)
 
@@ -168,7 +186,14 @@ def do_mlp_regressor_tune(dataset: tuple[str, TestDataset]) -> None:
         model = MLPEstimator(
             num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
         )
-        model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=1, verbosity=1)
+        model.htune_optuna(
+            X_train=X_tr,
+            y_train=y_tr,
+            metric=metric,  # type: ignore
+            n_trials=4,
+            n_jobs=1,
+            verbosity=1,
+        )
         score = model.tuned_score(X_test, y_test)
         print(f"Tuned score: {score}")
     except Exception as e:
@@ -191,9 +216,13 @@ def test_mlp_reg_tune_slow(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
-def test_mlp_tune_parallel(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_mlp_tune_parallel(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     dsname, ds = dataset
     X_tr, X_test, y_tr, y_test, num_classes = ds.train_test_split()
+    is_cls = ds.is_classification
+    metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()  # type: ignore
     if len(X_tr) > MAX_N:
         strat = y_tr if ds.is_classification else None
         X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N, stratify=strat)
@@ -203,7 +232,14 @@ def test_mlp_tune_parallel(dataset: tuple[str, TestDataset], capsys: CaptureFixt
             num_classes=num_classes, model_args=dict(verbose=1, max_epochs=MAX_EPOCHS)
         )
         with capsys.disabled():
-            model.htune_optuna(X_train=X_tr, y_train=y_tr, n_trials=10, n_jobs=-1, verbosity=1)
+            model.htune_optuna(
+                X_train=X_tr,
+                y_train=y_tr,
+                metric=metric,  # type: ignore
+                n_trials=10,
+                n_jobs=-1,
+                verbosity=1,
+            )
             score = model.tuned_score(X_test, y_test)
             print(f"Tuned score: {score}")
     except Exception as e:

@@ -96,6 +96,13 @@ Don't be shy about asking for help in the
 
 # Installation
 
+Currently, `df-analyze` is distributed as a Python script / scripts. This
+means, unless you are interested in [building and using a
+container](#by-singularity--apptainer-container), that you will need to have
+a compatible Python version installed on your machine.
+
+
+
 ## By Poetry
 
 This project uses Poetry to manage dependencies, so if you want to reproduce

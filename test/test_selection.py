@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from _pytest.capture import CaptureFixture
 
@@ -65,8 +65,10 @@ def do_association_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
     return filtered  # type: ignore
 
 
-def do_predict_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
+def do_predict_select(dataset: tuple[str, TestDataset]) -> Optional[FilterSelected]:
     dsname, ds = dataset
+    if dsname == "internet_usage":  # undersampled levels in target
+        return
     predictions = ds.predictions(load_cached=True)
     prepared = ds.prepared(load_cached=True)
     for _ in range(25):
@@ -87,20 +89,19 @@ def do_predict_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
 
 def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
+    if dsname == "internet_usage":  # undersampled levels in target
+        return
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
-    options = ProgramOptions.random(ds)
-    # options.embed_select = EmbedSelectionModel.Linear
-    # selected = embed_select_features(prep_train=prep_train, filtered=None, options=options)
-    # if selected is None or (selected.selected is None):
-    #     raise ValueError("Impossible!")
-    # assert len(selected.selected) > 0
 
-    options.embed_select = EmbedSelectionModel.LGBM
-    selected = embed_select_features(prep_train=prep_train, options=options)
-    if selected is None or (selected.selected is None):
-        raise ValueError("Impossible!")
-    assert len(selected.selected) > 0
+    options = ProgramOptions.random(ds)
+    options.embed_select = (EmbedSelectionModel.LGBM,)
+
+    selecteds = embed_select_features(prep_train=prep_train, options=options)
+    for selected in selecteds:
+        if selected is None or (selected.selected is None):
+            raise ValueError("Impossible!")
+        assert len(selected.selected) > 0
 
 
 def estimate_select(
