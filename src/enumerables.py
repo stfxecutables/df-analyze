@@ -138,6 +138,11 @@ class Scorer:
     def default() -> Scorer:
         ...
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        return self is other
+
 
 class DfAnalyzeClassifier(RandEnum, Enum):
     KNN = "knn"
@@ -182,7 +187,7 @@ class DfAnalyzeClassifier(RandEnum, Enum):
         )
 
 
-class DfAnalyzeRegressor(Scorer, RandEnum, Enum):
+class DfAnalyzeRegressor(RandEnum, Enum):
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
@@ -311,7 +316,7 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
 
 
 @dataclass
-class RegressorScorer(RandEnum, Enum):
+class RegressorScorer(Scorer, RandEnum, Enum):
     MAE = "mae"
     MSqE = "msqe"
     MdAE = "mdae"

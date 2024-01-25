@@ -8,7 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 from io import StringIO
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from openpyxl import load_workbook
@@ -41,7 +41,14 @@ def load_excel(path: Path) -> tuple[DataFrame, str]:
         data.append(row)
 
     df = DataFrame(data=data[1:], columns=data[0])
+    df.columns = df.columns.to_series().apply(str)
 
+    # for some reason there can be phantom cells...
+    drops: list[str] = []
+    for col in df.columns:
+        if col == "None":
+            drops.append(col)
+    df = df.drop(columns=drops, errors="ignore")
     return df, " ".join(meta.values())
 
 

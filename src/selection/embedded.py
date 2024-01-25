@@ -89,16 +89,25 @@ def embed_select_features(
     for embed_model in embed_models:
         if embed_model is EmbedSelectionModel.Linear:
             model = SGDClassifierSelector() if is_cls else SGDRegressorSelector()
-
         else:
             model = LightGBMClassifier() if is_cls else LightGBMRegressor()
         models.append(model)
 
+    if prep_train.is_classification:
+        metric = options.htune_cls_metric
+    else:
+        metric = options.htune_reg_metric
     model: DfAnalyzeModel
     results: list[EmbedSelected] = []
     for model, embed_model in zip(models, embed_models):
         try:
-            model.htune_optuna(X_train=X_train, y_train=y, n_trials=100, n_jobs=-1)
+            model.htune_optuna(
+                X_train=X_train,
+                y_train=y,
+                metric=metric,
+                n_trials=100,
+                n_jobs=-1,
+            )
             # `coefs` are floats if Linear, int32 if LGBM
             scores = np.ravel(
                 model.tuned_model.coef_  # type: ignore

@@ -60,11 +60,20 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
             return False
 
         for key in obj1.__dict__.keys():
+            # not sure why, but this appears when you add a mixin to the Enum
+            if key == "__objclass__":
+                continue
             attr1 = obj1.__dict__[key]
             attr2 = obj2.__dict__[key]
-            eq = are_equal(attr1, attr2)
-            if not eq:
-                return False
+            try:
+                eq = are_equal(attr1, attr2)
+                if not eq:
+                    return False
+            except RecursionError:
+                raise ValueError(
+                    f"Failed to compare objects on key={key} due to infinite recursion. Compared attribute types:\n"
+                    f"attr1={type(attr1)}, attr2={type(attr2)}"
+                )
         return True
     elif isinstance(obj1, ndarray) and isinstance(obj2, ndarray):
         return (obj1.ravel().round(8) == obj2.ravel().round(8)).all()
