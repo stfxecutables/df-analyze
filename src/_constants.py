@@ -3,16 +3,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATADIR = ROOT / "data"
 TESTDATA = DATADIR / "testing"
+TEMPLATES = DATADIR / "templates"
 TEST_RESULTS = TESTDATA / "__TEST_RESULTS__"
 FULL_RESULTS = TESTDATA / "__FULL_RESULTS__"
 
 # Testing
-SIMPLE_XLSX = DATADIR / "spreadsheet.xlsx"
-SIMPLE_CSV = DATADIR / "spreadsheet.csv"
-SIMPLE_CSV2 = DATADIR / "spreadsheet2.csv"
-SIMPLE_ODS = DATADIR / "spreadsheet.ods"
-COMPLEX_XLSX = DATADIR / "spreadsheet_complex.xlsx"
-COMPLEX_XLSX2 = DATADIR / "spreadsheet_complex2.xlsx"
+SIMPLE_XLSX = TEMPLATES / "testing/spreadsheet.xlsx"
+SIMPLE_CSV = TEMPLATES / "testing/spreadsheet.csv"
+SIMPLE_CSV2 = TEMPLATES / "testing/spreadsheet2.csv"
+SIMPLE_ODS = TEMPLATES / "testing/spreadsheet.ods"
+COMPLEX_XLSX = TEMPLATES / "testing/spreadsheet_complex.xlsx"
+COMPLEX_XLSX2 = TEMPLATES / "testing/spreadsheet_complex2.xlsx"
+
 MUSHROOM_DATA = TESTDATA / "classification/mushrooms/mushrooms.parquet"
 MUSHROOM_TYPES = TESTDATA / "classification/mushrooms/types.csv"
 ELDER_DATA = TESTDATA / "classification/elder/measurements.csv"
