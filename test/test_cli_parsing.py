@@ -40,8 +40,16 @@ PATH = list(TEST_DATASETS.values())[0].datapath
 
 @pytest.mark.fast
 def test_classifiers() -> None:
-    opts = get_options(f"--df {PATH} --categoricals one two three")
-    assert opts.categoricals == sorted(["one", "two", "three"])
+    with ArgvContext(
+        "df-analyze.py",
+        "--df",
+        f"{PATH}",
+        "--categoricals",
+        "one two three",
+    ):
+        # opts = get_options(f"--df {PATH} --categoricals one two three")
+        opts = get_options()
+        assert opts.categoricals == sorted(["one", "two", "three"])
 
 
 @pytest.mark.fast
@@ -53,8 +61,7 @@ def test_quoted_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "a one",
-        "a two",
+        "'a one' 'a two'",
         "--verbosity",
         "0",
     ):

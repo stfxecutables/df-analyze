@@ -124,6 +124,7 @@ def separator(s: str) -> str:
 def column_parser(s: str) -> list[str]:
     s = re.sub(" +", " ", s)
     columns = []
+    quoted_cols = []
     matches = [*re.finditer(r"'", s)]
     if len(matches) <= 1:
         return s.split(" ")
@@ -135,8 +136,9 @@ def column_parser(s: str) -> list[str]:
             "is not included in any column names. "
         )
     for start, end in zip(starts, ends):
-        columns.append(s[start:end])
-    for col in columns:
+        columns.append(s[start + 1 : end])
+        quoted_cols.append(s[start : end + 1])
+    for col in quoted_cols:
         s = s.replace(col, "")
     columns.extend(s.split())
     return columns

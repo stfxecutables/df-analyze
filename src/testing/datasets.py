@@ -369,6 +369,15 @@ all_ds = pytest.mark.parametrize(
     [*TEST_DATASETS.items()],
     ids=lambda pair: str(pair[0]),
 )
+turbo_ds = composed(
+    pytest.mark.parametrize(
+        "dataset",
+        FASTEST,
+        ids=lambda pair: str(pair[0]),
+    ),
+    pytest.mark.fast,
+)
+
 fast_ds = composed(
     pytest.mark.parametrize(
         "dataset",
@@ -393,3 +402,16 @@ slow_ds = composed(
     ),
     pytest.mark.slow,
 )
+
+if __name__ == "__main__":
+    from sklearn.model_selection import cross_val_score
+    from sklearn.svm import SVC
+
+    from src._constants import TEMPLATES
+
+    out = TEMPLATES / "binary_classification.csv"
+    X, _, y, _ = fake_data("classify", N=300, C=25)
+    print(cross_val_score(SVC(), X, y))
+    print(X)
+    df = pd.concat([X, y], axis=1)
+    df.to_csv(out, index=False)

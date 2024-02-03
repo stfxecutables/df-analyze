@@ -1,16 +1,33 @@
-import traceback
-from contextlib import redirect_stderr, redirect_stdout
-from copy import deepcopy
-from pathlib import Path
-from pprint import pprint
-from typing import List, TypeVar, Union
-from warnings import warn
+from __future__ import annotations
 
+# fmt: off
+import sys  # isort: skip
+from pathlib import Path  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent  # isort: skip
+sys.path.append(str(ROOT))  # isort: skip
+# fmt: on
+
+
+import os
+import sys
+from pathlib import Path
+
+import pandas as pd
+from cli_test_helpers import ArgvContext
 from pandas import DataFrame
 
+from src._constants import TEMPLATES
 from src.analysis.univariate.associate import target_associations
 from src.analysis.univariate.predict.predict import univariate_predictions
 from src.cli.cli import ProgramOptions, get_options
+from src.enumerables import (
+    DfAnalyzeClassifier,
+    DfAnalyzeRegressor,
+    EmbedSelectionModel,
+    FeatureSelection,
+    WrapperSelection,
+    WrapperSelectionModel,
+)
 from src.hypertune import evaluate_tuned
 from src.nonsense import silence_spam
 from src.preprocessing.cleaning import sanitize_names
@@ -18,77 +35,34 @@ from src.preprocessing.inspection.inspection import inspect_data
 from src.preprocessing.prepare import prepare_data
 from src.selection.filter import filter_select_features
 from src.selection.models import model_select_features
+from src.testing.datasets import (
+    FAST_INSPECTION,
+    FASTEST,
+    MEDIUM_INSPECTION,
+    SLOW_INSPECTION,
+    TestDataset,
+    fast_ds,
+    turbo_ds,
+)
 
-RESULTS_DIR = Path(__file__).parent / "results"
+DATA = TEMPLATES / "binary_classification.csv"
+DATALINES = DATA.read_text()
+ARGS_MIN = (TEMPLATES / "minimum_args.txt").read_text()
+ARGS_FULL = (TEMPLATES / "spread_full_args.txt").read_text()
 
-T = TypeVar("T")
+SPREAD_MIN = TEMPLATES / "student/minimal_sheet.csv"
+SPREAD_MIN.write_text(f"{ARGS_MIN}\n\n{DATALINES}")
 
-
-def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
-    if isinstance(item, list):
-        return item
-    if isinstance(item, tuple):
-        return [i for i in item]
-    return [item]
-
-
-def sort_df(df: DataFrame) -> DataFrame:
-    """Auto-detect if classification or regression based on columns and sort"""
-    cols = [c.lower() for c in df.columns]
-    is_regression = False
-    sort_col = None
-    for col in cols:
-        if ("mae" in col) and ("sd" not in col):
-            is_regression = True
-            sort_col = col
-            break
-    if sort_col is None:
-        return df
-    ascending = is_regression
-    return df.sort_values(by=sort_col, ascending=ascending)
+SPREAD_FULL = TEMPLATES / "student/full_sheet.csv"
+SPREAD_FULL.write_text(f"{ARGS_FULL}\n\n{DATALINES}")
 
 
-def print_sorted(df: DataFrame) -> None:
-    """Auto-detect if classification or regression based on columns"""
-    cols = [c.lower() for c in df.columns]
-    is_regression = None
-    sort_col = None
-    for col in cols:
-        if "mae" in col:
-            is_regression = True
-            break
-        if "acc" in col:
-            is_regression = False
-            break
-    if is_regression is None:
-        print(df.to_markdown(tablefmt="simple", floatfmt="0.3f"))
-        return
-    sort_col = "mae" if is_regression else "acc"
-    ascending = is_regression
-    table = df.sort_values(by=sort_col, ascending=ascending).to_markdown(
-        tablefmt="simple", floatfmt="0.3f"
-    )
-    print(table)
+def do_main(minimal: bool) -> None:
+    sheet = SPREAD_MIN if minimal else SPREAD_FULL
+    with ArgvContext("df-analyze.py", "--spreadsheet", f"{sheet}"):
+        options = get_options()
 
-
-def log_options(options: ProgramOptions) -> None:
-    opts = deepcopy(options.__dict__)
-    clean = opts.pop("cleaning_options").__dict__
-    selection = opts.pop("selection_options").__dict__
-    selection.pop("cleaning_options")
-    opts = {**opts, **clean, **selection}
-
-    print("Will run analyses with options:")
-    pprint(opts, indent=2, depth=2, compact=False)
-
-
-def main() -> None:
-    # TODO:
-    # get arguments
-    # run analyses based on args
-    options = get_options()
-    if options.verbosity.value > 0:
-        log_options(options)
+    options.to_json()
 
     is_cls = options.is_classification
     prog_dirs = options.program_dirs
@@ -96,9 +70,6 @@ def main() -> None:
     categoricals = options.categoricals
     ordinals = options.ordinals
     drops = options.drops
-    # joblib_cache = options.program_dirs.joblib_cache
-    # if joblib_cache is not None:
-    #     memory = Memory(location=joblib_cache)
 
     df = options.load_df()
     df, renames = sanitize_names(df, target)
@@ -137,6 +108,7 @@ def main() -> None:
     # selection, wher model-based selection means either embedded or wrapper
     # (stepup, stepdown) methods.
     selected = model_select_features(prep_train, options)
+    # selected = ModelSelected.random(ds)
     prog_dirs.save_model_selection_reports(selected)
     prog_dirs.save_model_selection_data(selected)
 
@@ -150,17 +122,21 @@ def main() -> None:
         model_selected=selected,
         options=options,
     )
+    print(eval_results.to_markdown())
     prog_dirs.save_eval_report(eval_results)
     prog_dirs.save_eval_tables(eval_results)
     prog_dirs.save_eval_data(eval_results)
-    try:
-        print(eval_results.to_markdown())
-    except ValueError as e:
-        warn(
-            f"Got error when attempting to print final report:\n{e}\n"
-            f"Details:\n{traceback.format_exc()}"
-        )
+
+
+def test_spreadsheet_minimal() -> None:
+    do_main(minimal=True)
+
+
+def test_spreadsheet_full() -> None:
+    do_main(minimal=False)
 
 
 if __name__ == "__main__":
-    main()
+    # each about 5 minutes on M2 Macbook Air with 8 cores, using all
+    # do_main(minimal=True)
+    do_main(minimal=False)

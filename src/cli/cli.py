@@ -1047,8 +1047,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
-        htune_cls_metric=cli_args.htune_cls_metric,
-        htune_reg_metric=cli_args.htune_reg_metric,
+        htune_cls_metric=ClassifierScorer.from_arg(cli_args.htune_cls_metric),
+        htune_reg_metric=RegressorScorer.from_arg(cli_args.htune_reg_metric),
         # test_val=cli_args.test_val,
         test_val_size=cli_args.test_val_size,
         # mc_repeats=cli_args.mc_repeats,
@@ -1062,6 +1062,6 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
 
 if __name__ == "__main__":
     parser = make_parser()
-    args = get_parser_dict(parser)
+    args = get_parser_dict()
     for arg, info in args.items():
         print(f"{arg}: {info}")

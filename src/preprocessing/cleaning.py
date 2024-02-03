@@ -69,6 +69,15 @@ class RenameInfo:
 
         return "".join(lines)
 
+    def rename_columns(self, cols: list[str]) -> list[str]:
+        renamed = []
+        for col in cols:
+            if col in self.changed:
+                renamed.append(self.changed[col])
+            else:
+                renamed.append(col)
+        return renamed
+
 
 def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, str]]]:
     y = df[target]

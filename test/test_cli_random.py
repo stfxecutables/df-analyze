@@ -55,9 +55,14 @@ def do_random_spreadsheet(dataset: tuple[str, TestDataset]) -> None:
             target = options.target
             categoricals = options.categoricals
             ordinals = options.ordinals
+            drops = options.drops
 
             df = options.load_df()
             df, renames = sanitize_names(df, target)
+            categoricals = renames.rename_columns(categoricals)
+            ordinals = renames.rename_columns(ordinals)
+            drops = renames.rename_columns(drops)
+
             inspect_data(df, target, categoricals, ordinals, _warn=True)
 
 

@@ -40,6 +40,7 @@ from src.testing.datasets import (
     SLOW_INSPECTION,
     TestDataset,
     fast_ds,
+    turbo_ds,
 )
 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -92,12 +93,17 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     target = options.target
     categoricals = options.categoricals
     ordinals = options.ordinals
+    drops = options.drops
 
     df = options.load_df()
     df, renames = sanitize_names(df, target)
     prog_dirs.save_renames(renames)
 
-    inspection = inspect_data(df, target, categoricals, ordinals, _warn=True)
+    categoricals = renames.rename_columns(categoricals)
+    ordinals = renames.rename_columns(ordinals)
+    drops = renames.rename_columns(drops)
+
+    inspection = inspect_data(df, target, categoricals, ordinals, drops, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 
@@ -156,19 +162,24 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     """
 
 
+@turbo_ds
+def test_main_turbo(dataset: tuple[str, TestDataset]) -> None:
+    do_main(dataset)
+
+
 @fast_ds
 def test_main_fast(dataset: tuple[str, TestDataset]) -> None:
     do_main(dataset)
 
 
 if __name__ == "__main__":
-    for dsname, ds in FASTEST[:1]:
-        print("=" * 79)
-        print(f"Testing {dsname}")
-        print("=" * 79)
-        do_main((dsname, ds))
+    # for dsname, ds in FASTEST[:1]:
+    #     print("=" * 79)
+    #     print(f"Testing {dsname}")
+    #     print("=" * 79)
+    #     do_main((dsname, ds))
 
-    sys.exit()
+    # sys.exit()
 
     DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
     if os.environ.get("CC_CLUSTER") == "niagara":
