@@ -73,10 +73,6 @@ def print_sorted(df: DataFrame) -> None:
 
 def log_options(options: ProgramOptions) -> None:
     opts = deepcopy(options.__dict__)
-    clean = opts.pop("cleaning_options").__dict__
-    selection = opts.pop("selection_options").__dict__
-    selection.pop("cleaning_options")
-    opts = {**opts, **clean, **selection}
 
     print("Will run analyses with options:")
     pprint(opts, indent=2, depth=2, compact=False)
