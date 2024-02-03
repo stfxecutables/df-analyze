@@ -72,8 +72,11 @@ class RandEnum(Generic[T]):
         return [None, *[x for x in cls]]  # type: ignore
 
     @classmethod
-    def parse(cls, s: str) -> RandEnum:
-        return cls(s.lower())
+    def parse(cls, s: str) -> str:
+        try:
+            return cls(s).value  # type: ignore
+        except Exception:
+            return cls(s.lower()).value  # type: ignore
 
     @classmethod
     def parseN(cls, s: str) -> Optional[RandEnum]:

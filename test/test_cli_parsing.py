@@ -20,7 +20,7 @@ from src.analysis.univariate.associate import (
     ContClsStats,
     ContRegStats,
 )
-from src.cli.cli import ProgramOptions, Verbosity, get_options
+from src.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
 from src.enumerables import (
     ClsScore,
     DfAnalyzeClassifier,
@@ -33,7 +33,7 @@ from src.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
-from src.testing.datasets import TEST_DATASETS, TestDataset, all_ds
+from src.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
 
 PATH = list(TEST_DATASETS.values())[0].datapath
 
@@ -159,5 +159,9 @@ def test_random_types(dataset: tuple[str, TestDataset]) -> None:
 
 
 if __name__ == "__main__":
-    opts = get_options()
-    print(opts.categoricals)
+    for dsname, ds in ALL_DATASETS:
+        with TemporaryDirectory() as tempdir:
+            args = random_cli_args(ds, Path(tempdir), spreadsheet=True)
+            print(args)
+            args = random_cli_args(ds, Path(tempdir), spreadsheet=False)
+            print(args)

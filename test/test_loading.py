@@ -16,7 +16,13 @@ from src._constants import (
     SIMPLE_CSV2,
     SIMPLE_XLSX,
 )
+from src.cli.cli import ProgramOptions
 from src.loading import load_csv, load_excel
+from src.testing.datasets import ALL_DATASETS, TestDataset, all_ds
+
+
+def generate_spreadsheet(tempdir: Path) -> Path:
+    ...
 
 
 @pytest.mark.fast

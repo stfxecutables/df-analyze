@@ -1,3 +1,4 @@
+import re
 from argparse import Action
 from enum import Enum
 from math import isnan
@@ -118,6 +119,27 @@ def separator(s: str) -> str:
     if s.lower().strip() == "newline":
         return "\n"
     return s
+
+
+def column_parser(s: str) -> list[str]:
+    s = re.sub(" +", " ", s)
+    columns = []
+    matches = [*re.finditer(r"'", s)]
+    if len(matches) <= 1:
+        return s.split(" ")
+    starts = [m.span()[0] for m in matches[::2]]
+    ends = [m.span()[0] for m in matches[1::2]]
+    if len(starts) != len(ends):
+        raise SyntaxError(
+            "Imbalanced number of single-quotes. Make sure the `'` character "
+            "is not included in any column names. "
+        )
+    for start, end in zip(starts, ends):
+        columns.append(s[start:end])
+    for col in columns:
+        s = s.replace(col, "")
+    columns.extend(s.split())
+    return columns
 
 
 class EnumParser(Action):
