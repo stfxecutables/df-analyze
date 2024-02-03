@@ -1,0 +1,34 @@
+--df None
+--spreadsheet None
+--separator None
+--target None
+--categoricals None
+--ordinals None
+--drops None
+--mode classify regress
+--classifiers knn lgbm rf lr sgd mlp svm dummy
+--regressors knn lgbm rf elastic sgd mlp svm dummy
+--feat-select filter embed wrap
+--embed-select lgbm linear
+--wrapper-select step-up step-down
+--wrapper-model linear lgbm knn
+--norm minmax robust
+--nan drop mean median impute
+--n-feat-filter None
+--n-feat-wrapper None
+--n-filter-cont None
+--n-filter-cat None
+--filter-method relief assoc pred
+--filter-assoc-cont-classify t U W corr cohen_d AUROC mut_info
+--filter-assoc-cat-classify mut_info H cramer_v
+--filter-assoc-cont-regress pearson_r spearman_r mut_info F
+--filter-assoc-cat-regress mut_info H
+--filter-pred-regress mae msqe mdae r2 var-exp
+--filter-pred-classify acc auroc sens spec
+--htune-trials 5 10 20
+--htune-cls-metric acc auroc sens spec ppv npv f1 bal-acc
+--htune-reg-metric mae msqe mdae r2 var-exp
+--test-val-size None
+--outdir None
+--verbosity 0 1 2
+--no-warn-explosion None

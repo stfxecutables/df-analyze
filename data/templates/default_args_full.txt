@@ -1,0 +1,26 @@
+--separator ','
+--target target
+--mode classify
+--classifiers knn lgbm lr sgd dummy
+--regressors knn lgbm elastic sgd dummy
+--feat-select filter
+--embed-select linear
+--wrapper-select none
+--wrapper-model linear
+--norm robust
+--nan drop mean
+--n-feat-filter 0.5
+--n-feat-wrapper 20
+--n-filter-cont 0.5
+--n-filter-cat 0.5
+--filter-method assoc
+--filter-assoc-cont-classify mut_info
+--filter-assoc-cat-classify mut_info
+--filter-assoc-cont-regress F
+--filter-assoc-cat-regress H
+--filter-pred-regress mae
+--filter-pred-classify acc
+--htune-trials 100
+--htune-cls-metric acc
+--htune-reg-metric mae
+--test-val-size 0.4

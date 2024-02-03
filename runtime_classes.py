@@ -49,7 +49,8 @@ from src.testing.datasets import (
 
 matplotlib.use("QtAgg")
 
-if __name__ == "__main__":
+
+def load_rich_runtime_info() -> DataFrame:
     DATASETS = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
     CLASSES = (
         ["fast" for _ in FAST_INSPECTION]
@@ -72,10 +73,17 @@ if __name__ == "__main__":
         )
     df = pd.concat(dfs, axis=0)
     df = pd.concat([df, rts], axis=1)
-    df = df.loc[df.state == "COMPLETED"].drop(columns="state")
     df["elapsed"] = pd.to_timedelta(df["elapsed"])
     df["elapsed"] = df["elapsed"].apply(lambda t: t.seconds)
     df = df.rename(columns={"elapsed": "seconds"})
+    df["minutes"] = (df["seconds"] / 60).round(1)
+    df["hours"] = (df["seconds"] / 3600).round(1)
+    return df
+
+
+def fit_runtimes() -> None:
+    df = load_rich_runtime_info()
+    df = df.loc[df.state == "COMPLETED"].drop(columns="state")
     print(df)
     y = df["seconds"]
     n, p = df["n"], df["p"]
@@ -197,4 +205,64 @@ if __name__ == "__main__":
     fig.set_size_inches(w=17, h=6)
     fig.tight_layout()
 
+    plt.show()
+
+
+def feature_classes(p: int) -> str:
+    if p < 100:
+        return "p < 100"
+    elif p < 150:
+        return "p < 150"
+    else:
+        return "200 <= p < 400"
+
+
+if __name__ == "__main__":
+    # fit_runtimes()
+    pd.options.display.max_rows = 100
+    df = load_rich_runtime_info()
+    df = df.loc[df["state"] != "FAILED"]
+    df["n + p"] = df["n"] + df["p"]
+    df["n_feat"] = df["p"].apply(feature_classes)
+    print(df)
+    # plt.hist(df.p, bins=20, color="black")
+    # plt.show()
+    palette = {"COMPLETED": "black", "TIMEOUT": "red"}
+    palette = {
+        "p < 100": "black",
+        "p < 150": "orange",
+        "200 <= p < 400": "red",
+    }
+    markers = {"COMPLETED": ".", "TIMEOUT": "x"}
+    fix, axes = plt.subplots(ncols=2)
+    sbn.scatterplot(
+        data=df,
+        x="n",
+        y="hours",
+        hue="n_feat",
+        palette=palette,  # type: ignore
+        # palette="bright",
+        style="state",
+        size="p",
+        ax=axes[0],
+    )
+    sbn.scatterplot(
+        data=df,
+        x="p",
+        y="hours",
+        hue="n_feat",
+        palette=palette,  # type: ignore
+        # palette="bright",
+        style="state",
+        size="n",
+        ax=axes[1],
+    )
+    sbn.move_legend(axes[0], "upper left", bbox_to_anchor=(1, 1))
+    sbn.move_legend(axes[1], "upper left", bbox_to_anchor=(1, 1))
+    fig = plt.gcf()
+    fig.set_size_inches(w=15, h=6)
+    fig.suptitle(
+        "df-analyze runtimes (Niagara, all options, step-up selecting 10 features)"
+    )
+    fig.tight_layout()
     plt.show()

@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+# fmt: off
+import sys  # isort: skip
+from pathlib import Path  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
+sys.path.append(str(ROOT))  # isort: skip
+# fmt: on
+
+
 """
 File for defining all options passed to `df-analyze.py`.
 """
@@ -11,6 +19,7 @@ from pathlib import Path
 from random import choice, randint, uniform
 from typing import (
     TYPE_CHECKING,
+    Any,
     Optional,
     Tuple,
     Type,
@@ -20,6 +29,7 @@ from typing import (
 from warnings import warn
 
 import jsonpickle
+import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
@@ -38,6 +48,7 @@ from src.analysis.univariate.associate import (
     ContRegStats,
 )
 from src.cli.parsing import (
+    column_parser,
     int_or_percent_parser,
     resolved_path,
     separator,
@@ -471,9 +482,7 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
     return cli_args
 
 
-def get_options(args: Optional[str] = None) -> ProgramOptions:
-    """parse command line arguments"""
-    # parser = ArgumentParser(description=DESC)
+def make_parser() -> ArgumentParser:
     parser = ArgumentParser(
         prog="df-analyze",
         usage=USAGE_STRING,
@@ -505,31 +514,32 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     parser.add_argument(
         "--target",
         action="store",
+        nargs="+",  # allow spaces: https://stackoverflow.com/a/26990349,
         type=str,
         default="target",
         help=TARGET_HELP_STR,
     )
     parser.add_argument(
         "--categoricals",
-        nargs="+",
+        # nargs="+",
         action="store",
-        type=str,
+        type=column_parser,
         default=[],
         help=CATEGORICAL_HELP_STR,
     )
     parser.add_argument(
         "--ordinals",
-        nargs="+",
+        # nargs="+",
         action="store",
-        type=str,
+        type=column_parser,
         default=[],
         help=ORDINAL_HELP_STR,
     )
     parser.add_argument(
         "--drops",
-        nargs="+",
+        # nargs="+",
         action="store",
-        type=str,
+        type=column_parser,
         default=[],
         help=DROP_HELP_STR,
     )
@@ -622,16 +632,16 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     # )
     parser.add_argument(
         "--norm",
+        type=Normalization.parse,
         choices=Normalization.choices(),
-        default=Normalization.Robust,
-        type=Normalization,
+        default=Normalization.Robust.value,
         help=NORM_HELP,
     )
     parser.add_argument(
         "--nan",
-        choices=NanHandling.choices(),
-        default=NanHandling.Mean,
         type=NanHandling.parse,
+        choices=NanHandling.choices(),
+        default=NanHandling.Mean.value,
         help=NAN_HELP,
     )
     # parser.add_argument(
@@ -793,7 +803,208 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         action="store_true",
         help=EXPLODE_HELP,
     )
+    return parser
 
+
+class ArgKind(Enum):
+    Choice = "choice"
+    ChoiceN = "choice-n"
+    Flag = "flag"
+    IntOrPercent = "int-percent"
+    Int = "int"
+    Path = "path"
+    Separator = "seperator"
+    String = "string"
+    StringList = "string-list"
+
+
+class RandKind(Enum):
+    ChooseN = "choose-n"
+    ChooseNoneOrN = "choose-none-or-n"
+    ChooseOne = "one"
+    Columns = "columns"
+    Custom = "custom"
+    Flag = "flag"
+    Int = "int"
+    IntOrPercent = "int-or-percent"
+    Path = "path"
+    Target = "target"
+
+
+ArgsDict = dict[str, tuple[RandKind, Optional[list[str]]]]
+
+
+def get_parser_dict() -> ArgsDict:
+    args_dict: ArgsDict = {
+        "--df": (RandKind.Path, None),
+        "--spreadsheet": (RandKind.Path, None),
+        "--separator": (RandKind.Custom, None),
+        "--target": (RandKind.Target, None),
+        "--categoricals": (RandKind.Columns, None),
+        "--ordinals": (RandKind.Columns, None),
+        "--drops": (RandKind.Columns, None),
+        "--mode": (RandKind.ChooseOne, ["classify", "regress"]),
+        "--classifiers": (RandKind.ChooseN, DfAnalyzeClassifier.choices()),
+        "--regressors": (RandKind.ChooseN, DfAnalyzeRegressor.choices()),
+        "--feat-select": (RandKind.ChooseNoneOrN, FeatureSelection.choices()),
+        "--embed-select": (RandKind.ChooseNoneOrN, EmbedSelectionModel.choices()),
+        "--wrapper-select": (RandKind.ChooseNoneOrN, WrapperSelection.choices()),
+        "--wrapper-model": (RandKind.ChooseOne, WrapperSelectionModel.choices()),
+        "--norm": (RandKind.ChooseOne, Normalization.choices()),
+        "--nan": (RandKind.ChooseOne, NanHandling.choices()),
+        "--n-feat-filter": (RandKind.IntOrPercent, None),
+        "--n-feat-wrapper": (RandKind.IntOrPercent, None),
+        "--n-filter-cont": (RandKind.IntOrPercent, None),
+        "--n-filter-cat": (RandKind.IntOrPercent, None),
+        "--filter-method": (RandKind.ChooseOne, FilterSelection.choices()),
+        "--filter-assoc-cont-classify": (RandKind.ChooseOne, ContClsStats.choices()),
+        "--filter-assoc-cat-classify": (RandKind.ChooseOne, CatClsStats.choices()),
+        "--filter-assoc-cont-regress": (RandKind.ChooseOne, ContRegStats.choices()),
+        "--filter-assoc-cat-regress": (RandKind.ChooseOne, CatRegStats.choices()),
+        "--filter-pred-regress": (RandKind.ChooseOne, RegScore.choices()),
+        "--filter-pred-classify": (RandKind.ChooseOne, ClsScore.choices()),
+        "--htune-trials": (RandKind.ChooseOne, ["5", "10", "20"]),
+        "--htune-cls-metric": (RandKind.ChooseOne, ClassifierScorer.choices()),
+        "--htune-reg-metric": (RandKind.ChooseOne, RegressorScorer.choices()),
+        "--test-val-size": (RandKind.IntOrPercent, None),
+        "--outdir": (RandKind.Path, None),
+        "--verbosity": (RandKind.ChooseOne, ["0", "1", "2"]),
+        "--no-warn-explosion": (RandKind.Flag, None),
+    }
+    return args_dict
+
+
+def randip(
+    imin: int, imax: int, pmin: float = 0.1, pmax: float = 0.5
+) -> Union[float, int]:
+    use_ints = bool(np.random.binomial(n=1, p=0.5, size=1).item())
+    if use_ints:
+        return np.random.randint(imin, imax)
+    return np.random.uniform(pmin, pmax)
+
+
+def random_cli_args(
+    ds: TestDataset, tempdir: Path, spreadsheet: bool = True
+) -> tuple[list[str], Path]:
+    args_dict = get_parser_dict()
+    n, p = ds.shape[0], ds.shape[1] - 1
+    p_max = min(15, p)
+    p_min = 1
+    pp_max = p_max / p
+    pp_min = 1 / p
+
+    n_max = n // 2
+    n_min = min(100, n)
+    tmin = 0.1
+    tmax = 0.5
+
+    int_or_percents = {
+        "--n-feat-filter": randip(p_min, p_max, pp_min, pp_max),
+        "--n-feat-wrapper": randip(p_min, p_max, pp_min, pp_max),
+        "--n-filter-cont": randip(p_min, p_max, pp_min, pp_max),
+        "--n-filter-cat": randip(p_min, p_max, pp_min, pp_max),
+        "--test-val-size": randip(n_min, n_max, tmin, tmax),
+    }
+
+    cols = set(ds.load().columns.to_list())
+    target = choice(list(cols))
+    cols.remove(target)
+    # if " " in target:
+    #     target = f"'{target}'"
+
+    n_drop = np.random.randint(0, 3)
+    drops = np.random.choice(list(cols), n_drop).tolist()
+    cols.difference_update(drops)
+    # drops = " ".join([f"'{d}'" if " " in d else d for d in drops])
+    # drops = f"'{' '.join(drops)}'"
+    drops = " ".join([f'"{x}"' if " " in x else x for x in drops])
+
+    n_cats = np.random.randint(len(cols) // 2)
+    cats = np.random.choice(list(cols), n_cats).tolist()
+    cols.difference_update(cats)
+    # cats = " ".join([f"'{c}'" if " " in c else c for c in cats])
+    # cats = f"'{' '.join(cats)}'"
+    cats = " ".join([f'"{x}"' if " " in x else x for x in cats])
+
+    n_ords = np.random.randint(len(cols) // 2)
+    ords = np.random.choice(list(cols), n_ords).tolist()
+    cols.difference_update(ords)
+    # ords = " ".join([f"'{o}'" if " " in o else o for o in ords])
+    # ords = f"'{' '.join(ords)}'"
+    ords = " ".join([f'"{x}"' if " " in x else x for x in ords])
+
+    datafile = tempdir / f"{ds.dsname}.csv" if spreadsheet else ds.datapath
+
+    arg_options = []
+    for argstr, (kind, choices) in args_dict.items():
+        # handle ds-related randoms first
+        if kind is RandKind.Path:
+            if argstr == "--df":
+                if not spreadsheet:
+                    arg_options.append(f"{argstr} {datafile}")
+            elif argstr == "--spreadsheet":
+                if spreadsheet:
+                    arg_options.append(f"{argstr} {datafile}")
+            elif argstr == "--outdir":
+                arg_options.append(f"{argstr} {tempdir}")
+            else:
+                raise KeyError(
+                    f"Unhandled argument: {argstr}, kind={kind}, choices={choices}"
+                )
+        elif (kind is RandKind.Custom) and (argstr == "--separator"):
+            continue
+        elif kind is RandKind.IntOrPercent:
+            numeric = round(int_or_percents[argstr], 2)
+            arg_options.append(f"{argstr} {numeric}")
+        elif kind is RandKind.Target:
+            arg_options.append(f"{argstr} {target}")
+        elif kind is RandKind.Columns:
+            if argstr == "--categoricals":
+                if n_cats > 0:
+                    arg_options.append(f"{argstr} {cats}")
+            elif argstr == "--ordinals":
+                if n_ords > 0:
+                    arg_options.append(f"{argstr} {ords}")
+            elif argstr == "--drops":
+                if n_drop > 0:
+                    arg_options.append(f"{argstr} {drops}")
+            else:
+                raise KeyError(
+                    f"Unhandled argument: {argstr}, kind={kind}, choices={choices}"
+                )
+        elif kind is RandKind.Flag:
+            do_flag = bool(np.random.binomial(n=1, p=0.5, size=1).item())
+            if do_flag:
+                arg_options.append(f"{argstr}")
+        elif kind in [RandKind.ChooseN, RandKind.ChooseNoneOrN, RandKind.ChooseOne]:
+            if choices is None:
+                raise ValueError("RandKind cannot be a choice with `choices=None`")
+            if kind is RandKind.ChooseOne:
+                chosen = choice(choices)
+                arg_options.append(f"{argstr} {chosen}")
+            elif kind is RandKind.ChooseN:
+                n_choose = np.random.randint(1, len(choices))
+                chosen = " ".join(np.random.choice(choices, n_choose).tolist())
+            elif kind is RandKind.ChooseNoneOrN:
+                is_none = bool(np.random.binomial(n=1, p=0.5, size=1).item())
+                if is_none:
+                    arg_options.append(f"{argstr} none")
+                else:
+                    n_choose = np.random.randint(1, len(choices))
+                    chosen = " ".join(np.random.choice(choices, n_choose).tolist())
+                    arg_options.append(f"{argstr} {chosen}")
+        else:
+            raise KeyError(
+                f"Unhandled argument: {argstr}, kind={kind}, choices={choices}"
+            )
+
+    return arg_options, datafile
+
+
+def get_options(args: Optional[str] = None) -> ProgramOptions:
+    """parse command line arguments"""
+    # parser = ArgumentParser(description=DESC)
+    parser = make_parser()
     cli_args = parse_and_merge_args(parser, args)
     cats = set(cli_args.categoricals)
     ords = set(cli_args.ordinals)
@@ -808,7 +1019,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
 
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
-        target=cli_args.target,
+        target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
         categoricals=sorted(cats),
         ordinals=sorted(ords),
         drops=cli_args.drops,
@@ -836,8 +1047,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
         htune_trials=cli_args.htune_trials,
-        htune_cls_metric=cli_args.htune_cls_metric,
-        htune_reg_metric=cli_args.htune_reg_metric,
+        htune_cls_metric=ClassifierScorer.from_arg(cli_args.htune_cls_metric),
+        htune_reg_metric=RegressorScorer.from_arg(cli_args.htune_reg_metric),
         # test_val=cli_args.test_val,
         test_val_size=cli_args.test_val_size,
         # mc_repeats=cli_args.mc_repeats,
@@ -847,3 +1058,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         verbosity=cli_args.verbosity,
         no_warn_explosion=cli_args.no_warn_explosion,
     )
+
+
+if __name__ == "__main__":
+    parser = make_parser()
+    args = get_parser_dict()
+    for arg, info in args.items():
+        print(f"{arg}: {info}")
