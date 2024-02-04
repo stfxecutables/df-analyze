@@ -106,8 +106,15 @@ a compatible Python version installed on your machine.
 ## By Poetry
 
 This project uses Poetry to manage dependencies, so if you want to reproduce
-the results you should [install Poetry](https://python-poetry.org/docs/). Then
-you can install dependencies and activate the venv with:
+the results you should [install Poetry](https://python-poetry.org/docs/).
+After installing Poetry, clone this repo:
+
+```shell
+git clone https://github.com/stfxecutables/df-analyze.git
+cd df-analyze
+```
+
+Then you can install dependencies and activate the venv with:
 
 ```shell
 poetry install  # setup environment
