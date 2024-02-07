@@ -40,9 +40,13 @@ def main() -> None:
     X = np.random.standard_normal([1000, 100])
     y = np.random.randint(0, 2, [1000])
 
-    df = pd.concat([DataFrame(X), Series(name="target", data=y)], axis=1)
+    # important columns have str names when not reading from disk
+    cols = [f"f{i}" for i in range(X.shape[1])]
+    df = pd.concat(
+        [DataFrame(data=X, columns=cols), Series(name="target", data=y)], axis=1
+    )
 
-    df = options.load_df()
+    # df = options.load_df()
     df, renames = sanitize_names(df, target)
     prog_dirs.save_renames(renames)
 
