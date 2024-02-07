@@ -34,15 +34,17 @@ class EmbedSelected:
         scores = DataFrame(
             data=scores, index=Series(name="feature", data=fnames), columns=["score"]
         )
-        direction = "Higher" if self.is_classification else "Lower"
-        metric = "Accuracy" if self.is_classification else "MAE"
+        if self.model is EmbedSelectionModel.LGBM:
+            metric = "Importances"
+        else:
+            metric = "Coefficients"
         text = (
             "# Wrapper-Based Feature Selection Summary\n\n"
             f"Wrapper model:  {self.model.name}\n"
             "\n"
             f"## Selected Features\n\n"
             f"{self.selected}\n\n"
-            f"## Selection scores ({metric}: {direction} = More important)\n\n"
+            f"## Selection scores ({metric}: Larger magnitude = More important)\n\n"
             f"{scores.to_markdown(floatfmt='0.3e')}"
         )
         return text
