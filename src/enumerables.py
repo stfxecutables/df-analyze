@@ -258,9 +258,9 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
                 "accuracy instead. "
             )
             item = ClassifierScorer.BalancedAccuracy.value
-        if np.isnan(y_true).ravel().any():
+        if np.asarray(np.isnan(y_true)).any():
             raise ValueError("Impossible! NaNs in y_true.")
-        if np.isnan(y_pred).ravel().any():
+        if np.asarray(np.isnan(y_pred)).any():
             raise ValueError("NaNs in y_pred")
 
         raws = {
@@ -284,9 +284,9 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
         if y_prob.shape[1] == 2:
             y_prob = y_prob[:, 1].reshape(-1, 1)
 
-        if np.isnan(y_true).ravel().any():
+        if np.asarray(np.isnan(y_true)).any():
             raise ValueError("Impossible! NaNs in y_true.")
-        if np.isnan(y_pred).ravel().any():
+        if np.asarray(np.isnan(y_pred)).any():
             raise ValueError("NaNs in y_pred")
 
         raws = {
