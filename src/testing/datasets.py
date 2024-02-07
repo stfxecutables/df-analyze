@@ -351,6 +351,7 @@ SLOW_INSPECTION = sorted(SLOW_INSPECTION, key=lambda d: str(d[0]).lower())
 ALL_DATASETS = sorted(ALL_DATASETS, key=lambda d: str(d[0]).lower())
 DATASET_LIST = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
 
+# "cleveland", "heart-c", "cholesterol"
 FASTEST = [DATASET_LIST[6], DATASET_LIST[19], DATASET_LIST[51]]
 
 
