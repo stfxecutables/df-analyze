@@ -254,7 +254,8 @@ __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in A
 TEST_DATASETS: dict[str, TestDataset] = dict(
     sorted(__UNSORTED, key=lambda p: p[1].load().shape[0])
 )
-TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
+if "credit-approval_reproduced" in TEST_DATASETS:
+    TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
 
 INSPECTION_TIMES = {
     "KDD98": 68.49440933300002,
@@ -352,7 +353,9 @@ ALL_DATASETS = sorted(ALL_DATASETS, key=lambda d: str(d[0]).lower())
 DATASET_LIST = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
 
 # "cleveland", "heart-c", "cholesterol"
-FASTEST = [DATASET_LIST[6], DATASET_LIST[19], DATASET_LIST[51]]
+FASTEST = []
+if len(DATASET_LIST) > 51:
+    FASTEST = [DATASET_LIST[6], DATASET_LIST[19], DATASET_LIST[51]]
 
 
 # https://stackoverflow.com/a/5409569
