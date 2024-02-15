@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pickle
+import traceback
 from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
@@ -249,13 +250,19 @@ def fake_data(
     return df_tr, df_test, target_tr, target_test
 
 
-__UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
+try:
+    __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
 
-TEST_DATASETS: dict[str, TestDataset] = dict(
-    sorted(__UNSORTED, key=lambda p: p[1].load().shape[0])
-)
-if "credit-approval_reproduced" in TEST_DATASETS:
-    TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
+    TEST_DATASETS: dict[str, TestDataset] = dict(
+        sorted(__UNSORTED, key=lambda p: p[1].load().shape[0])
+    )
+    if "credit-approval_reproduced" in TEST_DATASETS:
+        TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
+except Exception as e:
+    traceback.print_exc()
+    print(f"Got error: {e}")
+    __UNSORTED = []
+    TEST_DATASETS = {}
 
 INSPECTION_TIMES = {
     "KDD98": 68.49440933300002,
