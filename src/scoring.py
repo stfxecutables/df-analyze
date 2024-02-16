@@ -136,7 +136,10 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
 
 accuracy_scorer = make_scorer(accuracy_score)
 auc_scorer = make_scorer(
-    silent_scorer(roc_auc_score), needs_proba=True, multi_class="ovr", average="macro"
+    silent_scorer(roc_auc_score),
+    response_method="predict",
+    multi_class="ovr",
+    average="macro",
 )
 sensitivity_scorer = make_scorer(sensitivity)
 specificity_scorer = make_scorer(specificity)
