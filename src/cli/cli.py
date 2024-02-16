@@ -1006,6 +1006,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     # parser = ArgumentParser(description=DESC)
     parser = make_parser()
     cli_args = parse_and_merge_args(parser, args)
+    mode = str(cli_args.mode).lower()
+    is_cls = True if "class" in mode else False
     cats = set(cli_args.categoricals)
     ords = set(cli_args.ordinals)
     for cat in cats:
@@ -1040,7 +1042,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_assoc_cat_reg=CatRegStats.from_arg(cli_args.filter_assoc_cat_regress),
         filter_pred_cls_score=ClsScore.from_arg(cli_args.filter_pred_classify),
         filter_pred_reg_score=RegScore.from_arg(cli_args.filter_pred_regress),
-        is_classification=cli_args.mode,
+        is_classification=is_cls,
         classifiers=DfAnalyzeClassifier.from_args(cli_args.classifiers),
         regressors=DfAnalyzeRegressor.from_args(cli_args.regressors),
         # htune=cli_args.htune,
