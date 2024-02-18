@@ -1019,8 +1019,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
             )
             ords.remove(cat)
 
-    classifiers = DfAnalyzeClassifier.from_args(cli_args.classifiers)
-    regressors = DfAnalyzeRegressor.from_args(cli_args.regressors)
+    classifiers = set(DfAnalyzeClassifier.from_args(cli_args.classifiers))
+    regressors = set(DfAnalyzeRegressor.from_args(cli_args.regressors))
     if DfAnalyzeClassifier.SVM in classifiers:
         warn(
             "Found `svm` classifier as a specified model. SVMs are at the "
@@ -1029,9 +1029,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
             "will not appear in final results."
         )
 
-        classifiers = set(classifiers)
         classifiers.discard(DfAnalyzeClassifier.SVM)
-        classifiers = tuple(sorted(classifiers))
     if DfAnalyzeRegressor.SVM in regressors:
         warn(
             "Found `svm` regressor as a specified model. SVMs are at the "
@@ -1040,9 +1038,15 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
             "will not appear in final results."
         )
 
-        regressors = set(regressors)
         regressors.discard(DfAnalyzeRegressor.SVM)
-        regressors = tuple(sorted(regressors))
+
+    if DfAnalyzeClassifier.Dummy not in classifiers:
+        classifiers.add(DfAnalyzeClassifier.Dummy)
+    if DfAnalyzeRegressor.Dummy not in regressors:
+        regressors.add(DfAnalyzeRegressor.Dummy)
+
+    classifiers = tuple(sorted(classifiers))
+    regressors = tuple(sorted(regressors))
 
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
