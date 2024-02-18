@@ -8,34 +8,10 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-import os
 import re
 import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
+from argparse import ArgumentParser
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
-
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
 
 
 def load_log_text() -> tuple[str, Path]:
@@ -48,23 +24,47 @@ def load_log_text() -> tuple[str, Path]:
     return text, outfile
 
 
-def clean_text(text: str) -> str:
+def remove_warnings(lines: list[str]) -> list[str]:
     regs = [
-        r"\|[ ▏▎▍▌▋▊▉█▏████████████████]+\|",
-        "Best trial",
+        "UserWarning: The verbose",
         "is deprecated",
         "FutureWarning",
         r"warnings.warn\(",
-        "__UNSORTED",  # hack for loading bug
     ]
-
-    lines = text.split("\n")
-    cleaned = []
+    precleaned = []
     for line in lines:
         matches = [re.search(reg, line) is not None for reg in regs]
         if any(matches):
             continue
+        precleaned.append(line)
+    return precleaned
+
+
+def clean_text(text: str) -> str:
+    regs = [
+        r"\|[ ▏▎▍▌▋▊▉█▏████████████████]+\|",
+        "Best trial",
+        "__UNSORTED",  # hack for loading bug
+    ]
+    lines = text.split("\n")
+    lines = [line.strip() for line in lines]
+    lines = [line for line in lines if line != ""]
+
+    precleaned = remove_warnings(lines)
+
+    cleaned = []
+    for i, line in enumerate(precleaned[:-1]):
+        is_header = re.search("Tuning .* for selection=", line) is not None
+        nxt_header = re.search("Tuning .* for selection=", precleaned[i + 1]) is not None
+        if is_header or nxt_header:
+            cleaned.append(line)
+            continue
+
+        matches = [re.search(reg, line) is not None for reg in regs]
+        if any(matches):
+            continue
         cleaned.append(line)
+    cleaned.append(lines[-1])
     cleaned = [line for line in cleaned if line != ""]
     clean = "\n".join(cleaned)
     return clean
