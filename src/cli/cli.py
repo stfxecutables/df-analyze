@@ -1019,6 +1019,31 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
             )
             ords.remove(cat)
 
+    classifiers = DfAnalyzeClassifier.from_args(cli_args.classifiers)
+    regressors = DfAnalyzeRegressor.from_args(cli_args.regressors)
+    if DfAnalyzeClassifier.SVM in classifiers:
+        warn(
+            "Found `svm` classifier as a specified model. SVMs are at the "
+            "moment too computationally-expensive on most datasets. This "
+            "model has been disabled and performance metrics for this model "
+            "will not appear in final results."
+        )
+
+        classifiers = set(classifiers)
+        classifiers.discard(DfAnalyzeClassifier.SVM)
+        classifiers = tuple(sorted(classifiers))
+    if DfAnalyzeRegressor.SVM in regressors:
+        warn(
+            "Found `svm` regressor as a specified model. SVMs are at the "
+            "moment too computationally-expensive on most datasets. This "
+            "model has been disabled and performance metrics for this model "
+            "will not appear in final results."
+        )
+
+        regressors = set(regressors)
+        regressors.discard(DfAnalyzeRegressor.SVM)
+        regressors = tuple(sorted(regressors))
+
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
@@ -1043,8 +1068,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_pred_cls_score=ClsScore.from_arg(cli_args.filter_pred_classify),
         filter_pred_reg_score=RegScore.from_arg(cli_args.filter_pred_regress),
         is_classification=is_cls,
-        classifiers=DfAnalyzeClassifier.from_args(cli_args.classifiers),
-        regressors=DfAnalyzeRegressor.from_args(cli_args.regressors),
+        classifiers=classifiers,
+        regressors=regressors,
         # htune=cli_args.htune,
         # htune_val=cli_args.htune_val,
         # htune_val_size=cli_args.htune_val_size,
