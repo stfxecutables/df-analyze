@@ -74,7 +74,7 @@ SCRIPT = """
 PROJECT=$SCRATCH/df-analyze
 cd "$PROJECT" || exit 1
 
-bash run_python_with_home.sh df-analyze.py --spreadsheet {sheet} --outdir {outdir}
+bash run_python_with_home.sh df-analyze.py --spreadsheet "{sheet}" --outdir "{outdir}"
 """
 
 
