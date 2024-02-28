@@ -107,6 +107,7 @@ a compatible Python version installed on your machine.
 
 This project uses Poetry to manage dependencies, so if you want to reproduce
 the results you should [install Poetry](https://python-poetry.org/docs/).
+The project currently requires python 3.9 or python 3.10 to be installed.
 After installing Poetry, clone this repo:
 
 ```shell
@@ -117,11 +118,24 @@ cd df-analyze
 Then you can install dependencies and activate the venv with:
 
 ```shell
-poetry install  # setup environment
+poetry config virtualenvs.in-project true
+poetry install --no-root  # setup virtual environment in project
 poetry shell  # activate venv
 ```
 
-The project currently requires python 3.9 or python 3.10 to be installed.
+You will see a lot of warnings spam of the form:
+
+```txt
+Resolving dependencies... (47.1s)Source (pytorch): Authorization error
+```
+
+These can be ignored and is due to a hack to get PyTorch to install on
+different operating systems.
+
+While not strictly necessary, the setting the virtual environments to be
+in-project can prevent some permission issues or issues with Poetry choosing
+a bad default location on some machines and/or Compute Canada.
+
 
 ### Installing a Compatible Python Version
 
@@ -189,6 +203,7 @@ python df-analyze.py \
     --df=data/small_classifier_data.json \
     --outdir=./demo_results \
     --mode=classify \
+    --target target \
     --classifiers knn lgbm rf lr sgd mlp dummy \
     --embed-select none linear lgbm \
     --feat-select wrap filter embed
