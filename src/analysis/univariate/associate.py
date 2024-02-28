@@ -448,7 +448,8 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
         "W": W,
         "W_p": W_p,
         "cohen_d": cohens_d(g0, g1),
-        "AUROC": auroc(x, idx_level.astype(int)),
+        # copies below to maybe avoid an odd WRITABLE bug...
+        "AUROC": auroc(x.copy(), idx_level.astype(int).copy()),
         "corr": r,
         "corr_p": r_p,
         "mut_info": minfo_cat(x.to_frame(), y_bin),
