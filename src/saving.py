@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from hashlib import md5
 from pathlib import Path
+from platform import system
 from shutil import rmtree
 from tempfile import gettempprefix, mkdtemp
 from typing import (
@@ -118,6 +119,8 @@ class ProgramDirs(Debug):
 
             needs_clean = False
             outdir = root or Path.home().resolve() / "df-analyze-outputs"
+            if system().lower() == "windows":
+                return outdir, needs_clean
 
             if not os.access(outdir, os.W_OK):
                 new = Path.cwd().resolve() / "df-analyze-outputs"
