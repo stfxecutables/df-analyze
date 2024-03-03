@@ -228,7 +228,9 @@ class InferredKind(Enum):
 
 
 class Inference:
-    def __init__(self, kind: InferredKind = InferredKind.NoInference, reason: str = "") -> None:
+    def __init__(
+        self, kind: InferredKind = InferredKind.NoInference, reason: str = ""
+    ) -> None:
         self.kind = kind
         self.reason = reason
 
@@ -373,9 +375,11 @@ def infer_identifier(series: Series) -> Inference:
 
     cnts = np.unique(series.apply(str), return_counts=True)[1]
     if np.all(cnts == 1):  # obvious case
-        return Inference(InferredKind.CertainId, "All values including possible NaNs are unique")
+        return Inference(
+            InferredKind.CertainId, "All values including possible NaNs are unique"
+        )
 
-    dropped = series.dropna()
+    dropped = series.dropna().apply(str)
     if len(dropped) < 0.5 * len(series):
         # seems unlikely only half of data would have identifier info?
         return Inference()
@@ -388,7 +392,8 @@ def infer_identifier(series: Series) -> Inference:
         if converts_to_int(dropped):
             return Inference()
         return Inference(
-            InferredKind.MaybeId, "More unique values than one half of number of non-NaN samples"
+            InferredKind.MaybeId,
+            "More unique values than one half of number of non-NaN samples",
         )
 
     return Inference()
@@ -536,19 +541,25 @@ def infer_ordinal(series: Series) -> Inference:
     unq_diffs = np.unique(diffs)
     if len(unq_diffs) == 1:
         if vmin == 0 and vmax == 1:
-            return Inference(InferredKind.CertainOrd, f"Binary {{{vmin}, {vmax}}} indicator")
-        return Inference(InferredKind.MaybeOrd, f"Increasing integers in [{vmin}, {vmax}]")
+            return Inference(
+                InferredKind.CertainOrd, f"Binary {{{vmin}, {vmax}}} indicator"
+            )
+        return Inference(
+            InferredKind.MaybeOrd, f"Increasing integers in [{vmin}, {vmax}]"
+        )
 
     # Small chance remains that we are missing some level(s) of an ordinal, so
     # that we have all values in [0, ..., N] except for a couple, making some
     # diffs on the sorted unique values greater than 1.
     if np.mean(diffs == 1) >= 0.8:
         return Inference(
-            InferredKind.MaybeOrd, r"80% or more of unique integer values differ only by 1"
+            InferredKind.MaybeOrd,
+            r"80% or more of unique integer values differ only by 1",
         )
     if len(unq_ints) / (vmax - vmin) >= 0.8:
         return Inference(
-            InferredKind.MaybeOrd, f"80% or more of values in [{vmin}, {vmax}] are sampled"
+            InferredKind.MaybeOrd,
+            f"80% or more of values in [{vmin}, {vmax}] are sampled",
         )
 
     # Here, we just heuristically probably want to warn the user for some
@@ -561,12 +572,15 @@ def infer_ordinal(series: Series) -> Inference:
         )
     if imax in [5, 7]:
         return Inference(
-            InferredKind.MaybeOrd, f"Largest int is a common Likert-type scale value: {imax}"
+            InferredKind.MaybeOrd,
+            f"Largest int is a common Likert-type scale value: {imax}",
         )
 
     # The 9, 10 cases below are extremely unlikely
     if imax in [10, 100]:
-        return Inference(InferredKind.MaybeOrd, f"Largest int is a common scale max: {imax}")
+        return Inference(
+            InferredKind.MaybeOrd, f"Largest int is a common scale max: {imax}"
+        )
 
     if imax in [9, 99]:
         return Inference(
