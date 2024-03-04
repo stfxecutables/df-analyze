@@ -117,16 +117,20 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
 
     try:
         if y_prob.ndim == 1:
-            y_prob = np.stack([y_prob, 1 - y_prob], axis=1)
+            # y_prob = np.stack([y_prob, 1 - y_prob], axis=1)
+            y_prob = y_prob.reshape(-1, 1)
         # if y_prob.shape[1] == 2:
         #     y_prob = y_prob[:, 1].reshape(-1, 1)
         raw = float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
 
     except Exception as e:
+        idx = np.random.permutation(len(y_true))[:20]
+        yt = y_true.iloc[idx]
+        yp = y_prob[idx]
         warn(
             "Could not compute AUROC for given inputs:\n"
-            f"y_true: {type(y_true)} shape={y_true.shape}\n{y_true}\n"
-            f"y_prob: {type(y_prob)} shape={y_prob.shape}\n{y_prob}\n"
+            f"y_true: {type(y_true)} shape={y_true.shape}\n{yt}\n"
+            f"y_prob: {type(y_prob)} shape={y_prob.shape}\n{yp}\n"
             f"Details:\n{e}"
         )
         return 0.5
@@ -136,10 +140,11 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
 
 accuracy_scorer = make_scorer(accuracy_score)
 auc_scorer = make_scorer(
-    silent_scorer(roc_auc_score),
-    response_method="predict",
-    multi_class="ovr",
-    average="macro",
+    # silent_scorer(roc_auc_score),
+    silent_scorer(robust_auroc_score),
+    response_method="predict_proba",
+    # multi_class="ovr",
+    # average="macro",
 )
 sensitivity_scorer = make_scorer(sensitivity)
 specificity_scorer = make_scorer(specificity)

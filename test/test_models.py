@@ -9,8 +9,9 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import logging
 import sys
+from copy import deepcopy
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -95,12 +96,14 @@ def check_basics(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) ->
     model.score(X_test, y_test)
 
 
-def check_optuna_tune(
-    model: DfAnalyzeModel, mode: Literal["classify", "regress"]
-) -> tuple[float, Optional[ndarray]]:
+def check_optuna_tune_metric(
+    model: DfAnalyzeModel,
+    mode: Literal["classify", "regress"],
+    metric: Union[ClassifierScorer, RegressorScorer],
+) -> tuple[float, ndarray | None]:
     X_tr, X_test, y_tr, y_test = fake_data(mode)
-    is_cls = model.is_classifier
-    metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
+    # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
+    model = deepcopy(model)
     study = model.htune_optuna(
         X_train=X_tr,
         y_train=y_tr,
@@ -115,6 +118,17 @@ def check_optuna_tune(
         probs = model.predict_proba(X_test)
         return score, probs
     return score, None
+
+
+def check_optuna_tune(
+    model: DfAnalyzeModel,
+    mode: Literal["classify", "regress"],
+) -> None:
+    is_cls = model.is_classifier
+    metrics = ClassifierScorer if is_cls else RegressorScorer
+    # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
+    for metric in metrics:
+        check_optuna_tune_metric(model=model, mode=mode, metric=metric)
 
 
 @pytest.mark.fast

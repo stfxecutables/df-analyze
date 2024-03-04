@@ -439,6 +439,23 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
     W, W_p = W_res.statistic, W_res.pvalue
     r_res = pearsonr(x, y_bin)
     r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
+    try:
+        # copy is needed to prevent a strange error:
+        # ValueError: cannot set WRITEABLE flag to True of this array
+        auc = auroc(x.copy(), idx_level.astype(int).copy())
+    except Exception as e:
+        print(f"Got error:\n{e}")
+        traceback.print_exc()
+        auc = np.nan
+
+    try:
+        # copy is needed to prevent a strange error:
+        # ValueError: cannot set WRITEABLE flag to True of this array
+        minfo = minfo_cat(x.to_frame().copy(), y_bin)
+    except Exception as e:
+        print(f"Got error:\n{e}")
+        traceback.print_exc()
+        minfo = np.nan
 
     data = {
         "t": t,
@@ -449,10 +466,10 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
         "W_p": W_p,
         "cohen_d": cohens_d(g0, g1),
         # copies below to maybe avoid an odd WRITABLE bug...
-        "AUROC": auroc(x.copy(), idx_level.astype(int).copy()),
+        "AUROC": auc,
         "corr": r,
         "corr_p": r_p,
-        "mut_info": minfo_cat(x.to_frame(), y_bin),
+        "mut_info": minfo,
     }
 
     return DataFrame(

@@ -32,6 +32,16 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Debug Student Sheet CSV",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--spreadsheet=data/buggy_sheet.csv"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
       "name": "df-analyze CLI",
       "type": "debugpy",
       "request": "launch",
