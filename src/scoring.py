@@ -117,7 +117,8 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
 
     try:
         if y_prob.ndim == 1:
-            y_prob = np.stack([y_prob, 1 - y_prob], axis=1)
+            # y_prob = np.stack([y_prob, 1 - y_prob], axis=1)
+            y_prob = y_prob.reshape(-1, 1)
         # if y_prob.shape[1] == 2:
         #     y_prob = y_prob[:, 1].reshape(-1, 1)
         raw = float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
@@ -141,7 +142,7 @@ accuracy_scorer = make_scorer(accuracy_score)
 auc_scorer = make_scorer(
     # silent_scorer(roc_auc_score),
     silent_scorer(robust_auroc_score),
-    response_method="predict",
+    response_method="predict_proba",
     # multi_class="ovr",
     # average="macro",
 )
