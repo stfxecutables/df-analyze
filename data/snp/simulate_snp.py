@@ -219,7 +219,7 @@ def simulate_snp_data(
     n_feat = 0
     n_pred = 0
     attempts = 0
-    pbar = tqdm(total=1000, desc="Generating data...")
+    pbar = tqdm(desc="Generating data")
     while n_pred < n_predictive_sets:
         try:
             df, y = make_snp_set_x(
@@ -243,6 +243,7 @@ def simulate_snp_data(
             if attempts > 1000:
                 pbar.close()
                 raise RuntimeError("Could not generate data") from e
+    pbar.close()
 
     df_pred = pd.concat(dfs, axis=1)
     if len(ys) > 1:
