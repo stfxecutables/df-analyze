@@ -273,7 +273,7 @@ def test_feature_elim(
     df = df.iloc[:, np.random.permutation(df.shape[1])]
     df[:] = MinMaxScaler().fit_transform(df.values)
     opts = ProgramOptions.random(ds=None, outdir=DATA / "selection")
-    opts.wrapper_model = WrapperSelectionModel.LGBM
+    opts.wrapper_model = WrapperSelectionModel.KNN
     opts.wrapper_select = WrapperSelection.StepUp
 
     ss = StratifiedShuffleSplit(n_splits=1, test_size=0.5)
