@@ -123,7 +123,7 @@ class StepwiseSelector:
         else:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
-        scores: list[tuple[float, int]] = Parallel()(
+        scores: list[tuple[float, int]] = Parallel(n_jobs=-1)(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
