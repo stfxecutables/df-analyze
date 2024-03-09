@@ -352,7 +352,7 @@ def test_feature_elim(
         f"StepUp Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}"
     )
     print(
-        f"StepUp True Predictive Features Tagegd: {n_tagged} / {n_true} ({n_tagged / n_true})"
+        f"StepUp True Predictive Features Tagged: {n_tagged} / {df_pred.shape[1]} ({n_tagged / df_pred.shape[1]})"
     )
 
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
@@ -401,7 +401,7 @@ def test_feature_elim(
     )
     print(f"LGBM Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}")
     print(
-        f"StepUp True Predictive Features Tagegd: {n_tagged} / {n_true} ({n_tagged / n_true})"
+        f"LGBM True Predictive Features Tagged: {n_tagged} / {df_pred.shape[1]} ({n_tagged / df_pred.shape[1]})"
     )
 
     # ss = StratifiedKFold(n_splits=3)
