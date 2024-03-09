@@ -317,56 +317,68 @@ def test_feature_elim(
     selector.fit()
     selector.scores
 
-    # NOTE
-    #
-    # LASSO (L1 regularized LR-CV), and Relief (MultiSURF) methods fail
-    # beyond horribly here, they fail to select true features. LightGBM and
-    # RidgeClassifierCV do though.
-
-    # ss = StratifiedKFold(n_splits=3)
-    # importances = np.zeros(shape=[df.shape[1]], dtype=np.uint64)
-    # for idx_tr, idx_ts in tqdm(ss.split(y_tr, y_tr), desc="Fitting k-fold LGBM"):
-    #     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
-    #     model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
-    #     importances = importances + model.feature_importances_
-
-    # idx = importances > 0
-    # selected = df.loc[:, idx].columns.to_list()
-    # n_true = len([s for s in selected if "_" in s])
-    # n_phony = len(selected) - n_true
-    # n_possible = df_pred.shape[1]
-    # print(
-    #     f"LGBM: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
-    # )
-    # print(
-    #     f"LGBM: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
-    # )
-
-    ss = StratifiedKFold(n_splits=3)
-    importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
-    for idx_tr, idx_ts in tqdm(
-        ss.split(y_tr, y_tr), desc="Fitting k-fold RidgeClassifer-cv"
-    ):
-        model = RidgeClassifierCV(
-            alphas=[0.1, 1.0, 5.0, 10.0, 50.0, 100.0],
-            cv=3,
-        )
-        model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
-        importances = importances + model.coef_
-
-    p = 100 * (1 - 500 / n_snp)  # min 500 features
-    imin = np.percentile(importances.ravel(), p)
-    idx = np.abs(importances) > imin
-    selected = df.loc[:, np.ravel(idx)].columns.to_list()
+    selected = df.loc[:, np.ravel(selector.support_)].columns.to_list()
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
     print(
-        f"Ridge: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
+        f"StepUp: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
     )
     print(
-        f"Ridge: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
+        f"StepUp: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
     )
+    print(f"StepUp scores: {selector.scores}")
+
+    NOTE
+
+    # LASSO (L1 regularized LR-CV), and Relief (MultiSURF) methods fail
+    # beyond horribly here, they fail to select true features. LightGBM and
+    # RidgeClassifierCV do though.
+
+    ss = StratifiedKFold(n_splits=3)
+    importances = np.zeros(shape=[df.shape[1]], dtype=np.uint64)
+    for idx_tr, idx_ts in tqdm(ss.split(y_tr, y_tr), desc="Fitting k-fold LGBM"):
+        model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
+        model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
+        importances = importances + model.feature_importances_
+
+    idx = importances > 0
+    selected = df.loc[:, idx].columns.to_list()
+    n_true = len([s for s in selected if "_" in s])
+    n_phony = len(selected) - n_true
+    n_possible = df_pred.shape[1]
+    print(
+        f"LGBM: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
+    )
+    print(
+        f"LGBM: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
+    )
+
+    # ss = StratifiedKFold(n_splits=3)
+    # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
+    # for idx_tr, idx_ts in tqdm(
+    #     ss.split(y_tr, y_tr), desc="Fitting k-fold RidgeClassifer-cv"
+    # ):
+    #     model = RidgeClassifierCV(
+    #         alphas=[0.1, 1.0, 5.0, 10.0, 50.0, 100.0],
+    #         cv=3,
+    #     )
+    #     model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
+    #     importances = importances + model.coef_
+
+    # p = 100 * (1 - 500 / n_snp)  # min 500 features
+    # imin = np.percentile(importances.ravel(), p)
+    # idx = np.abs(importances) > imin
+    # selected = df.loc[:, np.ravel(idx)].columns.to_list()
+    # n_true = len([s for s in selected if "_" in s])
+    # n_phony = len(selected) - n_true
+    # n_possible = df_pred.shape[1]
+    # print(
+    #     f"Ridge: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
+    # )
+    # print(
+    #     f"Ridge: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
+    # )
 
 
 def test_simulated_data(
@@ -476,7 +488,8 @@ def test_simulated_data(
 if __name__ == "__main__":
     ...
     N = 2000
-    P = 30_000
+    # P = 30_000
+    P = 2000
     # test_simulated_data(
     #     n_samples=N,
     #     n_snp=P,
