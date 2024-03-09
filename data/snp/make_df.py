@@ -329,8 +329,7 @@ def test_feature_elim(
     )
     print(f"StepUp scores: {selector.scores}")
 
-    NOTE
-
+    # NOTE
     # LASSO (L1 regularized LR-CV), and Relief (MultiSURF) methods fail
     # beyond horribly here, they fail to select true features. LightGBM and
     # RidgeClassifierCV do though.
