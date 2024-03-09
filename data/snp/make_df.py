@@ -343,6 +343,9 @@ def test_feature_elim(
     print(
         f"StepUp Selected feature Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
     )
+    print(
+        f"StepUp Selected Features with Cramer V > 0.95: {(np.abs(corrs) >= 0.95).sum()}"
+    )
 
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
     model.fit(X_tr.loc[:, selected], y_tr)
@@ -384,6 +387,7 @@ def test_feature_elim(
     print(
         f"LGBM Selected Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
     )
+    print(f"LGBM Selected Features with Cramer V > 0.95: {(np.abs(corrs) >= 0.95).sum()}")
 
     # ss = StratifiedKFold(n_splits=3)
     # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
