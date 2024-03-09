@@ -273,7 +273,7 @@ def test_feature_elim(
     df = df.iloc[:, np.random.permutation(df.shape[1])]
     df[:] = MinMaxScaler().fit_transform(df.values)
     opts = ProgramOptions.random(ds=None, outdir=DATA / "selection")
-    opts.wrapper_model = WrapperSelectionModel.Linear
+    opts.wrapper_model = WrapperSelectionModel.LGBM
     opts.wrapper_select = WrapperSelection.StepUp
 
     ss = StratifiedShuffleSplit(n_splits=1, test_size=0.5)
@@ -330,6 +330,8 @@ def test_feature_elim(
         f"StepUp: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
     )
     print(f"StepUp scores: {selector.scores}")
+
+    print(f"StepUp Test performance:")
 
     # NOTE
     # LASSO (L1 regularized LR-CV), and Relief (MultiSURF) methods fail
