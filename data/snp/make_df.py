@@ -51,6 +51,7 @@ from tqdm import tqdm
 from typing_extensions import Literal
 
 from data.snp.simulate_snp import simulate_snp_data
+from src.analysis.metrics import cramer_v
 from src.cli.cli import ProgramOptions
 from src.enumerables import ClassifierScorer, WrapperSelection, WrapperSelectionModel
 from src.models.dummy import DummyClassifier
@@ -322,9 +323,16 @@ def test_feature_elim(
     selector.scores
 
     selected = df.loc[:, np.ravel(selector.support_)].columns.to_list()
+    phonies = [s for s in selected if "_" not in s]
+    corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
+    for i, phony in enumerate(phonies):
+        for j, predcol in enumerate(df_pred.columns):
+            corrs[i, j] = cramer_v(df[phony], df_pred[predcol])
+
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
+
     print(
         f"StepUp: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
     )
@@ -332,6 +340,9 @@ def test_feature_elim(
         f"StepUp: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
     )
     print(f"StepUp scores: {selector.scores}")
+    print(
+        f"StepUp Selected feature Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
+    )
 
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
     model.fit(X_tr.loc[:, selected], y_tr)
@@ -352,6 +363,11 @@ def test_feature_elim(
 
     idx = importances > 0
     selected = df.loc[:, idx].columns.to_list()
+    phonies = [s for s in selected if "_" not in s]
+    corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
+    for i, phony in enumerate(phonies):
+        for j, predcol in enumerate(df_pred.columns):
+            corrs[i, j] = cramer_v(df[phony], df_pred[predcol])
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
@@ -365,6 +381,9 @@ def test_feature_elim(
     model.fit(X_tr.loc[:, selected], y_tr)
     score = model.score(X_ts.loc[:, selected], y_ts)
     print(f"LGBM Selection Test performance: {score}")
+    print(
+        f"LGBM Selected Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
+    )
 
     # ss = StratifiedKFold(n_splits=3)
     # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
