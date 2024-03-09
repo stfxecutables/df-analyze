@@ -287,6 +287,21 @@ def test_feature_elim(
         y.iloc[idx_tr],
         y.iloc[idx_ts],
     )
+    y_corrs = Series([cramer_v(X_tr[col], y_tr) for col in X_tr.columns])
+    print("Distribution of Cramer V's of Training Data:")
+    ps = [2.5, 5.0, 10, 25, 75, 90, 95, 97.5]
+    print(y_corrs.describe(percentiles=np.array(ps) / 100))
+    # true_corrs = y_corrs.iloc[df.columns.isin(df_pred.columns)]
+    keep = y_corrs > 0.5
+    print(f"Dropping {(~keep).sum()} features due to Cramer V <= 0.5")
+    X_tr = X_tr.loc[:, keep.to_numpy()]
+    X_ts = X_ts.loc[:, keep.to_numpy()]
+    n_true_sel = X_tr.columns.isin(df_pred.columns).sum()
+    n_true_rej = df_pred.shape[1] - n_true_sel
+    r = n_true_sel / df_pred.shape[1]
+    print(
+        f"Cramer V Filtering Kept {n_true_sel} / {df_pred.shape[1]} ({r}) [{n_true_rej} predictive features rejected]"
+    )
 
     unqs, cnts = np.unique(y_tr, return_counts=True)
     info = PreparationInfo(
