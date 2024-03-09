@@ -267,13 +267,15 @@ def test_feature_elim(
         min_variant_samples=min_variant_samples,
     )
     print("done")
-    # normalize for ridge regression
-    df = df.astype(np.float64)
     # shuffle feature orders to prevent first-feature advantage in algorithms
     df = df.iloc[:, np.random.permutation(df.shape[1])]
-    df[:] = MinMaxScaler().fit_transform(df.values)
+
+    # normalize for ridge regression
+    # df = df.astype(np.float64)
+    # df[:] = MinMaxScaler().fit_transform(df.values)
+
     opts = ProgramOptions.random(ds=None, outdir=DATA / "selection")
-    opts.wrapper_model = WrapperSelectionModel.KNN
+    opts.wrapper_model = WrapperSelectionModel.Linear
     opts.wrapper_select = WrapperSelection.StepUp
 
     ss = StratifiedShuffleSplit(n_splits=1, test_size=0.5)
@@ -331,7 +333,10 @@ def test_feature_elim(
     )
     print(f"StepUp scores: {selector.scores}")
 
-    print(f"StepUp Test performance:")
+    model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
+    model.fit(X_tr.loc[:, selected], y_tr)
+    score = model.score(X_ts.loc[:, selected], y_ts)
+    print(f"StepUp Selection Test performance: {score}")
 
     # NOTE
     # LASSO (L1 regularized LR-CV), and Relief (MultiSURF) methods fail
@@ -356,6 +361,10 @@ def test_feature_elim(
     print(
         f"LGBM: True / phony selected: {n_true} / {n_phony} ({n_true / len(selected):0.4f})"
     )
+    model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
+    model.fit(X_tr.loc[:, selected], y_tr)
+    score = model.score(X_ts.loc[:, selected], y_ts)
+    print(f"LGBM Selection Test performance: {score}")
 
     # ss = StratifiedKFold(n_splits=3)
     # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
