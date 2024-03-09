@@ -83,6 +83,7 @@ class StepwiseSelector:
             total=self.n_iterations,  # type: ignore
             desc=f"{ddesc} feature selection: ",
             leave=True,
+            position=0,
         ):  # type: ignore
             new_feature_idx, score = self._get_best_new_feature()
             self.selection_idx[new_feature_idx] = True
@@ -131,7 +132,12 @@ class StepwiseSelector:
                 feature_idx=feature_idx,
                 is_forward=self.is_forward,
             )
-            for feature_idx in candidate_idx
+            for feature_idx in tqdm(
+                candidate_idx,
+                total=len(candidate_idx),
+                desc="Getting best new feature",
+                position=1,
+            )
         )
         # scores_dict = {idx: score for score, idx in scores}
         # feature_idx = max(scores_dict, key=lambda feature_idx: scores_dict[feature_idx])
