@@ -332,6 +332,7 @@ def test_feature_elim(
             corrs[i, j] = corr
             if abs(corr) > 0.9:
                 tagged.add(predcol)
+    corrs = np.max(corrs, axis=0)  # largest correlations with predictors
 
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
@@ -383,6 +384,8 @@ def test_feature_elim(
             corrs[i, j] = corr
             if abs(corr) > 0.9:
                 tagged.add(predcol)
+    corrs = np.max(corrs, axis=0)  # largest correlations with predictors
+
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
