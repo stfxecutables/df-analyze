@@ -337,7 +337,7 @@ def test_feature_elim(
     selector.fit()
     selector.scores
 
-    selected = df.loc[:, np.ravel(selector.support_)].columns.to_list()
+    selected = X_tr.loc[:, np.ravel(selector.support_)].columns.to_list()
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
     tagged = set()
@@ -389,7 +389,7 @@ def test_feature_elim(
         importances = importances + model.feature_importances_
 
     idx = importances > 0
-    selected = df.loc[:, idx].columns.to_list()
+    selected = X_tr.loc[:, idx].columns.to_list()
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
     tagged = set()
