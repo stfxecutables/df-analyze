@@ -325,13 +325,18 @@ def test_feature_elim(
     selected = df.loc[:, np.ravel(selector.support_)].columns.to_list()
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
+    tagged = set()
     for i, phony in enumerate(phonies):
         for j, predcol in enumerate(df_pred.columns):
-            corrs[i, j] = cramer_v(df[phony], df_pred[predcol])
+            corr = cramer_v(df[phony], df_pred[predcol])
+            corrs[i, j] = corr
+            if abs(corr) > 0.9:
+                tagged.add(predcol)
 
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
+    n_tagged = len(tagged)
 
     print(
         f"StepUp: True features selected: {n_true} / {n_possible} ({n_true / n_possible:0.4f})"
@@ -345,6 +350,9 @@ def test_feature_elim(
     )
     print(
         f"StepUp Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}"
+    )
+    print(
+        f"StepUp True Predictive Features Tagegd: {n_tagged} / {n_true} ({n_tagged / n_true})"
     )
 
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
@@ -368,9 +376,13 @@ def test_feature_elim(
     selected = df.loc[:, idx].columns.to_list()
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
+    tagged = set()
     for i, phony in enumerate(phonies):
         for j, predcol in enumerate(df_pred.columns):
-            corrs[i, j] = cramer_v(df[phony], df_pred[predcol])
+            corr = cramer_v(df[phony], df_pred[predcol])
+            corrs[i, j] = corr
+            if abs(corr) > 0.9:
+                tagged.add(predcol)
     n_true = len([s for s in selected if "_" in s])
     n_phony = len(selected) - n_true
     n_possible = df_pred.shape[1]
@@ -388,6 +400,9 @@ def test_feature_elim(
         f"LGBM Selected Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
     )
     print(f"LGBM Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}")
+    print(
+        f"StepUp True Predictive Features Tagegd: {n_tagged} / {n_true} ({n_tagged / n_true})"
+    )
 
     # ss = StratifiedKFold(n_splits=3)
     # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
