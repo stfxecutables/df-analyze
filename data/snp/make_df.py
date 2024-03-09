@@ -268,6 +268,7 @@ def test_feature_elim(
     )
     print("done")
     # normalize for ridge regression
+    df = df.astype(np.float64)
     df[:] = MinMaxScaler().fit_transform(df.values)
     opts = ProgramOptions.random(ds=None, outdir=DATA / "selection")
     opts.wrapper_model = WrapperSelectionModel.Linear
