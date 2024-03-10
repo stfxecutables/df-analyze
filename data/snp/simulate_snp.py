@@ -165,10 +165,10 @@ def make_snp_set_x(
     n_predictive_combinations = max(1, n_predictive_combinations)
     pmin = predictive_set_min_size
     pmax = predictive_set_max_size
-    P = np.random.randint(pmin, pmax + 1)  # number of features
     count = 0
     MAX_N_ITER = 50
     while count < MAX_N_ITER:
+        P = np.random.randint(pmin, pmax + 1)  # number of features
         df, y_raw = random_feature_set(
             n_samples=n_samples,
             n_features=P,

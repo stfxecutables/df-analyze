@@ -292,8 +292,8 @@ def test_feature_elim(
     ps = [2.5, 5.0, 10, 25, 75, 90, 95, 97.5]
     print(y_corrs.describe(percentiles=np.array(ps) / 100))
     # true_corrs = y_corrs.iloc[df.columns.isin(df_pred.columns)]
-    keep = y_corrs > 0.5
-    print(f"Dropping {(~keep).sum()} features due to Cramer V <= 0.5")
+    keep = y_corrs > 0.3
+    print(f"Dropping {(~keep).sum()} features due to Cramer V <= 0.3")
     X_tr = X_tr.loc[:, keep.to_numpy()]
     X_ts = X_ts.loc[:, keep.to_numpy()]
     n_true_sel = X_tr.columns.isin(df_pred.columns).sum()
@@ -382,7 +382,7 @@ def test_feature_elim(
     # RidgeClassifierCV do though.
 
     ss = StratifiedKFold(n_splits=3)
-    importances = np.zeros(shape=[df.shape[1]], dtype=np.uint64)
+    importances = np.zeros(shape=[X_tr.shape[1]], dtype=np.uint64)
     for idx_tr, idx_ts in tqdm(ss.split(y_tr, y_tr), desc="Fitting k-fold LGBM"):
         model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
         model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
@@ -574,12 +574,12 @@ if __name__ == "__main__":
         test_feature_elim(
             n_samples=N,
             n_snp=P,
-            n_predictive_sets=np.random.randint(2, 4),
+            n_predictive_sets=1,
             predictive_set_min_size=3,
             predictive_set_max_size=20,
             min_n_variants=2,
             max_n_variants=8,
             predictiveness=0.9,
             n_predictive_combinations=np.random.randint(1, 4),
-            min_variant_samples=ceil(0.02 * N),
+            min_variant_samples=50,
         )
