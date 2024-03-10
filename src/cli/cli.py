@@ -151,7 +151,7 @@ class ProgramOptions(Debug):
 
     def __init__(
         self,
-        datapath: Path,
+        datapath: Optional[Path],
         target: str,
         categoricals: list[str],
         ordinals: list[str],
@@ -194,7 +194,7 @@ class ProgramOptions(Debug):
     ) -> None:
         # memoization-related
         # other
-        self.datapath: Path = self.validate_datapath(datapath)
+        self.datapath: Optional[Path] = self.validate_datapath(datapath)
         self.target: str = target
         self.categoricals: list[str] = categoricals
         self.ordinals: list[str] = ordinals
@@ -261,8 +261,14 @@ class ProgramOptions(Debug):
         return clses
 
     @staticmethod
-    def random(ds: TestDataset, outdir: Optional[Path] = None) -> ProgramOptions:
-        n_samples, n_feats = ds.shape
+    def random(
+        ds: Optional[TestDataset], outdir: Optional[Path] = None
+    ) -> ProgramOptions:
+        if ds is None:
+            is_cls = np.random.randint(0, 2, dtype=bool)
+        else:
+            n_samples, n_feats = ds.shape
+            is_cls = ds.is_classification
         # feat_clean = FeatureCleaning.random_n()
         feat_select = FeatureSelection.random_n()
         wrap_select = WrapperSelection.random()
@@ -279,7 +285,7 @@ class ProgramOptions(Debug):
         filter_assoc_cat_reg = CatRegStats.random()
         filter_pred_cls_score = ClsScore.random()
         filter_pred_reg_score = RegScore.random()
-        is_classification = ds.is_classification
+        is_classification = is_cls
         classifiers = DfAnalyzeClassifier.random_n()
         regressors = DfAnalyzeRegressor.random_n()
         # htune: bool = choice([True, False])
@@ -291,16 +297,18 @@ class ProgramOptions(Debug):
         # test_val: ValMethod = "kfold"
         test_val_size: Size = 0.4
         # mc_repeats: int = 0
-        sub = "classification" if ds.is_classification else "regression"
-        outdir = outdir or ((FULL_RESULTS / sub) / ds.dsname)
+        sub = "classification" if is_cls else "regression"
+        dsname = ds.dsname if ds is not None else "random_data"
+        outdir = outdir or ((FULL_RESULTS / sub) / dsname)
+        datapath = ds.datapath if ds is not None else None
         is_spreadsheet: bool = False
         separator: str = ","
         verbosity: Verbosity = Verbosity.ERROR
         no_warn_explosion: bool = False
         return ProgramOptions(
-            datapath=ds.datapath,
+            datapath=datapath,
             target="target",
-            categoricals=ds.categoricals,
+            categoricals=ds.categoricals if ds is not None else [],
             ordinals=[],
             drops=[],
             nan_handling=NanHandling.random(),
@@ -374,7 +382,9 @@ class ProgramOptions(Debug):
         print("To silence these warnings, use `--verbosity=0`.")
 
     @staticmethod
-    def validate_datapath(df_path: Path) -> Path:
+    def validate_datapath(df_path: Optional[Path]) -> Optional[Path]:
+        if df_path is None:
+            return None
         datapath = resolved_path(df_path)
         if not datapath.exists():
             raise FileNotFoundError(f"The specified file {datapath} does not exist.")
@@ -383,8 +393,8 @@ class ProgramOptions(Debug):
         return Path(datapath).resolve()
 
     @staticmethod
-    def get_outdir(outdir: Optional[Path], datapath: Path) -> Optional[Path]:
-        if outdir is None:
+    def get_outdir(outdir: Optional[Path], datapath: Optional[Path]) -> Optional[Path]:
+        if outdir is None or datapath is None:
             return None
         name = datapath.stem
         outdir = outdir / name
@@ -420,6 +430,8 @@ class ProgramOptions(Debug):
         return cast(ProgramOptions, obj)
 
     def load_df(self) -> DataFrame:
+        if self.datapath is None:
+            raise RuntimeError("Cannot load data as `self.datapath` is None")
         if self.is_spreadsheet:
             return load_spreadsheet(self.datapath, self.separator)[0]
         path = self.datapath

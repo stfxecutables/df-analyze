@@ -71,6 +71,7 @@ class StepwiseSelector:
         self.selection_idx = np.zeros(shape=self.total_feats, dtype=bool)
         self.scores = np.full(shape=self.total_feats, fill_value=np.nan)
         self.remaining: list[str] = prep_train.X.columns.to_list()
+        self.ordered_scores: list[tuple[int, float]] = []
 
         self.n_iterations = (
             self.n_features if self.is_forward else self.total_feats - self.n_features
@@ -83,10 +84,13 @@ class StepwiseSelector:
             total=self.n_iterations,  # type: ignore
             desc=f"{ddesc} feature selection: ",
             leave=True,
+            position=0,
         ):  # type: ignore
             new_feature_idx, score = self._get_best_new_feature()
             self.selection_idx[new_feature_idx] = True
             self.scores[new_feature_idx] = score
+            self.ordered_scores.append((new_feature_idx, score))
+            # TODO: save in self.selected the ordered features and scores
 
         if not self.is_forward:
             self.selection_idx = ~self.selection_idx
@@ -122,7 +126,7 @@ class StepwiseSelector:
         else:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
-        scores: list[tuple[float, int]] = Parallel()(
+        scores: list[tuple[float, int]] = Parallel(n_jobs=-1)(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
@@ -131,7 +135,12 @@ class StepwiseSelector:
                 feature_idx=feature_idx,
                 is_forward=self.is_forward,
             )
-            for feature_idx in candidate_idx
+            for feature_idx in tqdm(
+                candidate_idx,
+                total=len(candidate_idx),
+                desc="Getting best new feature",
+                position=1,
+            )
         )
         # scores_dict = {idx: score for score, idx in scores}
         # feature_idx = max(scores_dict, key=lambda feature_idx: scores_dict[feature_idx])
@@ -158,9 +167,17 @@ def stepwise_select(
         direction=options.wrapper_select.direction(),
     )
     selector.fit()
-    selected_idx = selector.support_
-    selected_feats = prep_train.X.loc[:, selected_idx].columns.to_list()
+    # selected_idx = selector.support_
+    # selected_feats = prep_train.X.loc[:, selected_idx].columns.to_list()
+    cols = prep_train.X.columns.to_numpy()
+
     scores = {}
-    for feat, score in zip(selected_feats, selector.scores):
-        scores[feat] = score
+    selected_feats = []
+    for idx, score in selector.ordered_scores:
+        selected_feats.append(cols[idx])
+        scores[cols[idx]] = score
+
+    # scores = {}
+    # for feat, score in zip(selected_feats, selector.scores):
+    #     scores[feat] = score
     return selected_feats, scores
