@@ -338,6 +338,12 @@ def test_feature_elim(
     selector.scores
 
     selected = X_tr.loc[:, np.ravel(selector.support_)].columns.to_list()
+    sel_corrs = []
+    for i, c1 in enumerate(selected):
+        for j in range(i + 1, len(selected)):
+            c2 = selected[j]
+            sel_corrs.append(cramer_v(df[c1], df[c2]))
+
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
     tagged = set()
@@ -370,6 +376,7 @@ def test_feature_elim(
     print(
         f"StepUp True Predictive Features Tagged: {n_tagged} / {df_pred.shape[1]} ({n_tagged / df_pred.shape[1]})"
     )
+    print(f"StepUp Selected Cramer Vs:\n{Series(sel_corrs).describe()}")
 
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
     model.fit(X_tr.loc[:, selected], y_tr)
@@ -390,6 +397,12 @@ def test_feature_elim(
 
     idx = importances > 0
     selected = X_tr.loc[:, idx].columns.to_list()
+    sel_corrs = []
+    for i, c1 in enumerate(selected):
+        for j in range(i + 1, len(selected)):
+            c2 = selected[j]
+            sel_corrs.append(cramer_v(df[c1], df[c2]))
+
     phonies = [s for s in selected if "_" not in s]
     corrs = np.empty([len(phonies), df_pred.shape[1]], dtype=np.float64)
     tagged = set()
@@ -413,7 +426,6 @@ def test_feature_elim(
     model = LGBMClassifier(verbosity=-1, n_jobs=-1, force_col_wise=True)
     model.fit(X_tr.loc[:, selected], y_tr)
     score = model.score(X_ts.loc[:, selected], y_ts)
-    print(f"LGBM Selection Test performance: {score}")
     print(
         f"LGBM Selected Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
     )
@@ -421,6 +433,9 @@ def test_feature_elim(
     print(
         f"LGBM True Predictive Features Tagged: {n_tagged} / {df_pred.shape[1]} ({n_tagged / df_pred.shape[1]})"
     )
+    print(f"LGBM Selected Cramer Vs:\n{Series(sel_corrs).describe()}")
+
+    print(f"LGBM Selection Test performance: {score}")
 
     # ss = StratifiedKFold(n_splits=3)
     # importances = np.zeros(shape=[df.shape[1]], dtype=np.float64)
