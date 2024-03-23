@@ -34,6 +34,7 @@ from src.selection.stepwise import StepwiseSelector, stepwise_select
 from src.testing.datasets import (
     ALL_DATASETS,
     TestDataset,
+    all_ds,
     fast_ds,
     med_ds,
     slow_ds,
@@ -215,12 +216,20 @@ def estimate_knn_backward_select(
     estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
-def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+def do_forward_select(
+    dataset: tuple[str, TestDataset],
+    linear: bool,
+    redundant: bool = False,
+    test: bool = False,
+) -> None:
     silence_spam()
     dsname, ds = dataset
+    if dsname == "internet_usage":  # undersampled target
+        return
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
+    options.redundant_selection = redundant
     options.wrapper_model = (
         WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
     )
@@ -228,7 +237,7 @@ def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
     options.n_feat_wrapper = 10
     if prepared.X.shape[1] <= 10:
         return
-    results = stepwise_select(prep_train=prep_train, options=options)
+    results = stepwise_select(prep_train=prep_train, options=options, test=test)
     if results is None:
         raise ValueError("Impossible")
     selected, scores = results
@@ -236,6 +245,24 @@ def do_forward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
         raise ValueError("Did not select correct number of features")
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
+
+
+def do_forward_pseudo_select(dataset: tuple[str, TestDataset]) -> None:
+    """Use the `test=True` option to get random scores instead
+
+    NOTE: We don't need to test both linear or not in this case, as the
+    model is not used.
+    """
+    do_forward_select(dataset=dataset, linear=True, test=True)
+
+
+def do_forward_pseudo_select_redundant(dataset: tuple[str, TestDataset]) -> None:
+    """Use the `test=True` option to get random scores instead
+
+    NOTE: We don't need to test both linear or not in this case, as the
+    model is not used.
+    """
+    do_forward_select(dataset=dataset, linear=True, test=True, redundant=True)
 
 
 def do_linear_forward_select(dataset: tuple[str, TestDataset]) -> None:
@@ -246,12 +273,20 @@ def do_lgbm_forward_select(dataset: tuple[str, TestDataset]) -> None:
     do_forward_select(dataset, linear=False)
 
 
-def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
+def do_backward_select(
+    dataset: tuple[str, TestDataset],
+    linear: bool,
+    redundant: bool = False,
+    test: bool = False,
+) -> None:
     silence_spam()
     dsname, ds = dataset
+    if dsname == "internet_usage":  # undersampled target
+        return
     prepared = ds.prepared(load_cached=True)
     prep_train = prepared.representative_subsample()[0]
     options = ProgramOptions.random(ds)
+    options.redundant_selection = redundant
     options.wrapper_model = (
         WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
     )
@@ -259,7 +294,7 @@ def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
     options.n_feat_wrapper = prepared.X.shape[1] - 10
     if options.n_feat_wrapper <= 0:
         return
-    results = stepwise_select(prep_train=prep_train, options=options)
+    results = stepwise_select(prep_train=prep_train, options=options, test=test)
     if results is None:
         raise ValueError("Impossible")
     selected, scores = results
@@ -267,6 +302,14 @@ def do_backward_select(dataset: tuple[str, TestDataset], linear: bool) -> None:
         raise ValueError("Did not select correct number of features")
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
+
+
+def do_backward_pseudo_select(dataset: tuple[str, TestDataset]) -> None:
+    do_backward_select(dataset=dataset, linear=True, test=True)
+
+
+def do_backward_pseudo_select_redundant(dataset: tuple[str, TestDataset]) -> None:
+    do_backward_select(dataset=dataset, linear=True, test=True, redundant=True)
 
 
 def do_linear_backward_select(dataset: tuple[str, TestDataset]) -> None:
@@ -408,6 +451,16 @@ def test_lgbm_backward_select_fast(
     file = RUNTIMES / "lgbm_backward_select_fast_runtimes.txt"
     # with capsys.disabled():
     do_logged(do_lgbm_backward_select, file, dataset)
+
+
+@all_ds
+def test_pseudo_forward_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_forward_pseudo_select(dataset)
+
+
+@all_ds
+def test_pseudo_backward_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_backward_pseudo_select(dataset)
 
 
 if __name__ == "__main__":

@@ -449,6 +449,22 @@ Classification score to use for filter-based selection of features. Options:\n
 
 """
 
+REDUNDANT_SELECTION = """
+If this flag is present, then perform an "extra greedy" stepwise selection
+that adds or removes multiple features at each step, depending on if the
+scores for those features do not differ from the highest score specified by
+`--redundant-threshold`.
+"""
+
+REDUNDANT_THRESHOLD = """
+The threshold for deciding if wrapper feature selection scores during one
+iteration of selection differ meaningfully. E.g. if the threshold is `T`, and
+scoring is by accuracy, and at iteration `i` the best feature score is
+`acc_max`, then all features with scores greater than or equal to `acc_max -
+T` will be considered to be redundant to the first feature with an accuracy
+of `acc_max`.
+"""
+
 # HTUNE_HELP = """
 # If provided, use Optuna TPESampler to attempt to optimize classifier performance
 # prior to fitting and evaluating.

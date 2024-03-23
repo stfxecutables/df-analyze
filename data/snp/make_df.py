@@ -388,6 +388,8 @@ def test_feature_elim(
     # beyond horribly here, they fail to select true features. LightGBM and
     # RidgeClassifierCV do though.
 
+    print("===========================")
+
     ss = StratifiedKFold(n_splits=3)
     importances = np.zeros(shape=[X_tr.shape[1]], dtype=np.uint64)
     for idx_tr, idx_ts in tqdm(ss.split(y_tr, y_tr), desc="Fitting k-fold LGBM"):
@@ -395,12 +397,16 @@ def test_feature_elim(
         model.fit(X_tr.iloc[idx_tr], y_tr.iloc[idx_tr])
         importances = importances + model.feature_importances_
 
-    idx = importances > 0
+    idx = np.abs(importances) > 0
     selected = X_tr.loc[:, idx].columns.to_list()
+    idx_max = np.argsort(np.abs(importances))[:20]
+    max_selected = X_tr.iloc[:, idx_max].columns.to_list()
     sel_corrs = []
-    for i, c1 in enumerate(selected):
-        for j in range(i + 1, len(selected)):
-            c2 = selected[j]
+    for i, c1 in tqdm(
+        enumerate(max_selected), total=len(max_selected), desc="Correlating"
+    ):
+        for j in range(i + 1, len(max_selected)):
+            c2 = max_selected[j]
             sel_corrs.append(cramer_v(df[c1], df[c2]))
 
     phonies = [s for s in selected if "_" not in s]
@@ -427,7 +433,7 @@ def test_feature_elim(
     model.fit(X_tr.loc[:, selected], y_tr)
     score = model.score(X_ts.loc[:, selected], y_ts)
     print(
-        f"LGBM Selected Cramer V correlations with predictive features: {DataFrame(corrs.ravel()).describe()}"
+        f"LGBM Selected Cramer V correlations with predictive features:\n{DataFrame(corrs.ravel()).describe()}"
     )
     print(f"LGBM Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}")
     print(

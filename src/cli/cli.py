@@ -79,6 +79,8 @@ from src.cli.text import (
     OUTDIR_HELP,
     PRED_SELECT_CLS_SCORE,
     PRED_SELECT_REG_SCORE,
+    REDUNDANT_SELECTION,
+    REDUNDANT_THRESHOLD,
     REG_HELP_STR,
     REG_TUNE_METRIC,
     SEP_HELP_STR,
@@ -174,6 +176,8 @@ class ProgramOptions(Debug):
         filter_assoc_cat_reg: CatRegStats,
         filter_pred_cls_score: ClsScore,
         filter_pred_reg_score: RegScore,
+        redundant_selection: bool,
+        redundant_threshold: float,
         is_classification: bool,
         classifiers: Tuple[DfAnalyzeClassifier, ...],
         regressors: Tuple[DfAnalyzeRegressor, ...],
@@ -217,6 +221,8 @@ class ProgramOptions(Debug):
         self.filter_assoc_cat_reg: CatRegStats = filter_assoc_cat_reg
         self.filter_pred_cls_score: ClsScore = filter_pred_cls_score
         self.filter_pred_reg_score: RegScore = filter_pred_reg_score
+        self.redundant_selection: bool = redundant_selection
+        self.redundant_threshold: float = abs(redundant_threshold)
         self.is_classification: bool = is_classification
         self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(
             sorted(set(classifiers))
@@ -285,6 +291,8 @@ class ProgramOptions(Debug):
         filter_assoc_cat_reg = CatRegStats.random()
         filter_pred_cls_score = ClsScore.random()
         filter_pred_reg_score = RegScore.random()
+        redundant = choice([True, False])
+        redundant_threshold = uniform(0, 0.2)
         is_classification = is_cls
         classifiers = DfAnalyzeClassifier.random_n()
         regressors = DfAnalyzeRegressor.random_n()
@@ -329,6 +337,8 @@ class ProgramOptions(Debug):
             filter_assoc_cat_reg=filter_assoc_cat_reg,
             filter_pred_cls_score=filter_pred_cls_score,
             filter_pred_reg_score=filter_pred_reg_score,
+            redundant_selection=redundant,
+            redundant_threshold=redundant_threshold,
             is_classification=is_classification,
             classifiers=classifiers,
             regressors=regressors,
@@ -740,6 +750,17 @@ def make_parser() -> ArgumentParser:
         default=ClsScore.default(),
         help=PRED_SELECT_CLS_SCORE,
     )
+    parser.add_argument(
+        "--redundant-wrapper-selection",
+        action="store_true",
+        help=REDUNDANT_SELECTION,
+    )
+    parser.add_argument(
+        "--redundant-threshold",
+        type=float,
+        default=0.005,
+        help=REDUNDANT_THRESHOLD,
+    )
     # parser.add_argument(
     #     "--htune",
     #     action="store_true",
@@ -875,6 +896,8 @@ def get_parser_dict() -> ArgsDict:
         "--filter-assoc-cat-regress": (RandKind.ChooseOne, CatRegStats.choices()),
         "--filter-pred-regress": (RandKind.ChooseOne, RegScore.choices()),
         "--filter-pred-classify": (RandKind.ChooseOne, ClsScore.choices()),
+        "--redundant-wrapper-selection": (RandKind.Flag, None),
+        "--redundant-threshold": (RandKind.Custom, None),
         "--htune-trials": (RandKind.ChooseOne, ["5", "10", "20"]),
         "--htune-cls-metric": (RandKind.ChooseOne, ClassifierScorer.choices()),
         "--htune-reg-metric": (RandKind.ChooseOne, RegressorScorer.choices()),
@@ -965,6 +988,10 @@ def random_cli_args(
                 )
         elif (kind is RandKind.Custom) and (argstr == "--separator"):
             continue
+        elif (kind is RandKind.Custom) and (argstr == "--redundant-threshold"):
+            # just pick something that could work (though not well) for all metrics
+            score = uniform(0, 0.1)
+            arg_options.append(f"{argstr} {score}")
         elif kind is RandKind.IntOrPercent:
             numeric = round(int_or_percents[argstr], 2)
             arg_options.append(f"{argstr} {numeric}")
@@ -1083,6 +1110,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_assoc_cat_reg=CatRegStats.from_arg(cli_args.filter_assoc_cat_regress),
         filter_pred_cls_score=ClsScore.from_arg(cli_args.filter_pred_classify),
         filter_pred_reg_score=RegScore.from_arg(cli_args.filter_pred_regress),
+        redundant_selection=cli_args.redundant_selection,
+        redundant_threshold=cli_args.redundant_threshold,
         is_classification=is_cls,
         classifiers=classifiers,
         regressors=regressors,

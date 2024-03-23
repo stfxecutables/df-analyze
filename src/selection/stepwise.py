@@ -6,6 +6,7 @@ from joblib import Parallel, delayed
 
 if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
+from dataclasses import dataclass
 from math import ceil
 from time import perf_counter
 from typing import Literal, Type, Union
@@ -13,12 +14,13 @@ from typing import Literal, Type, Union
 import numpy as np
 from joblib import Parallel, delayed
 from numpy import ndarray
+from numpy.typing import NDArray
 from pandas import DataFrame, Series
 from tqdm import tqdm
 
 from src._constants import DEFAULT_N_STEPWISE_SELECT
 from src.cli.cli import ProgramOptions
-from src.enumerables import WrapperSelectionModel
+from src.enumerables import Scorer, WrapperSelectionModel
 from src.models.base import DfAnalyzeModel
 from src.models.knn import KNNClassifier, KNNRegressor
 from src.models.lgbm import LightGBMClassifier, LightGBMRegressor
@@ -26,21 +28,31 @@ from src.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from src.preprocessing.prepare import PreparedData
 
 
+@dataclass
+class RedundantFeatures:
+    best_idx: int
+    redundant_idx: NDArray[np.int64]
+    redundant_scores: NDArray[np.float64]
+
+
 def get_dfanalyze_score(
     model_cls: Type[DfAnalyzeModel],
     X: DataFrame,
     y: Series,
+    metric: Scorer,
     selection_idx: ndarray,
     feature_idx: int,
     is_forward: bool,
+    test: bool,
 ) -> float:
     candidate_idx = selection_idx.copy()
     candidate_idx[feature_idx] = True
     if not is_forward:
         candidate_idx = ~candidate_idx
+
     X_new = X.loc[:, candidate_idx]
     model = model_cls()
-    return model.cv_score(X_new, y)
+    return model.cv_score(X_new, y, test=test, metric=metric)
 
 
 def n_feat_int(prepared: PreparedData, n_features: Union[int, float, None]) -> int:
@@ -59,6 +71,7 @@ class StepwiseSelector:
         options: ProgramOptions,
         n_features: Union[int, float, None] = None,
         direction: Literal["forward", "backward"] = "forward",
+        test: bool = False,
     ) -> None:
         self.is_forward = direction == "forward"
         self.n_features: int = n_feat_int(prep_train, n_features)
@@ -66,6 +79,8 @@ class StepwiseSelector:
         self.prepared = prep_train
         self.options = options
         self.model = options.wrapper_model
+        self.redundant = options.redundant_selection
+        self.test = test
 
         # selection_idx is True for selected/excluded features in forward/backward select
         self.selection_idx = np.zeros(shape=self.total_feats, dtype=bool)
@@ -86,11 +101,14 @@ class StepwiseSelector:
             leave=True,
             position=0,
         ):  # type: ignore
-            new_feature_idx, score = self._get_best_new_feature()
-            self.selection_idx[new_feature_idx] = True
-            self.scores[new_feature_idx] = score
-            self.ordered_scores.append((new_feature_idx, score))
-            # TODO: save in self.selected the ordered features and scores
+            if not self.redundant:
+                new_feature_idx, score = self._get_best_new_feature()
+                self.selection_idx[new_feature_idx] = True
+                self.scores[new_feature_idx] = score
+                self.ordered_scores.append((new_feature_idx, score))
+            else:
+                # TODO: save in self.selected the ordered features and scores
+                results = self._get_best_new_features()
 
         if not self.is_forward:
             self.selection_idx = ~self.selection_idx
@@ -112,13 +130,14 @@ class StepwiseSelector:
         total = self.n_iterations * elapsed
         return round(total / 60, 1)
 
-    def _get_best_new_feature(self) -> tuple[int, float]:
-        # Return the best new feature to add to the current_mask, i.e. return
-        # the best new feature to add (resp. remove) when doing forward
-        # selection (resp. backward selection)
+    def _get_best_new_features(self) -> RedundantFeatures:
+        """Return the set of selected features via the greedy method"""
         candidate_idx = np.flatnonzero(~self.selection_idx)
         model_enum = self.options.wrapper_model
         is_cls = self.prepared.is_classification
+        metric = (
+            self.options.htune_cls_metric if is_cls else self.options.htune_reg_metric
+        )
         if model_enum is WrapperSelectionModel.LGBM:
             model_cls = LightGBMClassifier if is_cls else LightGBMRegressor
         elif model_enum is WrapperSelectionModel.KNN:
@@ -126,14 +145,65 @@ class StepwiseSelector:
         else:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
-        scores: list[tuple[float, int]] = Parallel(n_jobs=-1)(
+        scores: list[float] = Parallel(n_jobs=-1)(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
                 y=self.prepared.y,
+                metric=metric,
                 selection_idx=self.selection_idx,
                 feature_idx=feature_idx,
                 is_forward=self.is_forward,
+                test=self.test,
+            )
+            for feature_idx in tqdm(
+                candidate_idx,
+                total=len(candidate_idx),
+                desc="Getting best new feature",
+                position=1,
+            )
+        )
+        idx_max = np.argmax(scores)
+        smax = scores[idx_max]
+        # scores are such that higher is always better (negation already
+        # applied to ensure this), and we take the abs of user-supplied
+        # redundancy threshold, so we can just blindly subtract here
+        redundants = np.array(scores) >= (smax - self.options.redundant_threshold)
+
+        # feature_idx = max(scores_dict, key=lambda feature_idx: scores_dict[feature_idx])
+        # score = scores_dict[feature_idx]
+        # return feature_idx, score
+        return RedundantFeatures(
+            ...,
+        )
+
+    def _get_best_new_feature(self) -> tuple[int, float]:
+        # Return the best new feature to add to the current_mask, i.e. return
+        # the best new feature to add (resp. remove) when doing forward
+        # selection (resp. backward selection)
+        candidate_idx = np.flatnonzero(~self.selection_idx)
+        model_enum = self.options.wrapper_model
+        is_cls = self.prepared.is_classification
+        metric = (
+            self.options.htune_cls_metric if is_cls else self.options.htune_reg_metric
+        )
+        if model_enum is WrapperSelectionModel.LGBM:
+            model_cls = LightGBMClassifier if is_cls else LightGBMRegressor
+        elif model_enum is WrapperSelectionModel.KNN:
+            model_cls = KNNClassifier if is_cls else KNNRegressor
+        else:
+            model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
+
+        scores: list[float] = Parallel(n_jobs=-1)(
+            delayed(get_dfanalyze_score)(  # type: ignore
+                model_cls=model_cls,
+                X=self.prepared.X,
+                y=self.prepared.y,
+                metric=metric,
+                selection_idx=self.selection_idx,
+                feature_idx=feature_idx,
+                is_forward=self.is_forward,
+                test=self.test,
             )
             for feature_idx in tqdm(
                 candidate_idx,
@@ -147,8 +217,6 @@ class StepwiseSelector:
         # score = scores_dict[feature_idx]
         # return feature_idx, score
 
-        if np.isnan(scores).sum() != 0:
-            print("???")
         idx = np.argmax(scores)
         selected_idx = candidate_idx[idx]
         score = scores[idx]
@@ -156,7 +224,9 @@ class StepwiseSelector:
 
 
 def stepwise_select(
-    prep_train: PreparedData, options: ProgramOptions
+    prep_train: PreparedData,
+    options: ProgramOptions,
+    test: bool = False,
 ) -> Optional[tuple[list[str], dict[str, float]]]:
     if options.wrapper_select is None:
         return
@@ -165,6 +235,7 @@ def stepwise_select(
         options=options,
         n_features=options.n_feat_wrapper,
         direction=options.wrapper_select.direction(),
+        test=test,
     )
     selector.fit()
     # selected_idx = selector.support_
