@@ -30,7 +30,8 @@ from src.selection.filter import (
     filter_by_univariate_associations,
     filter_by_univariate_predictions,
 )
-from src.selection.stepwise import StepwiseSelector, stepwise_select
+from src.selection.stepwise import RedundantFeatures, StepwiseSelector, stepwise_select
+from src.selection.wrapper import WrapperSelected
 from src.testing.datasets import (
     ALL_DATASETS,
     TestDataset,
@@ -216,6 +217,23 @@ def estimate_knn_backward_select(
     estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
+def do_redundant_report(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+    dsname, ds = dataset
+    if dsname == "internet_usage":  # undersampled target
+        return
+    selected = WrapperSelected.random(ds)
+    report = selected.to_markdown()
+    with capsys.disabled():
+        print(report)
+
+
+@all_ds
+def test_redundant_report(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
+    do_redundant_report(dataset=dataset, capsys=capsys)
+
+
 def do_forward_select(
     dataset: tuple[str, TestDataset],
     linear: bool,
@@ -240,8 +258,8 @@ def do_forward_select(
     results = stepwise_select(prep_train=prep_train, options=options, test=test)
     if results is None:
         raise ValueError("Impossible")
-    selected, scores = results
-    if len(selected) != options.n_feat_wrapper:
+    selected, scores, redundants, early_stop = results
+    if (len(selected) != options.n_feat_wrapper) and (not early_stop):
         raise ValueError("Did not select correct number of features")
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
@@ -297,8 +315,8 @@ def do_backward_select(
     results = stepwise_select(prep_train=prep_train, options=options, test=test)
     if results is None:
         raise ValueError("Impossible")
-    selected, scores = results
-    if len(selected) != options.n_feat_wrapper:
+    selected, scores, redundants, early_stop = results
+    if (len(selected) != options.n_feat_wrapper) and (not early_stop):
         raise ValueError("Did not select correct number of features")
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
@@ -456,6 +474,11 @@ def test_lgbm_backward_select_fast(
 @all_ds
 def test_pseudo_forward_select_fast(dataset: tuple[str, TestDataset]) -> None:
     do_forward_pseudo_select(dataset)
+
+
+@all_ds
+def test_pseudo_forward_redundant_select_fast(dataset: tuple[str, TestDataset]) -> None:
+    do_forward_pseudo_select_redundant(dataset)
 
 
 @all_ds

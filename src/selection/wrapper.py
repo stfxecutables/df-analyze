@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from src.cli.cli import ProgramOptions
 from src.enumerables import ClsScore, RegScore, WrapperSelection, WrapperSelectionModel
 from src.preprocessing.prepare import PreparedData
-from src.selection.stepwise import stepwise_select
+from src.selection.stepwise import RedundantFeatures, stepwise_select
 from src.testing.datasets import TestDataset
 
 
@@ -23,6 +23,8 @@ class WrapperSelected:
     model: WrapperSelectionModel
     selected: list[str]
     scores: dict[str, float]
+    redundants: list[RedundantFeatures]
+    early_stop: bool
     is_classification: bool
 
     def to_markdown(self) -> str:
@@ -34,17 +36,26 @@ class WrapperSelected:
         mname = metric.longname()
         higher_better = self.is_classification
         direction = "Higher" if higher_better else "Lower"
+        is_redundant = len(self.redundants) > 0
         text = (
             "# Wrapper-Based Feature Selection Summary\n\n"
-            f"Wrapper method: {self.method.name}\n"
-            f"Wrapper model:  {self.model.name}\n"
+            f"Wrapper method:    {self.method.name}\n"
+            f"Wrapper model:     {self.model.name}\n"
+            f"Redundancy-aware:  {is_redundant}\n"
             "\n"
             f"## Selected Features\n\n"
             f"{self.selected}\n\n"
             f"## Selection Scores ({mname}: {direction} = More important)\n\n"
-            f"{scores.to_markdown(floatfmt='0.3e')}"
+            f"{scores.to_markdown(floatfmt='0.3e')}\n\n"
         )
-        return text
+        lines = []
+        for i, redundant in enumerate(self.redundants):
+            lines.append(
+                redundant.to_markdown_section(iteration=i, is_cls=self.is_classification)
+            )
+        redundant_info = "".join(lines)
+
+        return text + redundant_info
 
     @staticmethod
     def from_json(path: Path) -> WrapperSelected:
@@ -58,16 +69,59 @@ class WrapperSelected:
         method = WrapperSelection.random()
         model = WrapperSelectionModel.random()
         df = ds.load()
+        is_cls = ds.is_classification
         x = df.drop(columns="target", errors="ignore")
         cols = x.columns.to_list()
         n_feat = randint(min(10, x.shape[1]), x.shape[1])
         selected = np.random.choice(cols, size=n_feat, replace=False).tolist()
-        scores = {s: uniform(0, 1) for s in selected}
+        raw_scores = [uniform(0.7, 1) if is_cls else uniform(0, 0.3) for s in selected]
+        raw_scores = sorted(raw_scores, reverse=is_cls)
+        scores = {s: score for s, score in zip(selected, raw_scores)}
+        remaining_feats = set(cols)
+        metric = "acc" if is_cls else "mae"
+        redundants = []
+        total_feats = 0
+        for feat in selected:
+            best = feat
+            best_score = scores[feat]
+            best_idx = -1
+            for k, col in enumerate(x.columns):
+                if col == best:
+                    best_idx = k
+                    break
+
+            remaining_feats.discard(feat)
+            n_max = len(remaining_feats) // 2
+            if n_max > 0:
+                n_redundant = np.random.randint(0, n_max)
+            else:
+                n_redundant = 0
+            feats, feat_scores = [], []
+            if n_redundant > 0:
+                feats = np.random.choice(
+                    np.array(list(remaining_feats)), n_redundant, replace=False
+                ).tolist()
+                remaining_feats.difference_update(feats)
+                feat_scores = [uniform(-0.01, 0.01) + best_score for f in feats]
+            redundants.append(
+                RedundantFeatures(
+                    best=best,
+                    best_idx=best_idx,
+                    best_score=best_score,
+                    features=feats,
+                    scores=feat_scores,
+                    metric=metric,
+                )
+            )
+            total_feats += redundants[-1].n_feat()
+
         return WrapperSelected(
             method=method,
             model=model,
             selected=selected,
+            redundants=redundants,
             scores=scores,
+            early_stop=total_feats >= len(cols),
             is_classification=ds.is_classification,
         )
 
@@ -81,12 +135,14 @@ def wrap_select_features(
     result = stepwise_select(prep_train=prep_train, options=options)
     if result is None:
         return None
-    selected, scores = result
+    selected, scores, redundants, early_stop = result
 
     return WrapperSelected(
         selected=selected,
         scores=scores,
         method=options.wrapper_select,
         model=options.wrapper_model,
+        redundants=redundants,
+        early_stop=early_stop,
         is_classification=prep_train.is_classification,
     )

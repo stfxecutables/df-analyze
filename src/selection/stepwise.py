@@ -30,9 +30,34 @@ from src.preprocessing.prepare import PreparedData
 
 @dataclass
 class RedundantFeatures:
+    best: str
     best_idx: int
-    redundant_idx: NDArray[np.int64]
-    redundant_scores: NDArray[np.float64]
+    best_score: float
+    features: list[str]
+    scores: list[float]
+    metric: str
+
+    def n_feat(self) -> int:
+        return len(self.features)
+
+    def to_markdown_section(self, iteration: int, is_cls: bool) -> str:
+        lines = []
+        if iteration == 0:
+            lines.append("# Redundant Stepwise Selection Results\n\n")
+            lines.append(f"Metric: {self.metric}\n\n")
+
+        lines.append(f"* {self.best} ({self.metric}={self.best_score:0.5f}) - ")
+        lines.append(f"[Iteration {iteration: >3d}]\n\n")
+        if len(self.features) == 0:
+            return "".join(lines)[:-1]  # ignore last \n
+
+        lines.append("Redundants:\n\n")
+        df = DataFrame(
+            data=self.scores, index=self.features, columns=["score"]
+        ).sort_values(by="score", ascending=not is_cls)
+        lines.append(df.to_markdown(tablefmt="simple", floatfmt="0.4f", index=True))
+        lines.append("\n\n")
+        return "".join(lines)
 
 
 def get_dfanalyze_score(
@@ -87,6 +112,8 @@ class StepwiseSelector:
         self.scores = np.full(shape=self.total_feats, fill_value=np.nan)
         self.remaining: list[str] = prep_train.X.columns.to_list()
         self.ordered_scores: list[tuple[int, float]] = []
+        self.redundant_results: list[RedundantFeatures] = []
+        self.redundant_early_stop: bool = False
 
         self.n_iterations = (
             self.n_features if self.is_forward else self.total_feats - self.n_features
@@ -101,6 +128,10 @@ class StepwiseSelector:
             leave=True,
             position=0,
         ):  # type: ignore
+            if np.all(self.selection_idx):
+                self.redundant_early_stop = True
+                break
+
             if not self.redundant:
                 new_feature_idx, score = self._get_best_new_feature()
                 self.selection_idx[new_feature_idx] = True
@@ -108,7 +139,13 @@ class StepwiseSelector:
                 self.ordered_scores.append((new_feature_idx, score))
             else:
                 # TODO: save in self.selected the ordered features and scores
-                results = self._get_best_new_features()
+                selected_idx, results = self._get_best_new_features()
+                score = results.best_score
+                best_idx = results.best_idx
+                self.scores[best_idx] = score
+                self.selection_idx[selected_idx] = True
+                self.ordered_scores.append((best_idx, score))
+                self.redundant_results.append(results)
 
         if not self.is_forward:
             self.selection_idx = ~self.selection_idx
@@ -130,9 +167,8 @@ class StepwiseSelector:
         total = self.n_iterations * elapsed
         return round(total / 60, 1)
 
-    def _get_best_new_features(self) -> RedundantFeatures:
+    def _get_best_new_features(self) -> tuple[NDArray[np.int64], RedundantFeatures]:
         """Return the set of selected features via the greedy method"""
-        candidate_idx = np.flatnonzero(~self.selection_idx)
         model_enum = self.options.wrapper_model
         is_cls = self.prepared.is_classification
         metric = (
@@ -145,7 +181,9 @@ class StepwiseSelector:
         else:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
-        scores: list[float] = Parallel(n_jobs=-1)(
+        # loop only over un-flagged features
+        candidate_idx = np.flatnonzero(~self.selection_idx)
+        all_scores: list[float] = Parallel(n_jobs=-1)(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
@@ -163,18 +201,37 @@ class StepwiseSelector:
                 position=1,
             )
         )
-        idx_max = np.argmax(scores)
-        smax = scores[idx_max]
+        scores = np.array(all_scores)
+        feat_names = self.prepared.X.columns.to_numpy()[candidate_idx]
+        # Now remember redundant selection can stop early, so
+
+        best_idx = np.argmax(scores)
+        best_score = scores[best_idx]
+        best = feat_names.tolist()[best_idx]
         # scores are such that higher is always better (negation already
         # applied to ensure this), and we take the abs of user-supplied
         # redundancy threshold, so we can just blindly subtract here
-        redundants = np.array(scores) >= (smax - self.options.redundant_threshold)
+        selected_idx = scores >= (best_score - self.options.redundant_threshold)
+        selected = feat_names[selected_idx]
+        scores_selected = scores[selected_idx]
+        idx_sort = np.argsort(scores_selected)
+        selected = selected[idx_sort].tolist()
+        scores_selected = scores_selected[idx_sort].tolist()
 
-        # feature_idx = max(scores_dict, key=lambda feature_idx: scores_dict[feature_idx])
-        # score = scores_dict[feature_idx]
-        # return feature_idx, score
-        return RedundantFeatures(
-            ...,
+        all_selected_idx = np.zeros_like(self.selection_idx, dtype=bool)
+        cols = set(self.prepared.X.columns.to_list())
+        for feat in selected:
+            for i, col in enumerate(cols):
+                if feat == col:
+                    all_selected_idx[i] = True
+
+        return all_selected_idx, RedundantFeatures(
+            best=best,
+            best_idx=best_idx.item(),
+            best_score=best_score,
+            features=selected,
+            scores=scores_selected,
+            metric=metric.name,
         )
 
     def _get_best_new_feature(self) -> tuple[int, float]:
@@ -227,7 +284,7 @@ def stepwise_select(
     prep_train: PreparedData,
     options: ProgramOptions,
     test: bool = False,
-) -> Optional[tuple[list[str], dict[str, float]]]:
+) -> Optional[tuple[list[str], dict[str, float], list[RedundantFeatures], bool]]:
     if options.wrapper_select is None:
         return
     selector = StepwiseSelector(
@@ -251,4 +308,9 @@ def stepwise_select(
     # scores = {}
     # for feat, score in zip(selected_feats, selector.scores):
     #     scores[feat] = score
-    return selected_feats, scores
+    return (
+        selected_feats,
+        scores,
+        selector.redundant_results,
+        selector.redundant_early_stop,
+    )

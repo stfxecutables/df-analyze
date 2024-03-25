@@ -19,7 +19,6 @@ from pathlib import Path
 from random import choice, randint, uniform
 from typing import (
     TYPE_CHECKING,
-    Any,
     Optional,
     Tuple,
     Type,
@@ -79,6 +78,7 @@ from src.cli.text import (
     OUTDIR_HELP,
     PRED_SELECT_CLS_SCORE,
     PRED_SELECT_REG_SCORE,
+    REDUNDANT_CORR_THRESHOLD,
     REDUNDANT_SELECTION,
     REDUNDANT_THRESHOLD,
     REG_HELP_STR,
@@ -178,6 +178,7 @@ class ProgramOptions(Debug):
         filter_pred_reg_score: RegScore,
         redundant_selection: bool,
         redundant_threshold: float,
+        redundant_corr_threshold: float,
         is_classification: bool,
         classifiers: Tuple[DfAnalyzeClassifier, ...],
         regressors: Tuple[DfAnalyzeRegressor, ...],
@@ -223,6 +224,10 @@ class ProgramOptions(Debug):
         self.filter_pred_reg_score: RegScore = filter_pred_reg_score
         self.redundant_selection: bool = redundant_selection
         self.redundant_threshold: float = abs(redundant_threshold)
+        # TODO: only select all features in redundant stepwise if their
+        # absolute Pearson correlation with the highest-scoring feature is
+        # above this threshold
+        self.redundant_corr_threshold: float = abs(redundant_corr_threshold)
         self.is_classification: bool = is_classification
         self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(
             sorted(set(classifiers))
@@ -293,6 +298,7 @@ class ProgramOptions(Debug):
         filter_pred_reg_score = RegScore.random()
         redundant = choice([True, False])
         redundant_threshold = uniform(0, 0.2)
+        redundant_corr_threshold = uniform(0.8, 0.95)
         is_classification = is_cls
         classifiers = DfAnalyzeClassifier.random_n()
         regressors = DfAnalyzeRegressor.random_n()
@@ -339,6 +345,7 @@ class ProgramOptions(Debug):
             filter_pred_reg_score=filter_pred_reg_score,
             redundant_selection=redundant,
             redundant_threshold=redundant_threshold,
+            redundant_corr_threshold=redundant_corr_threshold,
             is_classification=is_classification,
             classifiers=classifiers,
             regressors=regressors,
@@ -757,9 +764,15 @@ def make_parser() -> ArgumentParser:
     )
     parser.add_argument(
         "--redundant-threshold",
-        type=float,
+        type=lambda x: abs(float(x)),
         default=0.005,
         help=REDUNDANT_THRESHOLD,
+    )
+    parser.add_argument(
+        "--redundant-corr-threshold",
+        type=lambda x: abs(float(x)),
+        default=0.8,
+        help=REDUNDANT_CORR_THRESHOLD,
     )
     # parser.add_argument(
     #     "--htune",
@@ -898,6 +911,7 @@ def get_parser_dict() -> ArgsDict:
         "--filter-pred-classify": (RandKind.ChooseOne, ClsScore.choices()),
         "--redundant-wrapper-selection": (RandKind.Flag, None),
         "--redundant-threshold": (RandKind.Custom, None),
+        "--redundant-corr-threshold": (RandKind.Custom, None),
         "--htune-trials": (RandKind.ChooseOne, ["5", "10", "20"]),
         "--htune-cls-metric": (RandKind.ChooseOne, ClassifierScorer.choices()),
         "--htune-reg-metric": (RandKind.ChooseOne, RegressorScorer.choices()),
@@ -991,6 +1005,9 @@ def random_cli_args(
         elif (kind is RandKind.Custom) and (argstr == "--redundant-threshold"):
             # just pick something that could work (though not well) for all metrics
             score = uniform(0, 0.1)
+            arg_options.append(f"{argstr} {score}")
+        elif (kind is RandKind.Custom) and (argstr == "--redundant-corr-threshold"):
+            score = uniform(0.0, 1.0)
             arg_options.append(f"{argstr} {score}")
         elif kind is RandKind.IntOrPercent:
             numeric = round(int_or_percents[argstr], 2)
@@ -1112,6 +1129,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         filter_pred_reg_score=RegScore.from_arg(cli_args.filter_pred_regress),
         redundant_selection=cli_args.redundant_selection,
         redundant_threshold=cli_args.redundant_threshold,
+        redundant_corr_threshold=cli_args.redundant_corr_threshold,
         is_classification=is_cls,
         classifiers=classifiers,
         regressors=regressors,
