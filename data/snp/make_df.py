@@ -335,7 +335,6 @@ def test_feature_elim(
         prep_train=prep, options=opts, n_features=20, direction="forward"
     )
     selector.fit()
-    selector.scores
 
     selected = X_tr.loc[:, np.ravel(selector.support_)].columns.to_list()
     sel_corrs = []

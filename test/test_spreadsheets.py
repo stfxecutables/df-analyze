@@ -54,7 +54,7 @@ SPREAD_MIN = TEMPLATES / "student/minimal_sheet.csv"
 SPREAD_MIN.write_text(f"{ARGS_MIN}\n\n{DATALINES}")
 
 SPREAD_FULL = TEMPLATES / "student/full_sheet.csv"
-SPREAD_FULL.write_text(f"{ARGS_FULL}\n\n{DATALINES}")
+# SPREAD_FULL.write_text(f"{ARGS_FULL}\n\n{DATALINES}")
 
 
 def do_main(minimal: bool) -> None:

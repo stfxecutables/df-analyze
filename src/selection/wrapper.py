@@ -84,11 +84,6 @@ class WrapperSelected:
         for feat in selected:
             best = feat
             best_score = scores[feat]
-            best_idx = -1
-            for k, col in enumerate(x.columns):
-                if col == best:
-                    best_idx = k
-                    break
 
             remaining_feats.discard(feat)
             n_max = len(remaining_feats) // 2
@@ -106,7 +101,6 @@ class WrapperSelected:
             redundants.append(
                 RedundantFeatures(
                     best=best,
-                    best_idx=best_idx,
                     best_score=best_score,
                     features=feats,
                     scores=feat_scores,

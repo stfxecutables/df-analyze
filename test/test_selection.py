@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+from random import randint
 from time import perf_counter
 from typing import Any, Callable, Optional
 
@@ -261,6 +262,14 @@ def do_forward_select(
     selected, scores, redundants, early_stop = results
     if (len(selected) != options.n_feat_wrapper) and (not early_stop):
         raise ValueError("Did not select correct number of features")
+
+    # check that redundant sets are disjoint
+    if len(redundants) > 1:
+        for i in range(len(redundants) - 1):
+            r1 = redundants[i].features
+            r2 = redundants[i + 1].features
+            assert len(set(r1).intersection(r2)) == 0
+
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
 
@@ -309,15 +318,27 @@ def do_backward_select(
         WrapperSelectionModel.Linear if linear else WrapperSelectionModel.LGBM
     )
     options.wrapper_select = WrapperSelection.StepDown
-    options.n_feat_wrapper = prepared.X.shape[1] - 10
+    p = prepared.X.shape[1]
+    pmin = max(1, p - 10)
+    pmax = p - 1
+    p_select = randint(pmin, pmax)
+    options.n_feat_wrapper = p_select
     if options.n_feat_wrapper <= 0:
         return
     results = stepwise_select(prep_train=prep_train, options=options, test=test)
     if results is None:
         raise ValueError("Impossible")
     selected, scores, redundants, early_stop = results
-    if (len(selected) != options.n_feat_wrapper) and (not early_stop):
-        raise ValueError("Did not select correct number of features")
+    if (len(selected) > p_select) and (not early_stop):
+        raise ValueError(f"Expected {p_select} to be selected: got {len(selected)}")
+
+    # check that redundant sets are disjoint
+    if len(redundants) > 1:
+        for i in range(len(redundants) - 1):
+            r1 = redundants[i].features
+            r2 = redundants[i + 1].features
+            assert len(set(r1).intersection(r2)) == 0
+
     for fname, score in scores.items():
         print(f"{fname:>30}  {round(score, 3)}")
 
