@@ -291,6 +291,10 @@ def calibration_plot(
     confs_train_max = np.max(probs_train, axis=1).ravel()
     confs_test_max = np.max(probs_test, axis=1).ravel()
 
+    # confidence is the entropy
+    confs_train_ent = (probs_train * np.log(probs_train)).sum(axis=1).ravel()
+    confs_test_ent = (probs_test * np.log(probs_test)).sum(axis=1).ravel()
+
     accs_train, ps = confidence_accuracies(confs_train, preds_train, y_train)
     accs_test = confidence_accuracies(confs_test, preds_test, y_test)[0]
 
