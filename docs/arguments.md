@@ -1,4 +1,5 @@
 ```txt
+
 usage:
 
 The df-analyze program can be used in one of two modes: CLI mode, and
@@ -390,6 +391,37 @@ optional arguments:
 
 
 
+  --redundant-wrapper-selection
+
+                        If this flag is present, then perform an "extra greedy" stepwise selection
+                        that adds or removes multiple features at each step, depending on if the
+                        scores for those features do not differ from the highest score specified by
+                        `--redundant-threshold`.
+  --redundant-threshold REDUNDANT_THRESHOLD
+
+                        The threshold for deciding if wrapper feature selection scores during one
+                        iteration of selection differ meaningfully. E.g. if the threshold is `T`, and
+                        scoring is by accuracy, and at iteration `i` the best feature score is
+                        `acc_max`, then all features with scores greater than or equal to `acc_max -
+                        T` will be considered to be redundant to the first feature with an accuracy
+                        of `acc_max`.
+  --redundant-corr-threshold REDUNDANT_CORR_THRESHOLD
+
+                        During each iteration of redundant wrapper selection, while some features may
+                        have nearly identical scores to the best score, some of these features may
+                        nevertheless contain very different information. Feature selection is done on
+                        the one-hot encoded cateogoricals and normalized continuous features. This
+                        means correlation (e.g. Pearson) gives us a rough measure of association
+                        between all selectable features. A more "cautious" redundant approach will
+                        only lump in features as equivalent if they are also strongly correlated with
+                        the best-scoring feature. This argument sets that threshold. That is, if `f`
+                        is the feature with the best score at an iteration, and if F is the set of
+                        features `f_i` that are within the redundancy threshold of `f`, then in this
+                        case the set of final features R that are redundant to `f` is the set of
+                        {{f_i | abs(corr(f, f_i)) >= T}}, i.e. features with weak (absolute magnitude
+                        lower than threshold) correlations with `f` will remain in the pool of
+                        features to consider in the next iteration.
+
   --htune-trials HTUNE_TRIALS
 
                         Specifies number of trials in Optuna Study, and for each estimator and feature
@@ -515,4 +547,5 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
         --n-feat-wrappper 10 \
         --test-val-size=0.25 \
         --outdir='./results'
+
 ```

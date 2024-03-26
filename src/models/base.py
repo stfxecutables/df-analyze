@@ -314,9 +314,20 @@ class DfAnalyzeModel(ABC):
 
         return self.tuned_model.score(X, y)
 
-    def cv_score(self, X: DataFrame, y: Series) -> float:
+    def cv_score(
+        self, X: DataFrame, y: Series, metric: Scorer, test: bool = False
+    ) -> float:
         # NOTE: VERY IMPORTANT: This must remain single-threaded! As it is
         # used in stepwise selection in the parallel loop
+
+        # TODO: Make sure to make selection use the desired tuning metric?
+
+        if test:
+            score = np.random.beta(a=2, b=5)
+            if self.is_classifier:
+                score = 1 - score
+            return score
+
         if self.is_classifier:
             ss = StratifiedKFold(n_splits=5)
         else:
@@ -331,9 +342,14 @@ class DfAnalyzeModel(ABC):
             self.fit(X_train, y_train)
             preds = self.predict(X=X_test)
             self.model = None  # reset for next fit call
-            scorer = acc if self.is_classifier else mae
-            score = scorer(preds, y_test)
-            score = score if self.is_classifier else -score
+            if metric is None:
+                scorer = acc if self.is_classifier else mae
+                score = scorer(preds, y_test)
+                score = score if self.is_classifier else -score
+            else:
+                score = metric.tuning_score(y_test, preds)
+                if not metric.higher_is_better():
+                    score = -score
             scores.append(score)
         return float(np.mean(scores))
 

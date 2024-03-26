@@ -86,7 +86,7 @@ def silent_scorer(f: Callable) -> Callable:
     return silent
 
 
-def robust_auroc_score(y_true: Series, y_prob: ndarray) -> float:
+def robust_auroc_score(y_true: Series, y_prob: ndarray, *args, **kwargs) -> float:
     try:
         assert_all_finite(y_true)
         assert_all_finite(y_prob)
