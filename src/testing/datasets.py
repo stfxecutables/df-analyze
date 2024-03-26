@@ -204,10 +204,14 @@ class TestDataset:
 
 
 def fake_data(
-    mode: Literal["classify", "regress"], N: int = 100, C: int = 5, noise: float = 1.0
+    mode: Literal["classify", "regress"],
+    N: int = 100,
+    C: int = 5,
+    noise: float = 1.0,
+    num_classes: int = 2,
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
-    X_cont_tr = np.random.standard_normal([N, C])
-    X_cont_test = np.random.standard_normal([N, C])
+    X_cont_tr = np.random.uniform(0, 1, [N, C])
+    X_cont_test = np.random.uniform(0, 1, [N, C])
 
     cat_sizes = np.random.randint(2, 20, C)
     cats_tr = [np.random.randint(0, c) for c in cat_sizes]
@@ -234,13 +238,15 @@ def fake_data(
     df_tr.columns = cols
     df_test.columns = cols
 
-    weights = np.random.uniform(0, 1, 2 * C)
+    weights = np.random.uniform(0, 1, 2 * C)  # bias to positive
     y_tr = np.dot(df_tr.values, weights) + np.random.normal(0, noise, N)
     y_test = np.dot(df_test.values, weights) + np.random.normal(0, noise, N)
 
     if mode == "classify":
-        encoder = KBinsDiscretizer(n_bins=2, encode="ordinal")
-        encoder.fit(y_tr.reshape(-1, 1))
+        encoder = KBinsDiscretizer(
+            n_bins=num_classes, encode="ordinal", strategy="quantile"
+        )
+        encoder.fit(np.concatenate([y_tr.ravel(), y_test.ravel()]).reshape(-1, 1))
         y_tr = encoder.transform(y_tr.reshape(-1, 1))
         y_test = encoder.transform(y_test.reshape(-1, 1))
 
