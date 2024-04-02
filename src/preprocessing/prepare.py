@@ -246,9 +246,11 @@ class PreparedData:
     ) -> tuple[PreparedData, PreparedData]:
         y = self.y
         if self.is_classification:
-            ss = StratifiedShuffleSplit(train_size=train_size, n_splits=1)
+            ss = StratifiedShuffleSplit(
+                train_size=train_size, n_splits=1, random_state=42
+            )
         else:
-            ss = ShuffleSplit(train_size=train_size, n_splits=1)
+            ss = ShuffleSplit(train_size=train_size, n_splits=1, random_state=42)
         idx_train, idx_test = next(ss.split(y, y))  # type: ignore
 
         prep_train = self.subsample(idx_train)
