@@ -89,10 +89,13 @@ def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, 
         if col not in dupe_cols:
             renames.append((col, col))
             continue
-        if counts[col] == 0:  # leave name unchanged
-            renames.append((col, col))
-        else:
-            renames.append((col, f"{col}_{counts[col]}"))
+        # have to rename first, because if you have e.g. "F" with
+        # values "1", "2", "NaN", and a second "F" with the same set of
+        # values, then one-hot encoding will make "F_1", "F_2", "F_NaN",
+        # and the rename here would have created "F_1", so we get a
+        # duplicate. Renaming with a 0 (and double underscores) prevents
+        # this
+        renames.append((col, f"{col}__{counts[col]}"))  # even have to rem
         counts[col] += 1
     newnames = [new for old, new in renames]
     df.columns = newnames

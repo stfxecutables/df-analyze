@@ -55,7 +55,9 @@ def messy_inform(message: str) -> str:
 
 def get_str_cols(df: DataFrame, target: str) -> list[str]:
     X = df.drop(columns=target, errors="ignore")
-    return X.select_dtypes(include=["object", "string[python]", "category"]).columns.tolist()
+    return X.select_dtypes(
+        include=["object", "string[python]", "category"]
+    ).columns.tolist()
 
 
 def get_int_cols(df: DataFrame, target: str) -> list[str]:
@@ -94,9 +96,12 @@ def detect_big_cats(
     -----
     Inflated categoricals we deflate by converting all inflated levels to NaN.
     """
-    big_cats = [col for col in all_cats if (col in unique_counts) and (unique_counts[col] >= 20)]
+    big_cats = [
+        col for col in all_cats if (col in unique_counts) and (unique_counts[col] >= 20)
+    ]
     big_cols = {
-        col: Inference(InferredKind.BigCat, f"{unique_counts[col]} levels") for col in big_cats
+        col: Inference(InferredKind.BigCat, f"{unique_counts[col]} levels")
+        for col in big_cats
     }
     inspect_info = InspectionInfo(ColumnType.BigCat, big_cols)
     if _warn:
@@ -348,7 +353,9 @@ def coerce_user_ambig(
             coercions[col] = Inference(InferredKind.UserOrdinal, "User-specified ordinal")
             continue
         # now we know user specified categorical
-        assert col in arg_cats, f"Logic error: {col} missing from user-specified categoricals"
+        assert (
+            col in arg_cats
+        ), f"Logic error: {col} missing from user-specified categoricals"
 
         ### Case (4) ###
 
@@ -358,7 +365,8 @@ def coerce_user_ambig(
             ### Case (4a) ###
             if infer.kind is InferredKind.MaybeCat:
                 coercions[col] = Inference(
-                    InferredKind.UserCategorical, "User-specified and inferred categorical"
+                    InferredKind.UserCategorical,
+                    "User-specified and inferred categorical",
                 )
                 continue
             ### Case (4b) ###
@@ -366,12 +374,14 @@ def coerce_user_ambig(
                 ### Case (4b.ii) ###
                 if inflation(df[col]) <= 0.0:
                     coercions[col] = Inference(
-                        InferredKind.UserCategorical, "User-specified and non-inflated categorical"
+                        InferredKind.UserCategorical,
+                        "User-specified and non-inflated categorical",
                     )
                 ### Case (4b.i) ###
                 else:
                     coercions[col] = Inference(
-                        InferredKind.CoercedCont, "Looks continuous and is inflated as categorical"
+                        InferredKind.CoercedCont,
+                        "Looks continuous and is inflated as categorical",
                     )
             else:
                 raise ValueError(f"Unaccounted for case: {infers}")
@@ -547,13 +557,11 @@ def convert_categoricals(df: DataFrame, target: str) -> DataFrame:
 
 
 @overload
-def unify_nans(df: DataFrame) -> DataFrame:
-    ...
+def unify_nans(df: DataFrame) -> DataFrame: ...
 
 
 @overload
-def unify_nans(df: Series) -> Series:
-    ...
+def unify_nans(df: Series) -> Series: ...
 
 
 def unify_nans(df: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
@@ -568,10 +576,11 @@ def inspect_data(
     ordinals: Optional[list[str]] = None,
     drops: Optional[list[str]] = None,
     _warn: bool = True,
-) -> InspectionResults:
+) -> tuple[DataFrame, InspectionResults]:
     """Attempt to infer column types"""
     categoricals = categoricals or []
     ordinals = ordinals or []
+    y = df[target]
 
     df = df.drop(columns=target, errors="ignore")
     if drops is not None:
@@ -665,7 +674,8 @@ def inspect_data(
     final_bins   = {col: info for col, info in final_types.items() if info.is_bin()}
     # fmt: on
 
-    return InspectionResults(
+    df[target] = y
+    return df, InspectionResults(
         conts=InspectionInfo(ColumnType.Continuous, final_conts),
         ords=InspectionInfo(ColumnType.Ordinal, final_ords),
         ids=InspectionInfo(ColumnType.Id, final_ids),
@@ -685,7 +695,7 @@ def inspect_data(
 def inspect_data_cached(
     options: ProgramOptions,
     memory: Memory,
-) -> InspectionResults:
+) -> tuple[DataFrame, InspectionResults]:
     if options.program_dirs.root is None:  # can't write files, no cache
         return inspect_data(
             df=options.load_df(),
@@ -704,7 +714,9 @@ def inspect_cls_target(series: Series) -> ClsTargetInfo:
         raise ValueError(f"Classification target '{series.name}' is constant.")
     n_values = len(series.dropna().unique())
     if n_values <= 1:
-        raise ValueError(f"Classification target '{series.name}' is constant after dropping NaNs.")
+        raise ValueError(
+            f"Classification target '{series.name}' is constant after dropping NaNs."
+        )
 
     p_max = np.max(cnts) / np.sum(cnts)
     p_min = np.min(cnts) / np.sum(cnts)
