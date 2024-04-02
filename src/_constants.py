@@ -108,7 +108,8 @@ reliable categorical levels to have 8-16 samples each.
 Inflation is to categorical variables as noise is to continuous ones.
 """
 
-N_TARG_LEVEL_MIN = 30
+# N_TARG_LEVEL_MIN = 30
+N_TARG_LEVEL_MIN = 20
 """
 Minimum required number of samples for level of a categorical target variable
 to be considered useful in 5-fold analyses.
