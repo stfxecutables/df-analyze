@@ -3,13 +3,14 @@
 ################################################################################
 data/*.csv
 data/*.rar
-data/testing/**/*.csv
-data/testing/**/*.txt
-data/testing/**/*.parquet
-data/**/*.tar.gz
+data/**/*.gz
+data/buggy
 data/testing/__*_CACHE__
-data/testing/__TEST*
 data/testing/__FULL*
+data/testing/__TEST*
+data/testing/**/*.csv
+data/testing/**/*.parquet
+data/testing/**/*.txt
 
 test_results
 
@@ -24,7 +25,10 @@ mplconfig
 
 poetry.lock
 
+*.sh
+
 **/*.csv
+**/*.gz
 **/*.json
 **/*.md
 **/*.npy
