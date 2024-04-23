@@ -70,7 +70,7 @@ class PredResults:
         else:
             DataFrame().to_parquet(root / self.files.conts_raw)
         if self.idx_subsample is not None:
-            with open(self.files.idx, "wb") as handle:
+            with open(root / self.files.idx, "wb") as handle:
                 np.save(handle, self.idx_subsample, allow_pickle=False, fix_imports=False)
 
     def save_tables(self, root: Path) -> None:
@@ -194,7 +194,9 @@ def categorical_feature_target_preds(
     with warnings.catch_warnings(record=True) as warns:
         warnings.simplefilter("once")
         try:
-            X = pd.get_dummies(categoricals[column], dummy_na=True, dtype=float).to_numpy()
+            X = pd.get_dummies(
+                categoricals[column], dummy_na=True, dtype=float
+            ).to_numpy()
             y = target
             if is_classification:
                 y = Series(data=LabelEncoder().fit_transform(target), name=target.name)  # type: ignore
@@ -224,7 +226,9 @@ def feature_target_predictions(
     continuous: DataFrame,
     target: Series,
     is_classification: bool,
-) -> tuple[Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]]:
+) -> tuple[
+    Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]
+]:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_conts: list[DataFrame]
