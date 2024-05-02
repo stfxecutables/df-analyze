@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import (
     Optional,
@@ -21,7 +22,9 @@ def get_clean_list() -> DataFrame:
     ds = openml.datasets.list_datasets(output_format="dataframe")
     ds.index = ds["did"]  # type: ignore
     ds = ds[ds["status"] == "active"]
-    ds = ds.drop(columns=["format", "uploader", "did", "status", "MaxNominalAttDistinctValues"])
+    ds = ds.drop(
+        columns=["format", "uploader", "did", "status", "MaxNominalAttDistinctValues"]
+    )
     # get latest versions
     ds = ds.loc[ds.groupby("name")["version"].nlargest(1).index.droplevel(0)]
     ds = ds.drop(columns="version").convert_dtypes()
@@ -45,7 +48,9 @@ def get_regression_info(ds: DataFrame) -> DataFrame:
     reg = ds[ds["n_cls"] == 0].drop(columns=["n_max_cls", "n_min_cls", "n_cls"])
     reg.insert(0, "nan_perc", reg["nan_total"] / reg["N"])
     reg.drop(columns="nan_total", inplace=True)
-    reg = reg.sort_values(by=["N", "n_feat", "n_categorical", "nan_perc"], ascending=False)
+    reg = reg.sort_values(
+        by=["N", "n_feat", "n_categorical", "nan_perc"], ascending=False
+    )
     reg = reg[reg["N"] > 300]
     reg = reg[reg["N"] < 100_000]
     reg = reg[reg["n_feat"] < 1000]
@@ -60,7 +65,9 @@ def get_classification_info(ds: DataFrame) -> DataFrame:
     cls.insert(0, "nan_perc", cls["n_nan_samp"] / cls["N"])
     cls.insert(0, "nan_ratio", cls["nan_total"] / cls["N"])
     cls.drop(
-        columns=["n_max_cls", "n_min_cls", "n_nan_samp", "nan_total"], inplace=True, errors="ignore"
+        columns=["n_max_cls", "n_min_cls", "n_nan_samp", "nan_total"],
+        inplace=True,
+        errors="ignore",
     )
 
     cls = cls[~cls.name.str.contains("seed_")]
@@ -141,7 +148,9 @@ def save_parquet(dataset: OpenMLDataset, is_cls: bool) -> None:
     df_types = DataFrame({"feature_name": cols, "type": cats})
     if "midwest_survey" in dsname.lower():
         df_types.loc[:, "type"] = True  # are in fact all categorical
-    df_types["type"] = df_types["type"].apply(lambda x: "categorical" if x else "continuous")
+    df_types["type"] = df_types["type"].apply(
+        lambda x: "categorical" if x else "continuous"
+    )
 
     df_types.to_csv(typs, index=False)
     df.to_parquet(pq)
@@ -157,6 +166,19 @@ def save_parquet(dataset: OpenMLDataset, is_cls: bool) -> None:
 
 if __name__ == "__main__":
     ds = get_clean_list()
+    benchmark = openml.study.get_suite(293)
+    tasks = openml.tasks.list_tasks(output_format="dataframe", task_id=benchmark.tasks)
+    df = openml.evaluations.list_evaluations(
+        # function="area_under_roc_curve", tasks=benchmark.tasks, output_format="dataframe"
+        function="predictive_accuracy",
+        tasks=benchmark.tasks,
+        output_format="dataframe",
+        size=None,
+    )
+    reg = get_regression_info(ds)
+    cls = get_classification_info(ds)
+    sys.exit()
+
     reg = get_regression_info(ds)
     cls = get_classification_info(ds)
 

@@ -1,3 +1,4 @@
+import sys
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
@@ -83,9 +84,11 @@ def main() -> None:
     # get arguments
     # run analyses based on args
     options = get_options()
-    if options.verbosity.value > 0:
-        log_options(options)
+    # if options.verbosity.value > 0:
+    #     log_options(options)
 
+    print(options.drops)
+    # sys.exit(0)
     is_cls = options.is_classification
     prog_dirs = options.program_dirs
     target = options.target

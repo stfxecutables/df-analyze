@@ -87,7 +87,7 @@ def int_or_percent_parser(
 
 
 def int_or_percent_or_none_parser(
-    default: Union[int, float, None]
+    default: Union[int, float, None],
 ) -> Callable[[str], Union[int, float, None]]:
     def inner(arg: str) -> Optional[Union[float, int]]:
         if "none" in arg.lower():
@@ -122,19 +122,15 @@ def separator(s: str) -> str:
 
 
 def column_parser(s: str) -> list[str]:
-    s = re.sub(" +", " ", s)
+    s = re.sub(r" +", " ", s)
+    s = re.sub(r",+", ",", s)
     columns = []
     quoted_cols = []
-    matches = [*re.finditer(r"'", s)]
-    if len(matches) <= 1:
-        return s.split(" ")
-    starts = [m.span()[0] for m in matches[::2]]
-    ends = [m.span()[0] for m in matches[1::2]]
-    if len(starts) != len(ends):
-        raise SyntaxError(
-            "Imbalanced number of single-quotes. Make sure the `'` character "
-            "is not included in any column names. "
-        )
+    cols = [w for w in s.split(",") if len(w) > 0]
+    return cols
+
+    if len(cols) <= 1:
+        return [s]
     for start, end in zip(starts, ends):
         columns.append(s[start + 1 : end])
         quoted_cols.append(s[start : end + 1])
