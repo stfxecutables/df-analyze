@@ -67,7 +67,7 @@ df_analyze () {
         --df "$3" \
         --mode "$1" \
         --target "$4" \
-        --classifiers knn lgbm rf lr sgd dummy \
+        --classifiers knn lgbm rf lr dummy \
         --norm robust \
         --nan median \
         --feat-select filter embed wrap \
@@ -79,7 +79,7 @@ df_analyze () {
         --filter-assoc-cat-classify mut_info \
         --filter-pred-classify acc \
         --n-feat-filter 20 \
-        --n-feat-wrapper 10 \
+        --n-feat-wrapper 20 \
         --redundant-wrapper-selection \
         --redundant-threshold 0.01 \
         --htune-trials 100 \
