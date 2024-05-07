@@ -6,7 +6,7 @@ PROJECT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$PROJECT" || exit 1
 ROOT="$(readlink -f .)"
 DATA="$ROOT"/cmc_data
-RESULTS="$ROOT"/cmc_results
+RESULTS="$ROOT"/cmc_results_fs_only
 ABIDE_I="$DATA/ABIDE_I"
 ABIDE_II="$DATA/ABIDE_II"
 ADHD200="$DATA/ADHD200"
