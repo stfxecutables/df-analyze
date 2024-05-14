@@ -72,43 +72,6 @@ TF_BINS = [
     "acc_blame",  # False, True
 ]
 
-COLS = {
-    "date_of_stop": "ord",
-    "time_of_stop": "ord",
-    "agency": "const",
-    "subagency": "cat",
-    "description": "text",  # 16 660 unique entries
-    "location": "ord",
-    "latitude": "ord",
-    "longitude": "ord",
-    "accident": "bin",
-    "belts": "bin",
-    "personal_injury": "bin",
-    "property_damage": "ord",
-    "fatal": "ord",
-    "commercial_license": "ord",
-    "hazmat": "ord",
-    "commercial_vehicle": "ord",
-    "alcohol": "ord",
-    "work_zone": "ord",
-    "state": "ord",
-    "vehicletype": "ord",
-    "year": "ord",
-    "make": "ord",
-    "model": "ord",
-    "color": "ord",
-    "violation_type": "ord",
-    "charge": "ord",
-    "article": "ord",
-    "contributed_to_accident": "ord",
-    "race": "ord",
-    "gender": "ord",
-    "driver_city": "ord",
-    "driver_state": "ord",
-    "dl_state": "ord",
-    "arrest_type": "ord",
-    "geolocation": "ord",
-}
 DROPS = [
     "time_of_stop",
     "date_of_stop",
@@ -197,6 +160,7 @@ def renamer(s: str) -> str:
         "gender": "sex",
         "state": "reg_state",
         "vehicletype": "vehicle_type",
+        "arrest_type": "patrol_entity",  # completely wrong name by them
     }
     if s in remaps:
         return remaps[s]
@@ -1320,7 +1284,7 @@ def clean_searches(df: DataFrame) -> DataFrame:
 
 def fix_arrests(df: DataFrame) -> DataFrame:
     """
-    >>> unqs, cnts, n = sorted_counts(df.arrest_type)
+    >>> unqs, cnts, n = sorted_counts(df.patrol_entity)
     >>> unqs
         'A - Marked Patrol',
         'Q - Marked Laser',
@@ -1396,10 +1360,10 @@ def fix_arrests(df: DataFrame) -> DataFrame:
     ]
     # fmt: on
 
-    df["unmarked_arrest"] = df["arrest_type"].isin(unmarked)
-    df["tech_arrest"] = df["arrest_type"].isin(machine)
-    idx = df["arrest_type"].isin(reduce)
-    df.loc[idx, "arrest_type"] = "Other"
+    df["unmarked_arrest"] = df["patrol_entity"].isin(unmarked)
+    df["tech_arrest"] = df["patrol_entity"].isin(machine)
+    idx = df["patrol_entity"].isin(reduce)
+    df.loc[idx, "patrol_entity"] = "Other"
     return df
 
 
@@ -1586,7 +1550,7 @@ def finalize(df: DataFrame) -> DataFrame:
     article                    4
     race                       6
     sex                        3
-    arrest_type               10
+    patrol_entity             10
     chrg_title                 9
     stop_chrg_title            9
 
@@ -1623,7 +1587,7 @@ def finalize(df: DataFrame) -> DataFrame:
     ]
     FINAL_CATS = [
         "subagency", "search_disposition", "outcome", "search_type", "vehicle_type",
-        "vehicle_make", "vehicle_color", "violation_type", "article", "race", "sex", "arrest_type",
+        "vehicle_make", "vehicle_color", "violation_type", "article", "race", "sex", "patrol_entity",
         "chrg_title", "stop_chrg_title",
     ]
     # all features with "search" in them have very high mutual information: only one
@@ -1647,7 +1611,7 @@ def finalize(df: DataFrame) -> DataFrame:
         "article",
         "race",
         "sex",
-        "arrest_type",
+        "patrol_entity",
         "chrg_title",
         "stop_chrg_title",
     ]
@@ -1673,31 +1637,64 @@ def finalize(df: DataFrame) -> DataFrame:
     return df
 
 
+def print_df_analyze_info(df: DataFrame) -> None:
+    CATS = [
+        "acc_blame",
+        "accident",
+        "alcohol",
+        "article",
+        "belts",
+        "chrg_sect_mtch",
+        "chrg_title",
+        "chrg_title_mtch",
+        "comm_license",
+        "comm_vehicle",
+        "fatal",
+        "hazmat",
+        "home_outstate",
+        "licensed_outstate",
+        "outcome",
+        "patrol_entity",
+        "pers_injury",
+        "prop_dmg",
+        "race",
+        "search_conducted",
+        "search_disposition",
+        "search_type",
+        "sex",
+        "stop_chrg_title",
+        "subagency",
+        "tech_arrest",
+        "unmarked_arrest",
+        "vehicle_color",
+        "vehicle_make",
+        "vehicle_type",
+        "violation_type",
+        "work_zone",
+    ]
+    ORDS = [
+        "year_of_stop",
+        "month_of_stop",
+        "weeknum_of_stop",
+        "weekday_of_stop",
+    ]
+    POTENTIAL_DROPS = ["vehicle_make", "vehicle_color", "subagency", "patrol_entity"]
+
+    cats = ",".join(CATS)
+    ords = ",".join(ORDS)
+    drops = ",".join(POTENTIAL_DROPS)
+
+    print(df.dtypes)
+    print(df.describe(include="all").T.to_markdown(tablefmt="simple", floatfmt="0.3f"))
+    print(df.shape)
+    print(f"--categoricals {cats}")
+    print(f"--ordinals {ords}")
+    print(f"[OPTIONAL]\n--drops {drops}")
+
+
 if __name__ == "__main__":
-    # # with open(DATA_OUT / "makes_alphasort.txt", "r") as handle:
-    # #     makes = [line.replace("\n", "").strip() for line in handle.readlines()]
-    # with open(DATA_OUT / "makes.txt", "r") as handle:
-    #     countlines = [line.replace("\n", "").strip() for line in handle.readlines()]
-
-    # countlines = list(reversed(countlines))
-
-    # counts = [
-    #     int(re.search(r"\[(?P<cnt>\d+)\]", line).groupdict()["cnt"])
-    #     for line in countlines
-    # ]
-    # makes = np.array([re.sub(r"\[\d+\]", "", line).strip() for line in countlines])
-    # common_makes = makes.tolist()[:150]
-    # all_dists = cdist(common_makes, makes, scorer=lev_dist)
-    # spellings = {}
-    # for m, common_make in enumerate(common_makes):
-    #     dists = all_dists[m]  # len == len(makes)
-    #     idx = dists <= 2
-    #     matches = sorted(makes[idx].tolist())
-    #     matches = [mtch for mtch in matches if mtch[0] == common_make[0]]
-    #     spellings[common_make] = matches
-
     use_cached = False
-    use_cached = True
+    # use_cached = True
     if MIN_CLEAN.exists() and use_cached:
         print("Loading cleaned data...")
         df = pd.read_parquet(MIN_CLEAN)
@@ -1748,4 +1745,5 @@ if __name__ == "__main__":
 
     df.to_parquet(FINAL_OUT)
     print(f"Saved processed data to {FINAL_OUT}")
-    print()
+    print_df_analyze_info(df)
+    print(f"Saved processed data to {FINAL_OUT}")
