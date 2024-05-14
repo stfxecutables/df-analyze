@@ -27,6 +27,9 @@ df_analyze () {
         --df "$SHEET" \
         --mode classify \
         --target "$TARGET" \
+        --categoricals "$CATS" \
+        --ordinals "$ORDS" \
+        --drops "$DROPS" \
         --classifiers lgbm rf sgd dummy \
         --norm robust \
         --nan median \
