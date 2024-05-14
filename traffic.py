@@ -44,9 +44,14 @@ from tqdm import tqdm
 from typing_extensions import Literal
 
 SOURCE = ROOT / "traffic_violations_complete.csv"
+"""
+https://data.montgomerycountymd.gov/Public-Safety/Traffic-Violations-API/y8ms-hri9/about_data
+https://data.montgomerycountymd.gov/Public-Safety/Traffic-Violations/4mse-ku6q/about_data
+"""
 DATA_OUT = ROOT / "traffic_data"
 DATA_OUT.mkdir(exist_ok=True)
 MIN_CLEAN = DATA_OUT / "min_cleaned.parquet"
+FINAL_OUT = DATA_OUT / "traffic_data_processed.parquet"
 MEMOIZER = Memory(location=ROOT / "__JOBLIB_CACHE__")
 
 DESC_OUT = DATA_OUT / "unique_descriptions.txt"
@@ -168,6 +173,15 @@ STATE_COORDS = {  # obtained through geopy via Nominatim, using query "{XX}, USA
 }
 
 
+def sorted_counts(s: Series) -> tuple[ndarray, ndarray, int]:
+    unqs, cnts = np.unique(s.apply(str), return_counts=True)
+    idx = np.argsort(-cnts)
+    unqs, cnts = unqs[idx], cnts[idx]
+    coverages = np.cumsum(cnts) / len(s)
+    n = (coverages < 0.95).sum()
+    return unqs, cnts, n
+
+
 def renamer(s: str) -> str:
     s = str(s).lower().replace(" ", "_")
     remaps = {
@@ -180,10 +194,20 @@ def renamer(s: str) -> str:
         "make": "vehicle_make",
         "model": "vehicle_model",
         "color": "vehicle_color",
+        "gender": "sex",
+        "state": "reg_state",
+        "vehicletype": "vehicle_type",
     }
     if s in remaps:
         return remaps[s]
     return s
+
+
+def get_coords(state: str) -> tuple[float, float]:
+    if state not in STATE_COORDS or state == "XX":
+        return (NaN, NaN)
+    state_point = STATE_COORDS[state]
+    return state_point
 
 
 def compute_distance(state: str, lat: float, long: float) -> float:
@@ -197,22 +221,72 @@ def compute_distance(state: str, lat: float, long: float) -> float:
 # @MEMOIZER.cache()
 def states_to_distances(df: DataFrame) -> DataFrame:
     df = df.copy()
-    df["latitude"]
     # (0, 0) is used to represent unknown, XX is unknown state, so we need to axe these
     idx_nan = (df.latitude.abs() < 0.1) | (df.longitude.abs() < 0.1)
     df.loc[idx_nan, "latitude"] = NaN
     df.loc[idx_nan, "longitude"] = NaN
-    df.loc[idx_nan, "state"] = "XX"
-    states, lats, longs = df["state"], df["latitude"], df["longitude"]
+    df.loc[idx_nan, "reg_state"] = "XX"
+    states, lats, longs = df["reg_state"], df["latitude"], df["longitude"]
+    reg_lats, reg_longs = [], []
+    for state in states:
+        lat, long = get_coords(state)
+        reg_lats.append(lat)
+        reg_longs.append(long)
 
-    kms = Parallel(n_jobs=-1)(
+    reg_kms = Parallel(n_jobs=-1)(
         delayed(compute_distance)(state, lat, long)
         for (state, lat, long) in tqdm(
-            zip(states, lats, longs), total=len(states), desc="Computing geodesics"
+            zip(states, lats, longs),
+            total=len(states),
+            desc="Computing vehicle regisration state geodesics",
         )
     )
 
-    df["state_km"] = kms
+    states = df["driver_state"]
+    home_lats, home_longs = [], []
+    for state in states:
+        lat, long = get_coords(state)
+        home_lats.append(lat)
+        home_longs.append(long)
+    # it turns out these are all zero or Nan!
+    home_kms = Parallel(n_jobs=-1)(
+        delayed(compute_distance)(state, lat, long)
+        for (state, lat, long) in tqdm(
+            zip(states, home_lats, home_longs),
+            total=len(states),
+            desc="Computing home state geodesics",
+        )
+    )
+
+    states = df["dl_state"]
+    license_lats, license_longs = [], []
+    for state in states:
+        lat, long = get_coords(state)
+        license_lats.append(lat)
+        license_longs.append(long)
+    # it turns out these are all zero or Nan!
+    license_kms = Parallel(n_jobs=-1)(
+        delayed(compute_distance)(state, lat, long)
+        for (state, lat, long) in tqdm(
+            zip(states, license_lats, license_longs),
+            total=len(states),
+            desc="Computing license state geodesics",
+        )
+    )
+
+    df["reg_lat"] = reg_lats
+    df["reg_long"] = reg_longs
+    df["reg_km"] = reg_kms
+
+    df["home_lat"] = home_lats
+    df["home_long"] = home_longs
+    df["home_km"] = home_kms
+
+    df["license_lat"] = license_lats
+    df["license_long"] = license_longs
+    df["license_km"] = license_kms
+
+    df = df.drop(columns=["reg_state", "driver_state", "driver_city", "dl_state"])
     return df
 
 
@@ -913,10 +987,143 @@ def clean_vehicle_info(df: DataFrame) -> DataFrame:
     # or other things This is a lot of work, so for now we drop to prevent
     # exploding compute costs.
     df.drop(columns="vehicle_model", inplace=True)
-
     df = fix_makes(df)
 
+    """
+    02 - Automobile
+
+    05 - Light Duty Truck
+    06 - Heavy Duty Truck
+    20 - Commercial Rig
+
+    28 - Other
+    03 - Station Wagon
+    04 - Limousine
+
+    01 - Motorcycle
+    19 - Moped
+
+    29 - Unknown
+
+    08 - Recreational Vehicle
+
+    25 - Utility Trailer
+    26 - Boat Trailer
+    21 - Tandem Trailer
+
+    07 - Truck/Road Tractor
+    27 - Farm Equipment
+    09 - Farm Vehicle
+
+    10 - Transit Bus
+    12 - School Bus
+    11 - Cross Country Bus
+
+    23 - Travel/Home Trailer
+    22 - Mobile Home
+    24 - Camper
+
+    18 - Police(Non-Emerg)
+    14 - Ambulance(Non-Emerg)
+    13 - Ambulance(Emerg)
+    15 - Fire(Emerg)
+    17 - Police(Emerg)
+    16 - Fire(Non-Emerg)
+    18 - Police Vehicle
+    15 - Fire Vehicle
+    14 - Ambulance
+    13 - Ambulance
+
+    [1700901  102419   34380   27701   17237   15777   10970    5345    1946
+    1903    1746    1043     949     638     399     135     108     101
+      86      65      35      27      26      21      20      14      13
+       5       4       4       3       2       1]
+
+    First two cover 95%
+
+    """
+    # fmt: off
+    emergency = ["18 - Police(Non-Emerg)", "14 - Ambulance(Non-Emerg)", "13 - Ambulance(Emerg)",
+        "15 - Fire(Emerg)", "17 - Police(Emerg)", "16 - Fire(Non-Emerg)", "18 - Police Vehicle",
+        "15 - Fire Vehicle", "14 - Ambulance", "13 - Ambulance",
+    ]
+    trucks = ["05 - Light Duty Truck", "06 - Heavy Duty Truck", "20 - Commercial Rig"]
+    other = ["28 - Other", "03 - Station Wagon", "04 - Limousine", "29 - Unknown"]
+    cycle = ["01 - Motorcycle", "19 - Moped"]
+    rec = ["08 - Recreational Vehicle"]
+    trailer = ["25 - Utility Trailer", "26 - Boat Trailer", "21 - Tandem Trailer"]
+    farm = ["07 - Truck/Road Tractor", "27 - Farm Equipment", "09 - Farm Vehicle"]
+    bus = ["10 - Transit Bus", "12 - School Bus", "11 - Cross Country Bus"]
+    camping = ["23 - Travel/Home Trailer", "22 - Mobile Home", "24 - Camper"]
+
+    cats = {
+        "emergency": emergency,
+        "truck": trucks,
+        "other": other,
+        "cycle": cycle,
+        "recreational": rec,
+        "trailer": trailer,
+        "farm": farm,
+        "bus": bus,
+        "camping": camping,
+    }
+
+    vt = df["vehicle_type"].apply(str)
+    df["vehicle_type"] = vt
+    for label, classes in cats.items():
+        df.loc[vt.isin(classes), "vehicle_type"] = label
+
     return df
+
+
+def clean_driver_info(df: DataFrame) -> DataFrame:
+    """
+    We convert driver_state + driver_city to latitude and longitude, and
+    leave those raw (no distances). However, this would be too many geocoding
+    requests, so instead we just drop the city, and map driver_state to a lat
+    and long instead.
+
+    >>> unqs, cnts, n = sorted_counts(df.driver_state)
+    >>> unqs
+    array(['MD', 'DC', 'VA', 'PA', 'FL', 'NY', 'NC', 'WV', 'CA', 'NJ', 'TX',
+        'GA', 'MA', 'DE', 'OH', 'IL', 'SC', 'XX', 'WA', 'CT', 'MI', 'TN',
+        'CO', 'AZ', 'IN', 'AL', 'MO', 'LA', 'MS', 'WI', 'NM', 'KY', 'MN',
+        'NV', 'OK', 'ME', 'UT', 'RI', 'ON', 'NH', 'OR', 'KS', 'ND', 'AR',
+        'HI', 'IA', 'VT', 'AK', 'NE', 'MT', 'ID', 'MB', 'SD', 'WY', 'PR',
+        'AB', 'QC', 'None', 'VI', 'BC', 'US', 'GU', 'NF', 'NB', 'SK', 'NS',
+        'PE', 'IT', 'PQ'], dtype=object)
+    >>> cnts
+    array([1736494,   63774,   59064,    9628,    6689,    5842,    4502,
+            4125,    3510,    3034,    2885,    2614,    1905,    1697,
+            1645,    1253,    1184,    1084,     925,     912,     897,
+            788,     710,     638,     591,     525,     462,     439,
+            346,     309,     301,     300,     297,     285,     276,
+            255,     237,     236,     220,     208,     186,     172,
+            151,     143,     141,     112,     107,     105,      96,
+                90,      78,      66,      46,      36,      34,      26,
+                25,      11,      10,      10,       9,       7,       6,
+                5,       4,       3,       2,       1,       1])
+    >>> n
+    2
+
+
+    >>> unqs, cnts, n = sorted_counts(df.driver_city)
+    >>> unqs
+    array(['SILVER SPRING', 'GAITHERSBURG', 'GERMANTOWN', ...,
+        'MARINA DL RAY', 'NUTTER FORT', 'DEVENS'], dtype=object)
+    >>> cnts
+    array([472158, 202617, 163072, ...,      1,      1,      1])
+    >>> n
+    187
+
+    """
+    df = df.copy()
+    lats, longs = [], []
+    for i in range(len(df)):
+        state = df.iloc[i]["driver_state"]
+        lat, long = get_coords(state)
+        lats.append(lat)
+        longs.append(long)
 
 
 def to_hour(s: str) -> float:
@@ -973,6 +1180,499 @@ def reduce_descriptions(df: DataFrame) -> DataFrame:
     return df
 
 
+def short_charge(series: Series) -> tuple[list[str], list[str]]:
+    titles, sections = [], []
+    for s in series:
+        res = re.match(r"(?P<title>\d+)-(?P<section>[\d\.]+)", str(s))
+        if res is None:
+            title = "None"
+            section = "None"
+        else:
+            d = res.groupdict()
+            title = d["title"] if "title" in d else "None"
+            section = d["section"] if "section" in d else "None"
+        titles.append(title)
+        sections.append(section)
+
+    return titles, sections
+
+
+def clean_searches(df: DataFrame) -> DataFrame:
+    """
+    feature                                           common_values                                   counts 95%
+    ......................  .......................................  ....................................... ...
+    search_conducted                                [No, None, Yes]                 [1107744, 730564, 85716]   1
+    search_disposition      [None, Nothing, Contraband Only, Pro...  [1838308, 37434, 22157, 13960, 12146...   0
+    search_outcome          [None, Warning, Citation, Arrest, SE...  [749832, 582862, 496949, 59673, 3470...   2
+    search_reason           [None, Incident to Arrest, Probable ...  [1838308, 48803, 21487, 12119, 1716,...   0
+    search_reason_for_stop  [None, 21-201(a1), 21-801.1, 13-411(...  [730842, 143600, 88181, 59310, 55787...  82
+    search_type             [None, Both, Property, Person, car, ...  [1838316, 64018, 11552, 10128, 4, 3, 3]   0
+    search_arrest_reason    [None, Stop, Search, Other, Warrant,...  [1865219, 37688, 11460, 6580, 3026, ...   0
+
+
+    search_conducted:
+
+    >>> pd.crosstab(df.search_conducted.apply(str), df.outcome.apply(str), margins=True)
+    outcome           Arrest  Citation    None   SERO  Warning              All
+
+    search_conducted
+    No                   587    478657   19268  34367   574865          1107744
+    None                   0         0  730564      0        0           730564
+    Yes                59086     18292       3    338     7997            85716
+
+    All                59673    496949  749835  34705   582862          1924024
+
+
+    """
+    df["search_conducted"] = df["search_conducted"].apply(str) == "Yes"
+
+    """
+    >>> info["search_disposition"].T
+    [None, Nothing, Contraband Only, Property Only, Contraband and Property | DUI, marijuana, nothing]
+    [1838308, 37434, 22157, 13960, 12146 | 12, 4, 3]
+    0
+    """
+    ix = (
+        df["search_disposition"]
+        .apply(str)
+        .isin(["None", "Nothing", "DUI", "marijuana", "nothing"])
+    )
+    df.loc[ix, "search_disposition"] = "None"
+
+    """
+    >>> print(info.search_type.T)
+    [None, Both, Property, Person | car, PC, Search Incidental]
+    [1838316, 64018, 11552, 10128 | 4, 3, 3]
+    0
+    """
+    ix = df["search_type"].apply(str).isin(["None", "car", "PC", "Search Incidental"])
+    df.loc[ix, "search_type"] = "None"
+
+    """
+    >>> print(info.search_arrest_reason.T)
+    [None, Stop, Search, Other, Warrant | Traffic, DUI, Marihuana, Criminal, DWI]
+    [1865219, 37688, 11460, 6580, 3026 | 28, 13, 5, 3, 2]
+    0
+    """
+    ix = (
+        df["search_arrest_reason"]
+        .apply(str)
+        .isin(["None", "Traffic", "DUI", "Marihuana", "Criminal", "DWI"])
+    )
+    df.loc[ix, "search_arrest_reason"] = "None"
+
+    """
+    >>> print(info["search_outcome"].T)
+    [None, Warning, Citation, Arrest, SERO, Recovered Evidence]
+    [749832, 582862, 496949, 59673, 34705, 3]
+    2
+
+    "SERO" = Safety Equipment Repair Order
+    "ESERO" = Electric Safety Equipment Repair Order
+    """
+    ix = df["search_outcome"].apply(str).isin(["None", "Recovered Evidence"])
+    df.loc[ix, "search_outcome"] = "None"
+
+    """
+    >>> print(info["search_reason"].T)
+    [None, Incident to Arrest, Probable Cause, Consensual | K-9, Other,
+     Exigent Circumstances, Probable Cause for CDS, Arrest/Tow, plain view marijuana, DUI]
+    [1838308, 48803, 21487, 12119 | 1716, 1057, 522, 5, 3, 3, 1]
+    """
+    ix = (
+        df["search_reason"]
+        .apply(str)
+        .isin(
+            [
+                "None",
+                "K-9",
+                "Other",
+                "Exigent Circumstances",
+                "Probable Cause for CDS",
+                "Arrest/Tow",
+                "plain view marijuana",
+                "DUI",
+            ]
+        )
+    )
+    df.loc[ix, "search_reason"] = "None"
+
+    """
+    print(info["search_reason_for_stop"].T)
+    [None, 21-201(a1), 21-801.1, 13-411(f), 21-707(a), 13-401(h), 21-1124.2(d2), 64*, 22-201.1, ...]
+    [730842, 143600, 88181, 59310, 55787, 49279, 45332, 31087, 30745, 25247, 22899, 22784, 21743, ...]
+    82
+
+    Way yoo many here, instead we just see if search reason matches ultimate charge
+    """
+    charge_title, charge_section = short_charge(df["charge"])
+    stop_title, stop_section = short_charge(df["search_reason_for_stop"])
+    df["chrg_title"] = charge_title
+    df["chrg_sect"] = charge_section
+    df["stop_chrg_title"] = stop_title
+    df["stop_chrg_sect"] = stop_section
+    df["chrg_title_mtch"] = df["stop_chrg_title"] == df["chrg_title"]
+    df["chrg_sect_mtch"] = df["stop_chrg_sect"] == df["chrg_sect"]
+
+    df.drop(columns="search_reason_for_stop", inplace=True)
+    return df
+
+
+def fix_arrests(df: DataFrame) -> DataFrame:
+    """
+    >>> unqs, cnts, n = sorted_counts(df.arrest_type)
+    >>> unqs
+        'A - Marked Patrol',
+        'Q - Marked Laser',
+        'B - Unmarked Patrol',
+        'G - Marked Moving Radar (Stationary)',
+        'L - Motorcycle',
+        'S - License Plate Recognition',
+        'O - Foot Patrol',
+        'E - Marked Stationary Radar',
+        'R - Unmarked Laser',
+        'M - Marked (Off-Duty)',
+        ---
+        'I - Marked Moving Radar (Moving)',
+        'H - Unmarked Moving Radar (Stationary)',
+        'J - Unmarked Moving Radar (Moving)',
+        'F - Unmarked Stationary Radar',
+        'C - Marked VASCAR',
+        'P - Mounted Patrol',
+        'D - Unmarked VASCAR',
+        'N - Unmarked (Off-Duty)',
+        'K - Aircraft Assist'
+    >>> cnts
+    array([1556828,  183878,   80132,   17716,   17561,   16307,   14659,
+            13528,    9063,    4839   |  3717,    2241,    1040,     985,
+            522,     361,     312,     278,      57])
+    >>> n
+    3
+
+    So 3 arrest types cover 95% of types. However, we can do better:
+
+        'A - Marked Patrol',
+        'M - Marked (Off-Duty)',
+        'P - Mounted Patrol',
+        'O - Foot Patrol',
+        'L - Motorcycle',
+
+        'B - Unmarked Patrol',
+        'N - Unmarked (Off-Duty)',
+
+        'Q - Marked Laser',
+        'G - Marked Moving Radar (Stationary)',
+        'E - Marked Stationary Radar',
+        'I - Marked Moving Radar (Moving)',
+        'C - Marked VASCAR',
+        'S - License Plate Recognition',
+
+        'R - Unmarked Laser',
+        'H - Unmarked Moving Radar (Stationary)',
+        'J - Unmarked Moving Radar (Moving)',
+        'F - Unmarked Stationary Radar',
+        'D - Unmarked VASCAR',
+
+        'K - Aircraft Assist'  <-- drop, too few
+    """
+    # fmt: off
+    unmarked = [
+        "B - Unmarked Patrol", "N - Unmarked (Off-Duty)", "R - Unmarked Laser",
+        "H - Unmarked Moving Radar (Stationary)", "J - Unmarked Moving Radar (Moving)",
+        "F - Unmarked Stationary Radar", "D - Unmarked VASCAR", "K - Aircraft Assist",
+    ]
+    machine = [
+        "Q - Marked Laser", "G - Marked Moving Radar (Stationary)", "E - Marked Stationary Radar",
+        "I - Marked Moving Radar (Moving)", "C - Marked VASCAR", "S - License Plate Recognition",
+        "R - Unmarked Laser", "H - Unmarked Moving Radar (Stationary)",
+        "J - Unmarked Moving Radar (Moving)", "F - Unmarked Stationary Radar",
+        "D - Unmarked VASCAR",
+    ]
+    reduce = [
+        "I - Marked Moving Radar (Moving)", "H - Unmarked Moving Radar (Stationary)",
+        "J - Unmarked Moving Radar (Moving)", "F - Unmarked Stationary Radar",
+        "C - Marked VASCAR", "P - Mounted Patrol", "D - Unmarked VASCAR",
+        "N - Unmarked (Off-Duty)", "K - Aircraft Assist",
+    ]
+    # fmt: on
+
+    df["unmarked_arrest"] = df["arrest_type"].isin(unmarked)
+    df["tech_arrest"] = df["arrest_type"].isin(machine)
+    idx = df["arrest_type"].isin(reduce)
+    df.loc[idx, "arrest_type"] = "Other"
+    return df
+
+
+def reduce_charges(df: DataFrame) -> DataFrame:
+    """
+    2 charges = 22%
+    3 charges = 26%
+    5 charges =
+    At ~145 charges, over 95% of charges are covered
+
+    https://law.justia.com/codes/maryland/2005/gtr.html
+
+    E.g.
+
+    https://law.justia.com/codes/maryland/2005/gtr/13-401.html
+
+
+    These are the actual categories:
+    https://law.justia.com/codes/maryland/transportation/
+
+
+    Title 1 - Definitions; General Provisions
+    Title 2 - Department of Transportation
+    Title 3 - Financing by Department
+    Title 4 - Revenue Facilities
+    Title 5 - Aviation
+    Title 6 - Ports
+    Title 7 - Mass Transit
+    Title 8 - Highways
+    Title 9 - Railroads
+    Title 10 - Transportation Compacts
+    Title 11 - Vehicle Laws -- Definitions; General Provisions
+    Title 12 - Vehicle Laws -- Motor Vehicle Administration
+    Title 13 - Vehicle Laws -- Certificates of Title and Registration of Vehicles
+    Title 14 - Vehicle Laws -- Antitheft Laws
+    Title 15 - Vehicle Laws -- Licensing of Businesses and Occupations
+    Title 16 - Vehicle Laws -- Drivers' Licenses
+    Title 17 - Vehicle Laws -- Required Security
+    Title 18 - Vehicle Laws -- For-Rent Vehicles
+    Title 18.5 - Peer-to-Peer Car Sharing Programs
+    Title 18.7 - Motor Scooter and Electric Low Speed Scooter Sharing Companies
+    Title 19 - Vehicle Laws -- Civil Liability of Governmental Agencies
+    Title 20 - Vehicle Laws -- Accidents and Accident Reports
+    Title 21 - Vehicle Laws -- Rules of the Road
+    Title 22 - Vehicle Laws -- Equipment of Vehicles
+    Title 23 - Vehicle Laws -- Inspection of Used Vehicles and Warnings for Defective Equipment
+    Title 24 - Vehicle Laws -- Size, Weight, and Load; Highway Preservation
+    Title 25 - Vehicle Laws -- Respective Powers of State and Local Authorities; Disposition of Abandoned Vehicles
+    Title 26 - Vehicle Laws -- Parties and Procedure on Citation, Arrest, Trial, and Appeal
+    Title 27 - Vehicle Laws -- Penalties; Disposition of Fines and Forfeitures
+
+    >>> unqs, cnts, n = sorted_counts(df.chrg_title)
+    >>> unqs
+    array(['21', '13', '16', '22', 'None', '17', '11', '23', '20' | '14', '24',
+        '25', '18', '26', '7', '15', '27', '10', '12', '9', '8'],
+        dtype=object)
+    >>> cnts
+    array([995634, 320652, 250175, 189337,  87519,  23512,  18007,  17717,
+            16123  | 2358,    888,    690,    576,    392,    119,    113,
+            83,     63,     43,     20,      3])
+    >>> n
+    4
+
+
+    21-801.1       # Speeding ticket
+    21-201(a1)     # disobey traffic control device/signal
+    13-409(b)      # missing registration
+    21-707(a)      # failure to stop at stop sign
+    13-401(h)      # driving with suspended registration
+    16-112(c)      # failure to show license
+    13-411(f)      # expired/missing registration plate
+    21-1124.2(d2)  # driving with phone
+    16-303(c)      # driving with suspended/revoked/etc license
+    21-801(a)      # speeding
+    16-303(h)      # driving with suspended/revoked/etc license
+    13-411(d)      # expired/missing registration plate
+    64*
+    16-101(a)
+    22-412.3(b)
+    21-901.1(b)
+    21-309(b)
+    22-201.1
+    21-801(b)
+    21-202(h1)
+    13-411(a)
+    16-116(a)
+    22-204(f)
+    22-226(a)
+    21-204(b)
+    22-406(i1)
+    16-101(a1)
+    23-104
+    21-301(a)
+    55*
+    21-902(b1)
+    21-902(a1)
+    22-219(a)
+    21-204(d)
+    21-901.1(a)
+    13-401(b1)
+    21-402(a)
+    61
+    21-902(a2)
+    21-405(e1)
+    21-902(b1i)
+    13-411(c1)
+    21-902(a1i)
+    21-310(a)
+    16-105(b1)
+    16-303(d)
+    16-301(j)
+    21-309(d)
+    17-107
+    21-202(i1)
+
+    """
+    df = df.copy()
+    df["charge"]
+
+    # deflate excessive amount of classes for charge titles
+    rare_charges = ["14", "24", "25", "18", "26", "7", "15", "27", "10", "12", "9", "8"]
+    df["chrg_title"] = df["chrg_title"].apply(str)
+    df["stop_chrg_title"] = df["stop_chrg_title"].apply(str)
+    df.loc[df["chrg_title"].isin(rare_charges), "chrg_title"] = "None"
+    df.loc[df["stop_chrg_title"].isin(rare_charges), "stop_chrg_title"] = "None"
+
+    # for now, just work with charge titles
+    df.drop(columns="charge", inplace=True)
+    return df
+
+
+def finalize(df: DataFrame) -> DataFrame:
+    """
+    Minimize types, ensure all "None" and Nones are unified, and collect some
+    stats and info on ordinals, conts, cats for final arguments to df-analyze
+    and etc.
+
+    Notes
+    -----
+
+    When "search_outcome" is None, "search_arrest_reason" is None 99.989% of
+    the time
+
+    >>> df.search_arrest_reason.apply(str).unique()
+    array(['None', 'Stop', 'Warrant', 'Search', 'Other'], dtype=object)
+    >>> df.search_outcome.apply(str).unique()
+    array(['Citation', 'Arrest', 'None', 'Warning', 'SERO'], dtype=object)
+
+    SERO = Safety Equipment Repair Order
+
+    >>> pd.crosstab(df.search_outcome.apply(str), df.search_arrest_reason.apply(str), margins=True)
+
+    search_arrest_reason     None  Other  Search   Stop  Warrant            All
+
+    outcome
+    Arrest                   1045   6553   11424  37625     3026          59673
+    Citation               496905      2      14     28        0         496949
+    None                   749753     25      22     35        0         749835
+    SERO                    34705      0       0      0        0          34705
+    Warning                582862      0       0      0        0         582862
+
+    All                   1865270   6580   11460  37688     3026        1924024
+
+
+    So if there is a warrant, the only possible outcome is arrest, i.e. these
+    are about as close as you can get to "unbiased" stops. In fact, if the
+    arrest reason is not None, then basically the outcome will be "Arrest",
+    so obviousy the arrest reason is a post hoc feature and should probably
+    be discarded, i.e., it is redundant, mostly (and sort of BS, i.e.
+    invented to support the ultimate charge / outcome, so might as well just
+    look at that instead).
+
+
+    >>> counts
+    subagency                  9
+    search_disposition         5
+    outcome                    6
+    search_reason              5
+    search_type                5
+    vehicle_type              10
+    vehicle_make              30
+    vehicle_color             19
+    violation_type             4
+    article                    4
+    race                       6
+    sex                        3
+    arrest_type               10
+    chrg_title                 9
+    stop_chrg_title            9
+
+    >>> pd.crosstab(df.search_conducted.apply(str), df.outcome.apply(str), margins=True)
+    outcome           Arrest  Citation    None   SERO  Warning              All
+
+    search_conducted
+    No                   587    478657   19268  34367   574865          1107744
+    None                   0         0  730564      0        0           730564
+    Yes                59086     18292       3    338     7997            85716
+
+    All                59673    496949  749835  34705   582862          1924024
+
+    It seems to me this too is something of a target, and not a cause.
+
+    """
+
+    FINAL_DROPS = [
+        "chrg_sect",  # too varied, too many
+        "stop_chrg_sect",  # too varied, too many
+        "search_arrest_reason",  # see above, just not a sensible feature or target
+        "search_reason",  # basically an outcome, almost constant / always "None"
+    ]
+    # fmt: off
+    FINAL_CONTS = [
+        "latitude", "longitude", "vehicle_year", "hour_of_stop", "year_of_stop", "month_of_stop",
+        "weeknum_of_stop", "weekday_of_stop", "reg_lat", "reg_long", "reg_km", "home_lat",
+        "home_long", "home_km", "license_lat", "license_long", "license_km",
+    ]
+    FINAL_BOOLS = [
+        "accident", "belts", "pers_injury", "prop_dmg", "fatal", "comm_license", "hazmat",
+        "comm_vehicle", "alcohol", "work_zone", "acc_blame", "chrg_title_mtch", "chrg_sect_mtch",
+        "unmarked_arrest", "tech_arrest",
+    ]
+    FINAL_CATS = [
+        "subagency", "search_disposition", "outcome", "search_type", "vehicle_type",
+        "vehicle_make", "vehicle_color", "violation_type", "article", "race", "sex", "arrest_type",
+        "chrg_title", "stop_chrg_title",
+    ]
+    # all features with "search" in them have very high mutual information: only one
+    # should be included in analyses as the target
+    FINAL_TARGETS = [
+        "outcome",
+        "search_conducted",
+        "search_disposition",  # basically an outcome...
+        "search_type",  # good rare target, has "None", "Both", "Person", "Property"
+    ]
+    TO_CATEGORICALS = [
+        "subagency",
+        "search_conducted",
+        "search_disposition",
+        "outcome",
+        "search_type",
+        "vehicle_type",
+        "vehicle_make",
+        "vehicle_color",
+        "violation_type",
+        "article",
+        "race",
+        "sex",
+        "arrest_type",
+        "chrg_title",
+        "stop_chrg_title",
+    ]
+    # fmt: on
+    df = df.copy()
+    df.drop(columns=FINAL_DROPS, inplace=True, errors="ignore")
+    df.rename(columns={"search_outcome": "outcome"}, inplace=True)
+    counts = df.apply(lambda s: len(Series(s).unique()), axis=0)
+    idx_bool = counts[counts == 2].index.drop(["home_km", "license_km"])
+    for col in idx_bool:
+        df[col] = df[col].astype(pd.BooleanDtype())
+
+    df["home_outstate"] = ~df["home_km"].isna()
+    df["licensed_outstate"] = ~df["license_km"].isna()
+    df.drop(columns=["home_km", "license_km"], inplace=True, errors="ignore")
+
+    for col in set(FINAL_CATS + FINAL_TARGETS):
+        df[col] = df[col].apply(str)
+
+    for col in TO_CATEGORICALS:
+        df[col] = df[col].astype("category")
+
+    return df
+
+
 if __name__ == "__main__":
     # # with open(DATA_OUT / "makes_alphasort.txt", "r") as handle:
     # #     makes = [line.replace("\n", "").strip() for line in handle.readlines()]
@@ -1005,9 +1705,9 @@ if __name__ == "__main__":
         print("Loading ...")
         df = pd.read_csv(SOURCE, low_memory=False)
         df.rename(columns=renamer, inplace=True)
+        df.drop(columns="seqid", inplace=True)
         # convert times to something useful
         print("Converting times")
-        df["time_of_stop"]
         df["hour_of_stop"] = df["time_of_stop"].apply(to_hour)
         df.drop(columns="time_of_stop", inplace=True)
 
@@ -1027,6 +1727,10 @@ if __name__ == "__main__":
             # don't use .loc here, incompatible dtypes due to bool
             df[col] = df[col].apply(lambda s: 0 if s is True else 1)
 
+        # the categories below have less than 100 instances, i.e. rounding error
+        idx = df["article"].isin(["BR", "TG", "1A", "00"])
+        df.loc[idx, "article"] = "other"
+
         # print("Cleaning descriptions")
         # df["description"] = df["description"].apply(clean)
         # df = reduce_descriptions(df)
@@ -1034,6 +1738,14 @@ if __name__ == "__main__":
 
         df = states_to_distances(df)
         df = clean_vehicle_info(df)
+        df = clean_searches(df)
+        df = fix_arrests(df)
+
         df.to_parquet(MIN_CLEAN)
 
+    df = reduce_charges(df)
+    df = finalize(df)
+
+    df.to_parquet(FINAL_OUT)
+    print(f"Saved processed data to {FINAL_OUT}")
     print()
