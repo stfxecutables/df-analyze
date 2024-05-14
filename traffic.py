@@ -7,41 +7,17 @@ ROOT = Path(__file__).resolve().parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-import os
 import re
 import sys
-import traceback
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
 from joblib import Memory, Parallel, delayed
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy import ndarray
 from pandas import DataFrame, Series
-from rapidfuzz.distance.Levenshtein import distance as lev_dist
-from rapidfuzz.process import cdist
 from tqdm import tqdm
-from typing_extensions import Literal
 
 SOURCE = ROOT / "traffic_violations_complete.csv"
 """
@@ -1040,56 +1016,6 @@ def clean_vehicle_info(df: DataFrame) -> DataFrame:
     return df
 
 
-def clean_driver_info(df: DataFrame) -> DataFrame:
-    """
-    We convert driver_state + driver_city to latitude and longitude, and
-    leave those raw (no distances). However, this would be too many geocoding
-    requests, so instead we just drop the city, and map driver_state to a lat
-    and long instead.
-
-    >>> unqs, cnts, n = sorted_counts(df.driver_state)
-    >>> unqs
-    array(['MD', 'DC', 'VA', 'PA', 'FL', 'NY', 'NC', 'WV', 'CA', 'NJ', 'TX',
-        'GA', 'MA', 'DE', 'OH', 'IL', 'SC', 'XX', 'WA', 'CT', 'MI', 'TN',
-        'CO', 'AZ', 'IN', 'AL', 'MO', 'LA', 'MS', 'WI', 'NM', 'KY', 'MN',
-        'NV', 'OK', 'ME', 'UT', 'RI', 'ON', 'NH', 'OR', 'KS', 'ND', 'AR',
-        'HI', 'IA', 'VT', 'AK', 'NE', 'MT', 'ID', 'MB', 'SD', 'WY', 'PR',
-        'AB', 'QC', 'None', 'VI', 'BC', 'US', 'GU', 'NF', 'NB', 'SK', 'NS',
-        'PE', 'IT', 'PQ'], dtype=object)
-    >>> cnts
-    array([1736494,   63774,   59064,    9628,    6689,    5842,    4502,
-            4125,    3510,    3034,    2885,    2614,    1905,    1697,
-            1645,    1253,    1184,    1084,     925,     912,     897,
-            788,     710,     638,     591,     525,     462,     439,
-            346,     309,     301,     300,     297,     285,     276,
-            255,     237,     236,     220,     208,     186,     172,
-            151,     143,     141,     112,     107,     105,      96,
-                90,      78,      66,      46,      36,      34,      26,
-                25,      11,      10,      10,       9,       7,       6,
-                5,       4,       3,       2,       1,       1])
-    >>> n
-    2
-
-
-    >>> unqs, cnts, n = sorted_counts(df.driver_city)
-    >>> unqs
-    array(['SILVER SPRING', 'GAITHERSBURG', 'GERMANTOWN', ...,
-        'MARINA DL RAY', 'NUTTER FORT', 'DEVENS'], dtype=object)
-    >>> cnts
-    array([472158, 202617, 163072, ...,      1,      1,      1])
-    >>> n
-    187
-
-    """
-    df = df.copy()
-    lats, longs = [], []
-    for i in range(len(df)):
-        state = df.iloc[i]["driver_state"]
-        lat, long = get_coords(state)
-        lats.append(lat)
-        longs.append(long)
-
-
 def to_hour(s: str) -> float:
     reg = r"(?P<hour>\d\d):(?P<min>\d\d):(?P<secs>\d\d)"
     result = re.search(reg, s)
@@ -1575,16 +1501,6 @@ def finalize(df: DataFrame) -> DataFrame:
         "search_reason",  # basically an outcome, almost constant / always "None"
     ]
     # fmt: off
-    FINAL_CONTS = [
-        "latitude", "longitude", "vehicle_year", "hour_of_stop", "year_of_stop", "month_of_stop",
-        "weeknum_of_stop", "weekday_of_stop", "reg_lat", "reg_long", "reg_km", "home_lat",
-        "home_long", "home_km", "license_lat", "license_long", "license_km",
-    ]
-    FINAL_BOOLS = [
-        "accident", "belts", "pers_injury", "prop_dmg", "fatal", "comm_license", "hazmat",
-        "comm_vehicle", "alcohol", "work_zone", "acc_blame", "chrg_title_mtch", "chrg_sect_mtch",
-        "unmarked_arrest", "tech_arrest",
-    ]
     FINAL_CATS = [
         "subagency", "search_disposition", "outcome", "search_type", "vehicle_type",
         "vehicle_make", "vehicle_color", "violation_type", "article", "race", "sex", "patrol_entity",
