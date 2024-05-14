@@ -126,10 +126,10 @@ class InspectionInfo:
     def __init__(
         self,
         kind: ColumnType,
-        infos: dict[str, Inference],
+        infos: dict[str, Inference] | None = None,
     ) -> None:
         self.kind = kind
-        self.infos = infos
+        self.infos = infos or {}
         self.cols = set([*self.infos.keys()])
         self.pad = get_width({col: info.reason for col, info in self.infos.items()})
         self.is_empty = len(self.infos) == 0
@@ -147,7 +147,9 @@ class InspectionInfo:
         return self.lines_from_infos(self.uncertains(), pad)
 
     @staticmethod
-    def lines_from_infos(infos: dict[str, Inference], pad: Optional[int] = None) -> list[str]:
+    def lines_from_infos(
+        infos: dict[str, Inference], pad: Optional[int] = None
+    ) -> list[str]:
         pad = pad or get_width({col: info.reason for col, info in infos.items()})
         return [f"{col:<{pad}} {info.reason}" for col, info in infos.items()]
 
@@ -210,7 +212,7 @@ class InspectionInfo:
 
     @staticmethod
     def conflicts(
-        *infos: InspectionInfo
+        *infos: InspectionInfo,
     ) -> tuple[dict[str, list[Inference]], dict[str, list[Inference]]]:
         cols = set()
         for info in infos:
@@ -229,7 +231,9 @@ class InspectionInfo:
                     maybes[col].append(infer)
         for col in certains:
             if len(certains[col]) > 1:
-                raise RuntimeError(f"Conflicting certainties for column {col}: {certains[col]}")
+                raise RuntimeError(
+                    f"Conflicting certainties for column {col}: {certains[col]}"
+                )
 
         return certains, maybes
 
@@ -251,7 +255,7 @@ class InspectionResults:
     drops: set[str]
 
     def ordered_basic_infos(
-        self
+        self,
     ) -> tuple[
         InspectionInfo,
         InspectionInfo,
@@ -289,7 +293,9 @@ class InspectionResults:
             return []
         w = pad or max(len(info.col) for info in infos) + 2
         header = "Deflated categorical variables (before --> after):"
-        lines = [f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}" for info in infos]
+        lines = [
+            f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}" for info in infos
+        ]
         return [header, *lines, "\n"]
 
     def drop_cols(self) -> list[str]:
@@ -351,8 +357,7 @@ class InspectionResults:
         joined = "\n".join(lines)
         return f"\n{header}{joined}\n\n"
 
-    def full_report(self, pad: Optional[int] = None) -> str:
-        ...
+    def full_report(self, pad: Optional[int] = None) -> str: ...
 
     def short_report(self, pad: Optional[int] = None) -> str:
         """
@@ -386,7 +391,9 @@ class InspectionResults:
         numerics = [*ord_lines, *cont_lines]
 
         destruct_header = (
-            self.big_header("Destructive Data Changes", pad) if len(destructives) > 0 else ""
+            self.big_header("Destructive Data Changes", pad)
+            if len(destructives) > 0
+            else ""
         )
         remove_header = self.med_header("Removed Features") if len(removes) > 0 else ""
         id_section = self.subsection("Ids", id_lines)
@@ -407,7 +414,9 @@ class InspectionResults:
 
         inflate_lines = self.inflation_lines()
         inflate_info = "\n".join(inflate_lines)
-        inflate_header = self.med_header("Deflated Categoricals") if len(inflate_lines) > 0 else ""
+        inflate_header = (
+            self.med_header("Deflated Categoricals") if len(inflate_lines) > 0 else ""
+        )
         inflate_desc = f"{INFLATION_HEADER}\n\n" if len(inflate_lines) > 0 else ""
 
         report = (
