@@ -1595,6 +1595,12 @@ def print_df_analyze_info(df: DataFrame) -> None:
         "weekday_of_stop",
     ]
     POTENTIAL_DROPS = ["vehicle_make", "vehicle_color", "subagency", "patrol_entity"]
+    POTENTIAL_TARGETS = [
+        "outcome",
+        "search_conducted",
+        "search_disposition",
+        "search_type",
+    ]
 
     cats = ",".join(CATS)
     ords = ",".join(ORDS)
@@ -1605,6 +1611,7 @@ def print_df_analyze_info(df: DataFrame) -> None:
     print(df.shape)
     print(f"--categoricals {cats}")
     print(f"--ordinals {ords}")
+    print(f"Targets: {POTENTIAL_TARGETS}")
     print(f"[OPTIONAL]\n--drops {drops}")
 
 
