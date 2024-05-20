@@ -9,8 +9,8 @@ from analysis.analyses import full_estimator_analysis
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
 
-from src.cli.cli import get_options
-from src.hypertune import Classifier
+from df_analyze.cli.cli import get_options
+from df_analyze.hypertune import Classifier
 
 IN_CCANADA = os.environ.get("CC_CLUSTER") is not None
 IN_CC_JOB = os.environ.get("SLURM_TMPDIR") is not None
@@ -43,13 +43,17 @@ def pbar_desc(args: Dict[str, Any]) -> str:
 #     return args.classifier, args.step_up
 
 
-def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -> pd.DataFrame:
+def run_analysis(
+    args: List[Dict], classifier: Classifier, step: bool = False
+) -> pd.DataFrame:
     results = []
     pbar = tqdm(total=len(args))
     for arg in args:
         pbar.set_description(pbar_desc(arg))
         results.append(
-            full_estimator_analysis(htune_trials=100, verbosity=optuna.logging.ERROR, **arg)
+            full_estimator_analysis(
+                htune_trials=100, verbosity=optuna.logging.ERROR, **arg
+            )
         )
         pbar.update()
     df = pd.concat(results, axis=0, ignore_index=True)
@@ -66,7 +70,11 @@ def run_analysis(args: List[Dict], classifier: Classifier, step: bool = False) -
     except Exception:
         pass
     df.to_csv(csv)
-    print(df.sort_values(by="acc", ascending=False).to_markdown(tablefmt="simple", floatfmt="0.3f"))
+    print(
+        df.sort_values(by="acc", ascending=False).to_markdown(
+            tablefmt="simple", floatfmt="0.3f"
+        )
+    )
     return df
 
 

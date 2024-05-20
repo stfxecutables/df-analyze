@@ -19,11 +19,17 @@ import numpy as np
 import pytest
 from pandas import DataFrame, Series
 
-from src._constants import TEST_RESULTS
-from src.analysis.univariate.predict.predict import (
+from df_analyze._constants import TEST_RESULTS
+from df_analyze.analysis.univariate.predict.predict import (
     PredResults,
 )
-from src.testing.datasets import TEST_DATASETS, TestDataset, fast_ds, med_ds, slow_ds
+from df_analyze.testing.datasets import (
+    TEST_DATASETS,
+    TestDataset,
+    fast_ds,
+    med_ds,
+    slow_ds,
+)
 
 logging.captureWarnings(capture=True)
 logger = logging.getLogger("py.warnings")
@@ -95,7 +101,7 @@ def do_predict(dataset: tuple[str, TestDataset]) -> Optional[PredResults]:
 
 
 def do_predict_cached(
-    dataset: tuple[str, TestDataset]
+    dataset: tuple[str, TestDataset],
 ) -> Optional[tuple[Optional[DataFrame], Optional[DataFrame]]]:
     filterwarnings(
         "ignore", message="Bins whose width are too small", category=UserWarning

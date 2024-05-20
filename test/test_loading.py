@@ -9,20 +9,19 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import pytest
 
-from src._constants import (
+from df_analyze._constants import (
     COMPLEX_XLSX,
     COMPLEX_XLSX2,
     SIMPLE_CSV,
     SIMPLE_CSV2,
     SIMPLE_XLSX,
 )
-from src.cli.cli import ProgramOptions
-from src.loading import load_csv, load_excel
-from src.testing.datasets import ALL_DATASETS, TestDataset, all_ds
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.loading import load_csv, load_excel
+from df_analyze.testing.datasets import ALL_DATASETS, TestDataset, all_ds
 
 
-def generate_spreadsheet(tempdir: Path) -> Path:
-    ...
+def generate_spreadsheet(tempdir: Path) -> Path: ...
 
 
 @pytest.mark.fast

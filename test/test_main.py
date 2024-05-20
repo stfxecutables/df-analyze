@@ -15,10 +15,10 @@ from pathlib import Path
 import pandas as pd
 from pandas import DataFrame
 
-from src.analysis.univariate.associate import target_associations
-from src.analysis.univariate.predict.predict import univariate_predictions
-from src.cli.cli import ProgramOptions
-from src.enumerables import (
+from df_analyze.analysis.univariate.associate import target_associations
+from df_analyze.analysis.univariate.predict.predict import univariate_predictions
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.enumerables import (
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
     EmbedSelectionModel,
@@ -26,14 +26,14 @@ from src.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
-from src.hypertune import evaluate_tuned
-from src.nonsense import silence_spam
-from src.preprocessing.cleaning import sanitize_names
-from src.preprocessing.inspection.inspection import inspect_data
-from src.preprocessing.prepare import prepare_data
-from src.selection.filter import filter_select_features
-from src.selection.models import model_select_features
-from src.testing.datasets import (
+from df_analyze.hypertune import evaluate_tuned
+from df_analyze.nonsense import silence_spam
+from df_analyze.preprocessing.cleaning import sanitize_names
+from df_analyze.preprocessing.inspection.inspection import inspect_data
+from df_analyze.preprocessing.prepare import prepare_data
+from df_analyze.selection.filter import filter_select_features
+from df_analyze.selection.models import model_select_features
+from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     FASTEST,
     MEDIUM_INSPECTION,

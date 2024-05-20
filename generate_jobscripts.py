@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from src.hypertune import Classifier
+from df_analyze.hypertune import Classifier
 
 CLASSIFIER_CHOICES = ["svm", "dtree", "bag", "rf", "mlp"]
 RUNTIMES = {
@@ -48,7 +48,9 @@ PYTHON=$(which python)
 
 
 def generate_script(
-    classifier: Classifier = "svm", step_up: bool = False, script_outdir: Path = SCRIPT_OUTDIR
+    classifier: Classifier = "svm",
+    step_up: bool = False,
+    script_outdir: Path = SCRIPT_OUTDIR,
 ) -> str:
     pythonfile = "run.py"
     stepup = " --step-up" if step_up else ""

@@ -1,4 +1,3 @@
-
 # os.environ["OPENBLAS_NUM_THREADS"] = "1"
 # os.environ["MKL_NUM_THREADS"] = "1"
 # os.environ["OMP_NUM_THREADS"] = "1"
@@ -13,12 +12,14 @@ from sklearn.calibration import CalibrationDisplay
 from sklearn.metrics import brier_score_loss
 from sklearn.svm import SVC
 
-from src.models.base import DfAnalyzeModel
-from src.models.svm import SVMClassifier
-from src.testing.datasets import TEST_DATASETS
+from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.models.svm import SVMClassifier
+from df_analyze.testing.datasets import TEST_DATASETS
 
 
-def calibration_plot(tuned: DfAnalyzeModel, X: DataFrame, y_true: Series, num_classes: int) -> None:
+def calibration_plot(
+    tuned: DfAnalyzeModel, X: DataFrame, y_true: Series, num_classes: int
+) -> None:
     probs = tuned.predict_proba(X)
     bins = 10
 
@@ -29,11 +30,15 @@ def calibration_plot(tuned: DfAnalyzeModel, X: DataFrame, y_true: Series, num_cl
             yt = idx
             yp = probs[:, i]
             loss = brier_score_loss(y_true=yt, y_prob=yp)
-            CalibrationDisplay.from_predictions(y_true=yt, y_prob=yp, ax=ax, n_bins=bins)
+            CalibrationDisplay.from_predictions(
+                y_true=yt, y_prob=yp, ax=ax, n_bins=bins
+            )
             ax.set_title(f"Class {i}: Brier={loss:0.5f} (lower=better)")
     else:
         fig, ax = plt.subplots()
-        CalibrationDisplay.from_predictions(y_true=y_true, y_prob=probs[:, 1], ax=ax, n_bins=bins)
+        CalibrationDisplay.from_predictions(
+            y_true=y_true, y_prob=probs[:, 1], ax=ax, n_bins=bins
+        )
         loss = brier_score_loss(y_true=y_true, y_prob=probs[:, 1])
         ax.set_title(f"Brier loss = {loss:0.5f} (lower=better)")
 
@@ -87,7 +92,9 @@ def main() -> None:
             svc.fit(X_tr, y_tr)
             duration = time.time() - start
             score = svc.score(X_test, y_test)
-            print(f"C={C:1.1e}, gamma={gamma:1.1e}, time: {duration:0.4f}, Acc: {score:0.3f}")
+            print(
+                f"C={C:1.1e}, gamma={gamma:1.1e}, time: {duration:0.4f}, Acc: {score:0.3f}"
+            )
     sys.exit()
 
     # C=1e3, gamma=1e-3, time:  1.7631, Acc: 0.775
@@ -119,11 +126,15 @@ def main() -> None:
             yt = idx
             yp = probs[:, i]
             loss = brier_score_loss(y_true=yt, y_prob=yp)
-            CalibrationDisplay.from_predictions(y_true=yt, y_prob=yp, ax=ax, n_bins=bins)
+            CalibrationDisplay.from_predictions(
+                y_true=yt, y_prob=yp, ax=ax, n_bins=bins
+            )
             ax.set_title(f"Class {i}: Brier={loss:0.5f} (lower=better)")
     else:
         fig, ax = plt.subplots()
-        CalibrationDisplay.from_predictions(y_true=y_test, y_prob=probs[:, 1], ax=ax, n_bins=bins)
+        CalibrationDisplay.from_predictions(
+            y_true=y_test, y_prob=probs[:, 1], ax=ax, n_bins=bins
+        )
         loss = brier_score_loss(y_true=y_test, y_prob=probs[:, 1])
         ax.set_title(f"Brier loss = {loss:0.5f} (lower=better)")
     fig.set_size_inches(w=10, h=10)

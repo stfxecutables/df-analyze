@@ -16,15 +16,15 @@ import pytest
 from _pytest.capture import CaptureFixture
 from pandas import DataFrame
 
-from src.enumerables import NanHandling
-from src.preprocessing.cleaning import (
+from df_analyze.enumerables import NanHandling
+from df_analyze.preprocessing.cleaning import (
     encode_categoricals,
     handle_continuous_nans,
 )
-from src.preprocessing.inspection.inspection import (
+from df_analyze.preprocessing.inspection.inspection import (
     get_unq_counts,
 )
-from src.testing.datasets import (
+from df_analyze.testing.datasets import (
     TEST_DATASETS,
     TestDataset,
     all_ds,
@@ -35,7 +35,12 @@ from src.testing.datasets import (
 
 
 def no_cats(df: DataFrame, target: str) -> bool:
-    return df.drop(columns=target).select_dtypes(include=["object", "string[python]"]).shape[1] == 0
+    return (
+        df.drop(columns=target)
+        .select_dtypes(include=["object", "string[python]"])
+        .shape[1]
+        == 0
+    )
 
 
 @fast_ds
@@ -62,7 +67,9 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 
     for nans in [NanHandling.Drop]:
         try:
-            dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[0]
+            dfc = handle_continuous_nans(
+                df, target="target", results=results, nans=nans
+            )[0]
             clean = dfc.drop(columns=["target", *cats])
             assert clean.isna().sum().sum() == 0, f"NaNs remaining in data {dsname}"
         except RuntimeError as e:
@@ -80,7 +87,9 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 @all_ds
 @pytest.mark.cached
 @pytest.mark.fast
-def test_multivariate_interpolate(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+def test_multivariate_interpolate(
+    dataset: tuple[str, TestDataset], capsys: CaptureFixture
+) -> None:
     dsname, ds = dataset
     if dsname in ["community_crime", "news_popularity"]:
         return  # extremely slow

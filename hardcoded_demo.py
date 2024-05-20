@@ -6,16 +6,16 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
 
-from src.analysis.univariate.associate import target_associations
-from src.analysis.univariate.predict.predict import univariate_predictions
-from src.cli.cli import get_options
-from src.hypertune import evaluate_tuned
-from src.nonsense import silence_spam
-from src.preprocessing.cleaning import sanitize_names
-from src.preprocessing.inspection.inspection import inspect_data
-from src.preprocessing.prepare import prepare_data
-from src.selection.filter import filter_select_features
-from src.selection.models import model_select_features
+from df_analyze.analysis.univariate.associate import target_associations
+from df_analyze.analysis.univariate.predict.predict import univariate_predictions
+from df_analyze.cli.cli import get_options
+from df_analyze.hypertune import evaluate_tuned
+from df_analyze.nonsense import silence_spam
+from df_analyze.preprocessing.cleaning import sanitize_names
+from df_analyze.preprocessing.inspection.inspection import inspect_data
+from df_analyze.preprocessing.prepare import prepare_data
+from df_analyze.selection.filter import filter_select_features
+from df_analyze.selection.models import model_select_features
 
 RESULTS_DIR = Path(__file__).parent / "results"
 

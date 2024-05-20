@@ -39,7 +39,7 @@ from sklearn.linear_model import LassoCV, LinearRegression, RidgeCV
 from sklearn.preprocessing import PolynomialFeatures
 from typing_extensions import Literal
 
-from src.testing.datasets import (
+from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     MEDIUM_INSPECTION,
     SLOW_INSPECTION,

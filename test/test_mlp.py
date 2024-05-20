@@ -11,9 +11,9 @@ import numpy as np
 from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
-from src.enumerables import ClassifierScorer, RegressorScorer
-from src.models.mlp import MLPEstimator
-from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
+from df_analyze.enumerables import ClassifierScorer, RegressorScorer
+from df_analyze.models.mlp import MLPEstimator
+from df_analyze.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
 MAX_N = 1000
 MAX_EPOCHS = 10
@@ -225,7 +225,9 @@ def test_mlp_tune_parallel(
     metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()  # type: ignore
     if len(X_tr) > MAX_N:
         strat = y_tr if ds.is_classification else None
-        X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N, stratify=strat)
+        X_tr, _, y_tr, _ = train_test_split(
+            X_tr, y_tr, train_size=MAX_N, stratify=strat
+        )
 
     try:
         model = MLPEstimator(

@@ -22,12 +22,12 @@ import numpy as np
 from numpy import ndarray
 from pandas import DataFrame, Series
 
-from src.cli.cli import ProgramOptions
-from src.hypertune import EvaluationResults
-from src.preprocessing.inspection.inspection import InspectionResults
-from src.selection.embedded import EmbedSelected
-from src.selection.wrapper import WrapperSelected
-from src.testing.datasets import TestDataset, all_ds
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.hypertune import EvaluationResults
+from df_analyze.preprocessing.inspection.inspection import InspectionResults
+from df_analyze.selection.embedded import EmbedSelected
+from df_analyze.selection.wrapper import WrapperSelected
+from df_analyze.testing.datasets import TestDataset, all_ds
 
 
 @all_ds
@@ -77,7 +77,9 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
         return True
     elif isinstance(obj1, ndarray) and isinstance(obj2, ndarray):
         return (obj1.ravel().round(8) == obj2.ravel().round(8)).all()
-    elif isinstance(obj1, (DataFrame, Series)) and isinstance(obj2, (DataFrame, Series)):
+    elif isinstance(obj1, (DataFrame, Series)) and isinstance(
+        obj2, (DataFrame, Series)
+    ):
         return np.all((obj1.round(8).values == obj2.round(8).values)).item()
     else:
         return obj1 == obj2

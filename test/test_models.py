@@ -21,22 +21,22 @@ from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
 
-from src.enumerables import ClassifierScorer, RegressorScorer, Scorer
-from src.models.base import DfAnalyzeModel
-from src.models.knn import KNNClassifier, KNNRegressor
-from src.models.lgbm import (
+from df_analyze.enumerables import ClassifierScorer, RegressorScorer, Scorer
+from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.models.knn import KNNClassifier, KNNRegressor
+from df_analyze.models.lgbm import (
     LightGBMClassifier,
     LightGBMRegressor,
     LightGBMRFClassifier,
     LightGBMRFRegressor,
 )
-from src.models.linear import (
+from df_analyze.models.linear import (
     ElasticNetRegressor,
     LRClassifier,
     SGDClassifier,
     SGDRegressor,
 )
-from src.models.svm import SVMClassifier, SVMRegressor
+from df_analyze.models.svm import SVMClassifier, SVMRegressor
 
 
 def fake_data(

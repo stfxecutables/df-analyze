@@ -17,7 +17,10 @@ from geopy.distance import geodesic
 from joblib import Memory, Parallel, delayed
 from numpy import ndarray
 from pandas import DataFrame, Series
+from scipy.stats.contingency import association
 from tqdm import tqdm
+
+from df_analyze.analysis.metrics import cramer_v
 
 SOURCE = ROOT / "traffic_violations_complete.csv"
 """
@@ -242,7 +245,7 @@ def rename_makes_1(s: str) -> str:
         "dodge": ("dodg", "ram"),
         "freightliner": ("frht",),
         "honda": ("hinda", "hino", "hond"),
-        "hummer": ("humm", "hyun", "hyund", "hyunda", "hyundai", "hyundi", "hyundia"),
+        "hummer": ("humm"),
         "infinity": ("inf", "infi", "infin", "infiniti"),
         "international": ("intl",),
         "isuzu": ("isu", "isuz"),
@@ -1615,58 +1618,102 @@ def print_df_analyze_info(df: DataFrame) -> None:
     print(f"[OPTIONAL]\n--drops {drops}")
 
 
+def p_cramer_v(dfr: DataFrame, c1: str, c2: str) -> float:
+    return cramer_v(dfr[c1], dfr[c2])
+
+
 if __name__ == "__main__":
     use_cached = False
     # use_cached = True
-    if MIN_CLEAN.exists() and use_cached:
-        print("Loading cleaned data...")
-        df = pd.read_parquet(MIN_CLEAN)
-    else:
-        print("Loading ...")
-        df = pd.read_csv(SOURCE, low_memory=False)
-        df.rename(columns=renamer, inplace=True)
-        df.drop(columns="seqid", inplace=True)
-        # convert times to something useful
-        print("Converting times")
-        df["hour_of_stop"] = df["time_of_stop"].apply(to_hour)
-        df.drop(columns="time_of_stop", inplace=True)
+    # if MIN_CLEAN.exists() and use_cached:
+    #     print("Loading cleaned data...")
+    #     df = pd.read_parquet(MIN_CLEAN)
+    # else:
+    #     print("Loading ...")
+    #     df = pd.read_csv(SOURCE, low_memory=False)
+    #     df.rename(columns=renamer, inplace=True)
+    #     df.drop(columns="seqid", inplace=True)
+    #     # convert times to something useful
+    #     print("Converting times")
+    #     df["hour_of_stop"] = df["time_of_stop"].apply(to_hour)
+    #     df.drop(columns="time_of_stop", inplace=True)
 
-        # convert dates
-        print("Converting dates to periodic features")
-        t = pd.to_datetime(df["date_of_stop"])
-        df["year_of_stop"] = t.apply(lambda t: t.year)
-        df["month_of_stop"] = t.apply(lambda t: t.month)
-        df["weeknum_of_stop"] = t.apply(lambda t: t.week)
-        df["weekday_of_stop"] = t.apply(lambda t: t.dayofweek)
-        df.drop(columns="date_of_stop", inplace=True)
+    #     # convert dates
+    #     print("Converting dates to periodic features")
+    #     t = pd.to_datetime(df["date_of_stop"])
+    #     df["year_of_stop"] = t.apply(lambda t: t.year)
+    #     df["month_of_stop"] = t.apply(lambda t: t.month)
+    #     df["weeknum_of_stop"] = t.apply(lambda t: t.week)
+    #     df["weekday_of_stop"] = t.apply(lambda t: t.dayofweek)
+    #     df.drop(columns="date_of_stop", inplace=True)
 
-        print("Converting binaries")
-        for col in YN_BINS:
-            df[col] = df[col].apply(lambda s: 0 if s == "No" else 1)
-        for col in TF_BINS:
-            # don't use .loc here, incompatible dtypes due to bool
-            df[col] = df[col].apply(lambda s: 0 if s is True else 1)
+    #     print("Converting binaries")
+    #     for col in YN_BINS:
+    #         df[col] = df[col].apply(lambda s: 0 if s == "No" else 1)
+    #     for col in TF_BINS:
+    #         # don't use .loc here, incompatible dtypes due to bool
+    #         df[col] = df[col].apply(lambda s: 0 if s is True else 1)
 
-        # the categories below have less than 100 instances, i.e. rounding error
-        idx = df["article"].isin(["BR", "TG", "1A", "00"])
-        df.loc[idx, "article"] = "other"
+    #     # the categories below have less than 100 instances, i.e. rounding error
+    #     idx = df["article"].isin(["BR", "TG", "1A", "00"])
+    #     df.loc[idx, "article"] = "other"
 
-        # print("Cleaning descriptions")
-        # df["description"] = df["description"].apply(clean)
-        # df = reduce_descriptions(df)
-        df.drop(columns=DROPS, errors="ignore", inplace=True)
+    #     # print("Cleaning descriptions")
+    #     # df["description"] = df["description"].apply(clean)
+    #     # df = reduce_descriptions(df)
+    #     df.drop(columns=DROPS, errors="ignore", inplace=True)
 
-        df = states_to_distances(df)
-        df = clean_vehicle_info(df)
-        df = clean_searches(df)
-        df = fix_arrests(df)
+    #     df = states_to_distances(df)
+    #     df = clean_vehicle_info(df)
+    #     df = clean_searches(df)
+    #     df = fix_arrests(df)
 
-        df.to_parquet(MIN_CLEAN)
+    #     df.to_parquet(MIN_CLEAN)
 
-    df = reduce_charges(df)
-    df = finalize(df)
+    # df = reduce_charges(df)
+    # df = finalize(df)
+    # df = df.map(lambda x: np.nan if str(x) == "None" else x)
 
-    df.to_parquet(FINAL_OUT)
-    print(f"Saved processed data to {FINAL_OUT}")
-    print_df_analyze_info(df)
-    print(f"Saved processed data to {FINAL_OUT}")
+    # df.to_parquet(FINAL_OUT)
+    # print(f"Saved processed data to {FINAL_OUT}")
+    # print_df_analyze_info(df)
+    # print(f"Saved processed data to {FINAL_OUT}")
+
+    # sys.exit()
+
+    df = pd.read_parquet(FINAL_OUT)
+    dfr = df.filter(regex=r"(chrg)|(viol)|(search)|(outcome)|(article)")
+    dfr = dfr.loc[
+        :,
+        [  # sort columns
+            "chrg_title",
+            "stop_chrg_title",
+            "chrg_sect_mtch",
+            "chrg_title_mtch",
+            "search_conducted",
+            "search_disposition",
+            "search_type",
+            "violation_type",
+            "article",
+            "outcome",
+        ],
+    ]
+
+    dfv = DataFrame(
+        data=np.full([dfr.shape[1], dfr.shape[1]], fill_value=np.nan),
+        index=dfr.columns,
+        columns=dfr.columns,
+    )
+    for i1, c1 in tqdm(enumerate(dfr.columns)):
+        for i2, c2 in enumerate(dfr.columns):
+            if i2 >= i1:
+                continue
+            ct = pd.crosstab(dfr[c1], dfr[c2])
+            a = association(ct, correction=False)  # correction makes no diff here
+            if 0.4 <= a <= 0.95:
+                print(f"\n{c1} vs. {c2} (Cramer V = {round(a, 4)})")
+                ct2 = pd.crosstab(dfr[c1], dfr[c2], margins=True)
+                print(ct2)
+            dfv.loc[c1, c2] = a
+
+    print(dfv.round(2))

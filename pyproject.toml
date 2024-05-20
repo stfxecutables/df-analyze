@@ -1,3 +1,46 @@
+[project]
+name = "df-analyze"
+version = "0.1.0"
+description = "Add your description here"
+authors = [{ name = "Derek Berger", email = "dmberger.dev@gmail.com" }]
+dependencies = [
+    "joblib>=1.4.2",
+    "jsonpickle>=3.0.4",
+    "lightgbm>=4.3.0",
+    "matplotlib>=3.9.0",
+    "openpyxl>=3.1.2",
+    "optuna>=3.6.1",
+    "pandas>=2.2.2",
+    "scikit-learn>=1.4.2",
+    "scipy>=1.13.0",
+    "skorch>=0.15.0",
+    "typing-extensions>=4.9.0",
+    "tabulate>=0.9.0",
+    "openml>=0.14.2",
+    "torch>=2.3.0",
+    "torchvision>=0.18.0",
+    "numpy>=1.26.3",
+    "tqdm>=4.64.1",
+]
+readme = "README.md"
+requires-python = ">= 3.9"
+
+[project.scripts]
+"df-analyze" = "df_analyze:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = ["pytest>=8.2.1", "ruff>=0.4.4"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/df_analyze"]
 [tool.ruff]
 line-length = 90
 indent-width = 4
@@ -18,95 +61,6 @@ section-order = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
 
-[project]
-name = "df-analyze"
-version = "0.1.0"
-description = "Add your description here"
-authors = [{ name = "Derek Berger", email = "dmberger.dev@gmail.com" }]
-
-dependencies = []
-readme = "README.md"
-requires-python = ">= 3.9"
-
-[project.scripts]
-df-analyze = "df_analyze:main"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.rye]
-managed = true
-dev-dependencies = []
-
-[tool.hatch.metadata]
-allow-direct-references = true
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/df_analyze"]
-
-[tool.poetry]
-name = "df-analyze"
-version = "0.1.0"
-description = ""
-authors = ["Derek M Berger <dmberger.dev@gmail.com>"]
-
-[tool.poetry.dependencies]
-python = ">=3.9,<=3.10.13"
-coverage = "^7.3.2"
-featuretools = "^1.28.0"
-joblib = "^1.3.2"
-matplotlib = "^3.8.1"
-numpy = "1.26.2"
-optuna = "^3.4.0"
-pandas = "^2.1.2"
-pytest = "^7.4.3"
-scikit-learn = "^1.3.2"
-scipy = "^1.11.3"
-tabulate = "^0.9.0"
-typing-extensions = "^4.8.0"
-python-dateutil = "^2.8.2"
-ucimlrepo = "^0.0.3"
-lightgbm = "^4.1.0"
-torch = [
-  { version = "=2.1.1", source = "pypi", platform = "darwin" },
-  { version = "=2.1.1+cpu", source = "pytorch", platform = "linux" },
-  { version = "=2.1.1+cpu", source = "pytorch", platform = "win32" },
-]
-torchvision = [
-  { version = "=0.16.1", source = "pypi", platform = "darwin" },
-  { version = "=0.16.1+cpu", source = "pytorch", platform = "linux" },
-  { version = "=0.16.1+cpu", source = "pytorch", platform = "win32" },
-]
-skorch = "^0.15.0"
-openml = "^0.14.1"
-jsonpickle = "^3.0.2"
-pytest-xdist = { extras = ["psutil"], version = "^3.5.0" }
-seaborn = "^0.13.1"
-openpyxl = "^3.1.2"
-skrebate = "^0.62"
-
-
-[[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cpu/"
-priority = "primary"
-
-
-[[tool.poetry.source]]
-name = "PyPI"
-priority = "primary"
-
-[tool.poetry.dev-dependencies]
-
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.1.5"
-cli-test-helpers = "^3.4.0"
-
-
-# [build-system]
-# requires = ["poetry-core>=1.0.0"]
-# build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
@@ -127,3 +81,24 @@ markers = [
   "cached: marks tests as using cached results (deselect with '-m \"not cached\"')",
   "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
 ]
+
+[[tool.rye.sources]]
+name = "torch"
+url = "https://download.pytorch.org/whl/cpu"
+type = "index"
+
+[[tool.rye.sources]]
+name = "torchvision"
+url = "https://download.pytorch.org/whl/cpu"
+type = "index"
+
+# torch = [
+#   { version = "=2.1.1", source = "pypi", platform = "darwin" },
+#   { version = "=2.1.1+cpu", source = "pytorch", platform = "linux" },
+#   { version = "=2.1.1+cpu", source = "pytorch", platform = "win32" },
+# ]
+# torchvision = [
+#   { version = "=0.16.1", source = "pypi", platform = "darwin" },
+#   { version = "=0.16.1+cpu", source = "pytorch", platform = "linux" },
+#   { version = "=0.16.1+cpu", source = "pytorch", platform = "win32" },
+# ]

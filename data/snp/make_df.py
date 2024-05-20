@@ -51,15 +51,19 @@ from tqdm import tqdm
 from typing_extensions import Literal
 
 from data.snp.simulate_snp import simulate_snp_data
-from src.analysis.metrics import cramer_v
-from src.cli.cli import ProgramOptions
-from src.enumerables import ClassifierScorer, WrapperSelection, WrapperSelectionModel
-from src.models.dummy import DummyClassifier
-from src.models.lgbm import LightGBMClassifier
-from src.models.linear import SGDClassifierSelector as SGDLinear
-from src.preprocessing.inspection.inspection import ClsTargetInfo
-from src.preprocessing.prepare import PreparationInfo, PreparedData
-from src.selection.stepwise import StepwiseSelector
+from df_analyze.analysis.metrics import cramer_v
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.enumerables import (
+    ClassifierScorer,
+    WrapperSelection,
+    WrapperSelectionModel,
+)
+from df_analyze.models.dummy import DummyClassifier
+from df_analyze.models.lgbm import LightGBMClassifier
+from df_analyze.models.linear import SGDClassifierSelector as SGDLinear
+from df_analyze.preprocessing.inspection.inspection import ClsTargetInfo
+from df_analyze.preprocessing.prepare import PreparationInfo, PreparedData
+from df_analyze.selection.stepwise import StepwiseSelector
 
 DATA = Path(__file__).resolve().parent
 
@@ -434,7 +438,9 @@ def test_feature_elim(
     print(
         f"LGBM Selected Cramer V correlations with predictive features:\n{DataFrame(corrs.ravel()).describe()}"
     )
-    print(f"LGBM Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}")
+    print(
+        f"LGBM Selected Features with Cramer V > 0.90: {(np.abs(corrs) >= 0.90).sum()}"
+    )
     print(
         f"LGBM True Predictive Features Tagged: {n_tagged} / {df_pred.shape[1]} ({n_tagged / df_pred.shape[1]})"
     )

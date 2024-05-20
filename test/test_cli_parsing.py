@@ -14,14 +14,14 @@ from typing import Type, Union
 import pytest
 from cli_test_helpers import ArgvContext
 
-from src.analysis.univariate.associate import (
+from df_analyze.analysis.univariate.associate import (
     CatClsStats,
     CatRegStats,
     ContClsStats,
     ContRegStats,
 )
-from src.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
-from src.enumerables import (
+from df_analyze.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
+from df_analyze.enumerables import (
     ClsScore,
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
@@ -33,7 +33,7 @@ from src.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
-from src.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
+from df_analyze.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
 
 PATH = list(TEST_DATASETS.values())[0].datapath
 

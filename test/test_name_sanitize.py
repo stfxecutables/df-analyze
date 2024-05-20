@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 from pandas import DataFrame
 
-from src.preprocessing.cleaning import sanitize_names
-from src.testing.datasets import (
+from df_analyze.preprocessing.cleaning import sanitize_names
+from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     MEDIUM_INSPECTION,
     SLOW_INSPECTION,
