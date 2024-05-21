@@ -151,10 +151,10 @@ relied upon for stability.
 `df-analyze` is currently only distributed as a wheel
 
 
-
 ## [WIP] With Rye
 
-This project recently transitioned to [Rye](https://rye-up.com/) for.
+This project recently transitioned to [Rye](https://rye-up.com/).
+
 
 ## [DEPRECATED] By Poetry
 
