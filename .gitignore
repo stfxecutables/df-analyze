@@ -12,10 +12,11 @@ data/testing/**/*.csv
 data/testing/**/*.parquet
 data/testing/**/*.txt
 
-test_results
-
 cc_results
 results/reports
+secrets
+test_results
+
 runtimes/*.txt
 *runtime*txt
 
