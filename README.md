@@ -5,7 +5,11 @@
 
 - [Overview](#overview)
 - [Installation](#installation)
-  - [By Poetry](#by-poetry)
+  - [Quickstart With `pip`](#quickstart-with-pip)
+    - [Installing Latest / Development Releases](#installing-latest--development-releases)
+    - [Installing Editable (`pip install -e`)](#installing-editable-pip-install--e)
+  - [\[WIP\] With Rye](#wip-with-rye)
+  - [\[DEPRECATED\] By Poetry](#deprecated-by-poetry)
     - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
   - [By `pip` (in case of Poetry issues)](#by-pip-in-case-of-poetry-issues)
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
@@ -101,9 +105,58 @@ means, unless you are interested in [building and using a
 container](#by-singularity--apptainer-container), that you will need to have
 a compatible Python version installed on your machine.
 
+At the moment, `df-analyze` is also under active development. I have no real
+capacity to test on Windows machines, and while I have tried to avoid
+platform-specific code, errors are likely to appear here.
+
+`df-analyze` is also currently in the process of transitioning to
+[Rye](https://rye-up.com/) for distribution. Rye itself is under active
+development, so bugs may arise here as Rye updates. If you do run into a
+problem, feel free to file an issue or make a
+[Discussions](https://github.com/stfxecutables/df-analyze/discussions) post.
 
 
-## By Poetry
+## Quickstart With `pip`
+
+To install, run:
+
+```sh
+pip install df-analyze
+```
+
+This should "just work", though this may not install the latest version. Then,
+to see the available options, just run:
+
+```sh
+df-analyze --help
+```
+
+to see usage and available options.
+
+### Installing Latest / Development Releases
+
+
+To install the `develop` branch from the latest GitHub commit:
+
+```sh
+python -m pip install git+https://github.com/stfxecutables/df-analyze/@develop
+```
+
+**Note**: This branch is really only intended for developers, and should not be
+relied upon for stability.
+
+
+### Installing Editable (`pip install -e`)
+
+`df-analyze` is currently only distributed as a wheel
+
+
+
+## [WIP] With Rye
+
+This project recently transitioned to [Rye](https://rye-up.com/) for.
+
+## [DEPRECATED] By Poetry
 
 This project uses Poetry to manage dependencies, so if you want to reproduce
 the results you should [install Poetry](https://python-poetry.org/docs/).
@@ -173,8 +226,8 @@ things to break with this approach...
 ## By Singularity / Apptainer Container
 
 Alternately, [build the Singularity
-container](#building-the-singularity-container) and use this for running the
-code.
+container](#building-the-singularity-container) and use this for running any
+code that uses `df-analyze`.
 
 
 # Usage
