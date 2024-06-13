@@ -6,12 +6,11 @@ from shutil import get_terminal_size
 from typing import TYPE_CHECKING, Optional, Union, overload
 
 import numpy as np
+from df_analyze._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 from joblib import Memory, Parallel, delayed
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
-
-from df_analyze._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 
 if TYPE_CHECKING:
     from df_analyze.cli.cli import ProgramOptions
@@ -353,9 +352,7 @@ def coerce_user_ambig(
     for col in user_cols:
         ### Case (3) ###
         if col in arg_ords:  # always trust user ordinals
-            coercions[col] = Inference(
-                InferredKind.UserOrdinal, "User-specified ordinal"
-            )
+            coercions[col] = Inference(InferredKind.UserOrdinal, "User-specified ordinal")
             continue
         # now we know user specified categorical
         assert (
@@ -649,7 +646,7 @@ def inspect_data(
     final_coercions = coerce_ambiguous_cols(
         df, ambigs, arg_cats=arg_cats, arg_ords=arg_ords, _warn=_warn
     )
-    if len(ambigs) > 0:
+    if len(ambigs) > 0 and _warn:
         messy_inform(
             "df-analyze could not determine the types of some features. These "
             "have been coerced to our best guess for the appropriate type. See "

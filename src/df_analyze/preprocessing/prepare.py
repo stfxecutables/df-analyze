@@ -12,13 +12,6 @@ from warnings import warn
 import jsonpickle
 import numpy as np
 import pandas as pd
-from numpy import ndarray
-from numpy.random import Generator
-from pandas import DataFrame, Series
-from sklearn.experimental import enable_iterative_imputer  # noqa
-from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer
-
 from df_analyze._constants import (
     N_CAT_LEVEL_MIN,
     N_TARG_LEVEL_MIN,
@@ -44,6 +37,12 @@ from df_analyze.preprocessing.inspection.inspection import (
     unify_nans,
 )
 from df_analyze.timing import timed
+from numpy import ndarray
+from numpy.random import Generator
+from pandas import DataFrame, Series
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
+from sklearn.preprocessing import KBinsDiscretizer
 
 
 @dataclass
@@ -120,8 +119,11 @@ class PreparationInfo:
         path.write_text(str(jsonpickle.encode(self)))
 
     @staticmethod
-    def from_json(path: Path) -> PreparationInfo:
-        return cast(PreparationInfo, jsonpickle.decode(path.read_text()))
+    def from_json(path: Path) -> Optional[PreparationInfo]:
+        content = path.read_text()
+        if content.strip().replace("\n", "") == "":
+            return None
+        return cast(PreparationInfo, jsonpickle.decode(content))
 
 
 def viable_subsample(
@@ -212,28 +214,67 @@ class PreparedData:
     def __init__(
         self,
         X: DataFrame,
-        X_cont: DataFrame,
-        X_cat: DataFrame,
         y: Series,
-        labels: Optional[dict[int, str]],
-        inspection: InspectionResults,
-        info: PreparationInfo,
+        is_classification: Optional[bool] = None,
+        X_cont: Optional[DataFrame] = None,
+        X_cat: Optional[DataFrame] = None,
+        labels: Optional[dict[int, str]] = None,
+        inspection: Optional[InspectionResults] = None,
+        info: Optional[PreparationInfo] = None,
         phase: Optional[Literal["train", "test"]] = None,
     ) -> None:
-        self.is_classification: bool = info.is_classification
-        self.inspection: InspectionResults = inspection
-        self.info: PreparationInfo = info
+        # Attempt to automatically infer classification problem based on y.dtype
+        # https://numpy.org/doc/stable/reference/generated/numpy.dtype.kind.html
+        if is_classification is None:
+            kind = y.dtype.kind
+            kinds = {"f": False, "i": True, "b": True, "u": True}
+            if kind not in kinds:
+                raise ValueError(
+                    f"Got argument for parameter `y` with unsupported data type: {y.dtype}"
+                )
+            if kind == "O":
+                ...
+                # run cleaning.encode_target with X, y
+                warn(
+                    f"Found 'object' dtype for argument y (name='{y.name}'). Attempting to "
+                    "automatically label encode. If this is undesirable, ensure that your "
+                    "target `y` has the proper dtype, e.g. `y = y.astype(np.float64)` if "
+                    "regression, or `y = y.astype(np.int64)` if classification. "
+                )
+                X, y, labels = encode_target(X, y, _warn=True)
+                self.is_classification = True
+            else:
+                tname = (
+                    "floating point"
+                    if kind == "f"
+                    else "signed/unsigned integer or boolean type"
+                )
+                self.is_classification = kinds[kind]
+                warn(
+                    f"Argument `is_classification` left at default. Inferred "
+                    f"`is_classification={self.is_classification}`, since y is {tname}. "
+                    "If this is incorrect, or to silence this warning, specify the value for "
+                    "`is_classification`"
+                )
+        else:
+            self.is_classification = is_classification
+        self.inspection: Optional[InspectionResults] = inspection
+        self.info: Optional[PreparationInfo] = info
         self.files: PrepFiles = PrepFiles()
         self.phase = phase
 
         X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
 
         self.X = self.rename_cols(X)
-        self.X_cont: DataFrame = self.rename_cols(X_cont)
-        self.X_cat: DataFrame = self.rename_cols(X_cat)
+        self.X_cont: Optional[DataFrame] = (
+            None if X_cont is None else self.rename_cols(X_cont)
+        )
+        self.X_cat: Optional[DataFrame] = (
+            None if X_cat is None else self.rename_cols(X_cat)
+        )
         self.y: Series = y
         self.target = self.y.name
-        self.labels = labels
+        self.labels = labels or {}
 
     @property
     def num_classes(self) -> int:
@@ -263,12 +304,16 @@ class PreparedData:
 
     def subsample(self, idx: ndarray) -> PreparedData:
         X_sub = self.X.iloc[idx]
-        info_sub = deepcopy(self.info)
-        info_sub.final_shape = X_sub.shape
+        X_cont, X_cat = self.X_cont, self.X_cat
+        if self.info is not None:
+            info_sub = deepcopy(self.info)
+            info_sub.final_shape = X_sub.shape
+        else:
+            info_sub = None
         return PreparedData(
             X=X_sub,
-            X_cont=self.X_cont.iloc[idx],
-            X_cat=self.X_cat.iloc[idx],
+            X_cont=None if X_cont is None else X_cont.iloc[idx],
+            X_cat=None if X_cat is None else X_cat.iloc[idx],
             y=self.y.iloc[idx],
             labels=self.labels,
             inspection=self.inspection,
@@ -291,8 +336,10 @@ class PreparedData:
             strat = y
             idx = viable_subsample(df=X, target=y, n_sub=n_sub, rng=rng)
             X = X.iloc[idx]
-            X_cont = X_cont.iloc[idx]
-            X_cat = X_cat.iloc[idx]
+            if X_cont is not None:
+                X_cont = X_cont.iloc[idx]
+            if X_cat is not None:
+                X_cat = X_cat.iloc[idx]
             y = y.iloc[idx]
         else:
             kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
@@ -302,8 +349,10 @@ class PreparedData:
             idx = next(ss.split(strat, strat))[0]
             X = cast(DataFrame, self.X.iloc[idx, :].copy(deep=True))
             y = self.y.loc[idx].copy(deep=True)
-            X_cat = self.X_cat.loc[idx, :].copy(deep=True)
-            X_cont = self.X_cont.loc[idx, :].copy(deep=True)
+            if X_cont is not None:
+                X_cont = X_cont.loc[idx, :].copy(deep=True)
+            if X_cat is not None:
+                X_cat = X_cat.loc[idx, :].copy(deep=True)
 
         return PreparedData(
             X=X,
@@ -316,22 +365,26 @@ class PreparedData:
         ), idx
 
     def validate(
-        self, X: DataFrame, X_cont: DataFrame, X_cat: DataFrame, y: Series
-    ) -> tuple[DataFrame, DataFrame, DataFrame, Series]:
+        self,
+        X: DataFrame,
+        X_cont: Optional[DataFrame],
+        X_cat: Optional[DataFrame],
+        y: Series,
+    ) -> tuple[DataFrame, Optional[DataFrame], Optional[DataFrame], Series]:
         n_samples = len(X)
-        if len(X_cont) != n_samples:
+        if X_cont is not None and len(X_cont) != n_samples:
             raise ValueError(
                 f"Continuous data number of samples ({len(X_cont)}) does not "
                 f"match number of samples in processed data ({n_samples})"
             )
-        if len(X_cat) != n_samples:
+        if X_cat is not None and len(X_cat) != n_samples:
             raise ValueError(
                 f"Categorical data number of samples ({len(X_cat)}) does not "
                 f"match number of samples in processed data ({n_samples})"
             )
         if len(y) != n_samples:
             raise ValueError(
-                f"Target number of samples ({len(X_cat)}) does not "
+                f"Target number of samples ({len(X)}) does not "
                 f"match number of samples in processed data ({n_samples})"
             )
 
@@ -340,8 +393,10 @@ class PreparedData:
 
         # Handle some BS due to stupid Pandas index behaviour
         X.reset_index(drop=True, inplace=True)
-        X_cont.index = X.index.copy(deep=True)
-        X_cat.index = X.index.copy(deep=True)
+        if X_cont is not None:
+            X_cont.index = X.index.copy(deep=True)
+        if X_cat is not None:
+            X_cat.index = X.index.copy(deep=True)
         y.index = X.index.copy(deep=True)
         return X, X_cont, X_cat, y
 
@@ -367,7 +422,9 @@ class PreparedData:
         return df
 
     def to_markdown(self) -> Optional[str]:
-        return self.info.to_markdown()
+        if self.info is not None:
+            return self.info.to_markdown()
+        warn("No preparation info found, no Markdown report to make")
 
     def save_raw(self, root: Path) -> None:
         try:
@@ -377,7 +434,8 @@ class PreparedData:
             self.y.to_frame().to_parquet(root / self.files.y_raw)
             if self.labels is not None:
                 Series(self.labels).to_frame().to_parquet(root / self.files.labels)
-            self.info.to_json(root / self.files.info)
+            if self.info is not None:
+                self.info.to_json(root / self.files.info)
         except Exception as e:
             warn(
                 f"Exception while saving {self.__class__.__name__} to {root}."

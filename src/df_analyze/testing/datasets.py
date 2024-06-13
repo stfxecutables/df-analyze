@@ -3,7 +3,7 @@ from __future__ import annotations
 # fmt: off
 import sys  # isort: skip
 from pathlib import Path  # isort: skip
-ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
@@ -17,10 +17,6 @@ import jsonpickle
 import numpy as np
 import pandas as pd
 import pytest
-from pandas import DataFrame, Series
-from sklearn.model_selection import train_test_split as tt_split
-from sklearn.preprocessing import KBinsDiscretizer
-
 from df_analyze._constants import TESTDATA
 from df_analyze.analysis.univariate.associate import AssocResults, target_associations
 from df_analyze.analysis.univariate.predict.predict import (
@@ -41,6 +37,9 @@ from df_analyze.preprocessing.inspection.inspection import (
     inspect_data,
 )
 from df_analyze.preprocessing.prepare import PreparedData, prepare_data
+from pandas import DataFrame, Series
+from sklearn.model_selection import train_test_split as tt_split
+from sklearn.preprocessing import KBinsDiscretizer
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
@@ -82,9 +81,7 @@ class TestDataset:
         if not self.preds_cachedir.exists():
             self.preds_cachedir.mkdir(exist_ok=True, parents=True)
 
-    def inspect(
-        self, load_cached: bool = True, force: bool = False
-    ) -> InspectionResults:
+    def inspect(self, load_cached: bool = True, force: bool = False) -> InspectionResults:
         if load_cached and force:
             raise ValueError("Cannot both use and overwrite cache, this is pointless.")
 
@@ -131,9 +128,7 @@ class TestDataset:
                 pickle.dump(prep, handle)
         return prep
 
-    def associations(
-        self, load_cached: bool = True, force: bool = False
-    ) -> AssocResults:
+    def associations(self, load_cached: bool = True, force: bool = False) -> AssocResults:
         if load_cached and AssocResults.is_saved(self.assoc_cachedir) and (not force):
             return AssocResults.load(self.assoc_cachedir, self.is_classification)
 
@@ -433,10 +428,9 @@ slow_ds = composed(
 )
 
 if __name__ == "__main__":
+    from df_analyze._constants import TEMPLATES
     from sklearn.model_selection import cross_val_score
     from sklearn.svm import SVC
-
-    from df_analyze._constants import TEMPLATES
 
     out = TEMPLATES / "binary_classification.csv"
     X, _, y, _ = fake_data("classify", N=300, C=25)
