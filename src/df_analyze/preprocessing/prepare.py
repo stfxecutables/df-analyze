@@ -285,7 +285,7 @@ class PreparedData:
     def split(
         self, train_size: Union[int, float] = 0.6
     ) -> tuple[PreparedData, PreparedData]:
-        y = self.y
+        y = self.y.copy()
         if self.is_classification:
             ss = StratifiedShuffleSplit(
                 train_size=train_size, n_splits=1, random_state=42
@@ -314,7 +314,7 @@ class PreparedData:
             X=X_sub,
             X_cont=None if X_cont is None else X_cont.iloc[idx],
             X_cat=None if X_cat is None else X_cat.iloc[idx],
-            y=self.y.iloc[idx],
+            y=self.y.iloc[idx].copy(),
             labels=self.labels,
             inspection=self.inspection,
             info=info_sub,
