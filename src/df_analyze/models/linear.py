@@ -11,11 +11,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+from df_analyze.models.base import DfAnalyzeModel
 from sklearn.linear_model import ElasticNet, LogisticRegression
 from sklearn.linear_model import SGDClassifier as SklearnSGDClassifier
 from sklearn.linear_model import SGDRegressor as SklearnSGDRegressor
-
-from df_analyze.models.base import DfAnalyzeModel
 
 # https://scikit-learn.org/stable/auto_examples/linear_model/plot_quantile_regression.html
 
@@ -125,13 +124,17 @@ class SGDClassifierSelector(DfAnalyzeModel):
         return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
-        return dict(
+        args = dict(
             loss=trial.suggest_categorical("loss", ["hinge", "squared_hinge"]),
             eta0=trial.suggest_float("eta0", 1e-5, 5.0, log=True),
             alpha=trial.suggest_float("alpha", 1e-6, 1.0, log=True),
             early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
             average=trial.suggest_int("average", 0, 20),
         )
+        # prevent a FutureWarning
+        if args["average"] == 0:
+            args["average"] = False
+        return args
 
 
 class SGDRegressorSelector(DfAnalyzeModel):
@@ -149,7 +152,7 @@ class SGDRegressorSelector(DfAnalyzeModel):
         return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
-        return dict(
+        args = dict(
             loss=trial.suggest_categorical(
                 "loss",
                 [
@@ -164,3 +167,7 @@ class SGDRegressorSelector(DfAnalyzeModel):
             early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
             average=trial.suggest_int("average", 0, 20),
         )
+        # prevent a FutureWarning
+        if args["average"] == 0:
+            args["average"] = False
+        return args
