@@ -270,10 +270,10 @@ try:
     if "credit-approval_reproduced" in TEST_DATASETS:
         TEST_DATASETS.pop("credit-approval_reproduced")  # constant target
 except Exception:
-    print(
-        "No test datasets found. If you are not a developer of df-analyze, "
-        "you may ignore this message."
-    )
+    # print(
+    #     "No test datasets found. If you are not a developer of df-analyze, "
+    #     "you may ignore this message."
+    # )
     __UNSORTED = []
     TEST_DATASETS = {}
 
