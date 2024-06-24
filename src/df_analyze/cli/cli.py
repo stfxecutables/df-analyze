@@ -12,6 +12,7 @@ sys.path.append(str(ROOT))  # isort: skip
 File for defining all options passed to `df-analyze.py`.
 """
 import os
+import traceback
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from copy import deepcopy
 from enum import Enum
@@ -30,8 +31,6 @@ from warnings import warn
 import jsonpickle
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
-
 from df_analyze._constants import (
     FULL_RESULTS,
     N_WRAPPER_DEFAULT,
@@ -109,6 +108,7 @@ from df_analyze.enumerables import (
     WrapperSelectionModel,
 )
 from df_analyze.loading import load_spreadsheet
+from pandas import DataFrame
 
 if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
@@ -415,8 +415,13 @@ class ProgramOptions(Debug):
             return None
         name = datapath.stem
         outdir = outdir / name
-        os.makedirs(outdir, exist_ok=True)
-        return outdir
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            return outdir
+        except OSError as e:
+            print(f"Got error: {e}", file=sys.stderr)
+            traceback.print_exc()
+            return None
 
     def hash(self) -> str:
         return get_hash(
@@ -461,9 +466,7 @@ class ProgramOptions(Debug):
         raise ValueError(f"Unrecognized filetype: '{path.suffix}'")
 
 
-def parse_and_merge_args(
-    parser: ArgumentParser, args: Optional[str] = None
-) -> Namespace:
+def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
     # CLI args supersede when non default and also specified in sheet
     # see https://stackoverflow.com/a/76230387 for a similar problem
     cli_parser = deepcopy(parser)
@@ -494,9 +497,7 @@ def parse_and_merge_args(
         else sentinel_parser.parse_known_args(args.split())[0]
     )
     explicit_cli_args = {
-        key: val
-        for key, val in sentinel_cli_args.__dict__.items()
-        if val is not SENTINEL
+        key: val for key, val in sentinel_cli_args.__dict__.items() if val is not SENTINEL
     }
 
     spreadsheet = cli_args.spreadsheet
@@ -1125,9 +1126,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         n_feat_filter=cli_args.n_feat_filter,
         n_filter_cont=cli_args.n_filter_cont,
         n_filter_cat=cli_args.n_filter_cat,
-        filter_assoc_cont_cls=ContClsStats.from_arg(
-            cli_args.filter_assoc_cont_classify
-        ),
+        filter_assoc_cont_cls=ContClsStats.from_arg(cli_args.filter_assoc_cont_classify),
         filter_assoc_cat_cls=CatClsStats.from_arg(cli_args.filter_assoc_cat_classify),
         filter_assoc_cont_reg=ContRegStats.from_arg(cli_args.filter_assoc_cont_regress),
         filter_assoc_cat_reg=CatRegStats.from_arg(cli_args.filter_assoc_cat_regress),
