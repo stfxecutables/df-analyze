@@ -611,36 +611,40 @@ def categorical_feature_target_stats(
     labels: Optional[dict[int, str]],
     is_classification: bool,
 ) -> DataFrame:
-    ...
-    x = categoricals[column]
-    y = target
+    try:
+        x = categoricals[column]
+        y = target
 
-    if is_classification:
-        assert labels is not None, "Missing target labels"
-        xx = x.astype(str).to_numpy().ravel()
-        x_enc = np.asarray(LabelEncoder().fit_transform(xx)).ravel()
-        xs = Series(data=x_enc, name=x.name)
-        levels = np.unique(y).tolist()
+        if is_classification:
+            assert labels is not None, "Missing target labels"
+            xx = x.astype(str).to_numpy().ravel()
+            x_enc = np.asarray(LabelEncoder().fit_transform(xx)).ravel()
+            xs = Series(data=x_enc, name=x.name)
+            levels = np.unique(y).tolist()
 
-        descs = []
-        for level in levels:
-            label = labels[int(level)]
-            desc = cat_feature_cat_target_level_stats(xs, y, level=level, label=label)
-            descs.append(desc)
-        desc = pd.concat(descs, axis=0)
+            descs = []
+            for level in levels:
+                label = labels[int(level)]
+                desc = cat_feature_cat_target_level_stats(xs, y, level=level, label=label)
+                descs.append(desc)
+            desc = pd.concat(descs, axis=0)
 
-        # if y.dtype == "object":
-        #     y = y.astype(str)
-        V = cramer_v(x_enc.reshape(-1, 1), y.astype(str))
-        minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
-        df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}"])
-        desc = desc.dropna(axis="columns", how="all")
-        desc = pd.concat([desc, df], axis=0)
-        # TODO: collect mean stats when this makes sense?
-        # TODO: collect some other fancy stat?
-        return desc
+            # if y.dtype == "object":
+            #     y = y.astype(str)
+            V = cramer_v(x_enc.reshape(-1, 1), y.astype(str))
+            minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
+            df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}"])
+            desc = desc.dropna(axis="columns", how="all")
+            desc = pd.concat([desc, df], axis=0)
+            # TODO: collect mean stats when this makes sense?
+            # TODO: collect some other fancy stat?
+            return desc
 
-    return cat_feature_cont_target_stats(x, y)
+        return cat_feature_cont_target_stats(x, y)
+    except Exception as e:
+        print(f"Got exception: {e}")
+        traceback.print_exc()
+        return DataFrame()
 
 
 def target_associations(
