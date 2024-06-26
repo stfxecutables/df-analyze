@@ -629,9 +629,9 @@ def categorical_feature_target_stats(
             descs.append(desc)
         desc = pd.concat(descs, axis=0)
 
-        if y.dtype == "object":
-            y = y.astype(str)
-        V = cramer_v(x_enc.reshape(-1, 1), y)
+        # if y.dtype == "object":
+        #     y = y.astype(str)
+        V = cramer_v(x_enc.reshape(-1, 1), y.astype(str))
         minfo = minfo_cat(x_enc.reshape(-1, 1), y, discrete_features=True)
         df = DataFrame(data={"cramer_v": V, "mut_info": minfo}, index=[f"{x.name}"])
         desc = desc.dropna(axis="columns", how="all")
