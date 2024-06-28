@@ -32,6 +32,13 @@ if TYPE_CHECKING:
 import numpy as np
 import optuna
 import pandas as pd
+from df_analyze._constants import SEED
+from df_analyze.enumerables import (
+    ClassifierScorer,
+    RegressorScorer,
+    Scorer,
+    WrapperSelection,
+)
 from numpy import ndarray
 from optuna import Study, Trial, create_study
 from optuna.logging import _get_library_root_logger
@@ -43,14 +50,6 @@ from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
-
-from df_analyze._constants import SEED
-from df_analyze.enumerables import (
-    ClassifierScorer,
-    RegressorScorer,
-    Scorer,
-    WrapperSelection,
-)
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -185,9 +184,7 @@ class DfAnalyzeModel(ABC):
             pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
         )
         optuna.logging.set_verbosity(verbosity)
-        objective = self.optuna_objective(
-            X_train=X_train, y_train=y_train, metric=metric
-        )
+        objective = self.optuna_objective(X_train=X_train, y_train=y_train, metric=metric)
         cbs = [EarlyStopping(patience=15, min_trials=50)]
         study.optimize(
             objective,
@@ -250,9 +247,7 @@ class DfAnalyzeModel(ABC):
         # TODO: need to specify valiation method, and return confidences, etc.
         # Actually maybe just want to call refit in here...
         if self.tuned_model is None:
-            raise RuntimeError(
-                "Cannot evaluate tuning because model has not been tuned."
-            )
+            raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
         preds_test = self.tuned_predict(X_test)
         preds_train = self.tuned_predict(X_train)
         probs_train = probs_test = None
@@ -343,11 +338,12 @@ class DfAnalyzeModel(ABC):
             ss = KFold(n_splits=5)
 
         scores = []
-        for idx_train, idx_test in ss.split(y, y):  # type: ignore
-            X_train = X.loc[idx_train]
-            X_test = X.loc[idx_test]
-            y_train = y.loc[idx_train]
-            y_test = y.loc[idx_test]
+
+        for idx_train, idx_test in ss.split(y.copy(), y.copy()):  # type: ignore
+            X_train = X.loc[idx_train].copy()
+            X_test = X.loc[idx_test].copy()
+            y_train = y.loc[idx_train].copy()
+            y_test = y.loc[idx_test].copy()
             self.fit(X_train, y_train)
             preds = self.predict(X=X_test)
             self.model = None  # reset for next fit call
@@ -398,9 +394,7 @@ class DfAnalyzeModel(ABC):
             raise ValueError("Cannot get probabilities for a regression model.")
 
         if self.tuned_args is None or self.tuned_model is None:
-            raise RuntimeError(
-                "Need to tune estimator before calling `.predict_proba()`"
-            )
+            raise RuntimeError("Need to tune estimator before calling `.predict_proba()`")
 
         return self.tuned_model.predict_proba(X)
 

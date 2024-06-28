@@ -12,12 +12,6 @@ from time import perf_counter
 from typing import Literal, Type, Union
 
 import numpy as np
-from joblib import Parallel, delayed
-from numpy import ndarray
-from numpy.typing import NDArray
-from pandas import DataFrame, Series
-from tqdm import tqdm
-
 from df_analyze._constants import DEFAULT_N_STEPWISE_SELECT
 from df_analyze.cli.cli import ProgramOptions
 from df_analyze.enumerables import Scorer, WrapperSelectionModel
@@ -26,6 +20,11 @@ from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from df_analyze.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from df_analyze.preprocessing.prepare import PreparedData
+from joblib import Parallel, delayed
+from numpy import ndarray
+from numpy.typing import NDArray
+from pandas import DataFrame, Series
+from tqdm import tqdm
 
 
 @dataclass
@@ -94,8 +93,9 @@ def get_dfanalyze_score(
     includes.add(candidate)
     includes = sorted(includes)
     X_new = X.loc[:, includes] if is_forward else X.drop(columns=includes)
+    X_new = X_new.copy()
     model = model_cls()
-    return model.cv_score(X_new, y, test=test, metric=metric)
+    return model.cv_score(X_new, y.copy(), test=test, metric=metric)
 
 
 def n_feat_int(prepared: PreparedData, n_features: Union[int, float, None]) -> int:
