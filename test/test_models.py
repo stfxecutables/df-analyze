@@ -36,6 +36,7 @@ from df_analyze.models.linear import (
     SGDClassifier,
     SGDRegressor,
 )
+from df_analyze.models.dummy import DummyClassifier, DummyRegressor
 from df_analyze.models.svm import SVMClassifier, SVMRegressor
 
 
@@ -129,6 +130,27 @@ def check_optuna_tune(
     # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
     for metric in metrics:
         check_optuna_tune_metric(model=model, mode=mode, metric=metric)
+
+
+@pytest.mark.fast
+class TestDummy:
+    def test_dummy_cls(self) -> None:
+        model = DummyClassifier()
+        check_basics(model, "classify")
+
+    def test_dummy_reg(self) -> None:
+        model = DummyRegressor()
+        check_basics(model, "regress")
+
+    def test_dummy_cls_tune(self, capsys: CaptureFixture) -> None:
+        logging.captureWarnings(capture=True)
+        model = DummyClassifier()
+        check_optuna_tune(model, "classify")
+
+    def test_dummy_reg_tune(self, capsys: CaptureFixture) -> None:
+        model = DummyRegressor()
+        # with capsys.disabled():
+        check_optuna_tune(model, "regress")
 
 
 @pytest.mark.fast

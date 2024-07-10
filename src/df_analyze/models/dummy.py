@@ -1,23 +1,50 @@
 from __future__ import annotations
 
 # fmt: off
+from logging import ERROR
 import sys  # isort: skip
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from optuna import Trial
+import optuna
+from optuna import Study, Trial
+
+from df_analyze.enumerables import Scorer
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
+from pandas import DataFrame, Series
 from sklearn.dummy import DummyClassifier as SklearnDummyClassifier
 from sklearn.dummy import DummyRegressor as SklearnDummyRegressor
 
 from df_analyze.models.base import DfAnalyzeModel
 
 
-class DummyRegressor(DfAnalyzeModel):
+class DummyEstimator(DfAnalyzeModel):
+    shortname = "dummy-est"
+    longname = "Dummy Estimator"
+
+    def htune_optuna(
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        metric: Scorer,
+        n_trials: int = 100,
+        n_jobs: int = -1,
+        verbosity: int = optuna.logging.ERROR,
+    ) -> Study:
+        """
+        Too many jobs will blow memory and also since all grids are at most 4
+        waste time and compute.
+        """
+        return super().htune_optuna(
+            X_train, y_train, metric, n_trials, n_jobs=4, verbosity=verbosity
+        )
+
+
+class DummyRegressor(DummyEstimator):
     shortname = "dummy"
     longname = "Dummy Regressor"
     timeout_s = 5 * 60
@@ -42,7 +69,7 @@ class DummyRegressor(DfAnalyzeModel):
         )
 
 
-class DummyClassifier(DfAnalyzeModel):
+class DummyClassifier(DummyEstimator):
     shortname = "dummy"
     longname = "Dummy Classifier"
     timeout_s = 5 * 60
