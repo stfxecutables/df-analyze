@@ -437,8 +437,11 @@ def cont_feature_cat_target_level_stats(x: Series, y: Series, level: Any) -> Dat
     )  # avoid errors for `distribution="t"`
     W, W_p = W_res.statistic, W_res.pvalue
 
-    if (np.std(x) == 0) or (np.std(y_bin) == 0):
+    if np.nanstd(x) == 0:
         r, r_p = np.nan, np.nan
+        warn(f"Input `x`: {x.name} is constant")
+    elif np.nanstd(y_bin) == 0:
+        raise ValueError(f"Target `y_bin` ({y.name}) is constant")
     else:
         r_res = pearsonr(x, y_bin)
         r, r_p = r_res.statistic, r_res.pvalue  # type: ignore
