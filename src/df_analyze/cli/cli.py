@@ -1161,6 +1161,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         separator=cli_args.separator,
         verbosity=cli_args.verbosity,
         no_warn_explosion=cli_args.no_warn_explosion,
+        no_preds=cli_args.no_preds,
     )
 
 
