@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 from random import choice, randint, uniform
-from typing import TYPE_CHECKING, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Literal, Optional, Type, Union, overload
 from warnings import warn
 
 import numpy as np
@@ -381,19 +381,35 @@ def filter_by_univariate_predictions(
     )
 
 
+@overload
+def filter_select_features(
+    prep_train: PreparedData,
+    associations: AssocResults,
+    predictions: None,
+    options: ProgramOptions,
+) -> tuple[FilterSelected, None]: ...
+
+
+@overload
 def filter_select_features(
     prep_train: PreparedData,
     associations: AssocResults,
     predictions: PredResults,
     options: ProgramOptions,
-) -> tuple[FilterSelected, FilterSelected]:
+) -> tuple[FilterSelected, FilterSelected]: ...
+
+
+def filter_select_features(
+    prep_train: PreparedData,
+    associations: AssocResults,
+    predictions: Optional[PredResults],
+    options: ProgramOptions,
+) -> tuple[FilterSelected, Optional[FilterSelected]]:
     is_cls = prep_train.is_classification
     cont_metric = (
         options.filter_assoc_cont_cls if is_cls else options.filter_assoc_cont_reg
     )
-    cat_metric = (
-        options.filter_assoc_cat_cls if is_cls else options.filter_assoc_cat_reg
-    )
+    cat_metric = options.filter_assoc_cat_cls if is_cls else options.filter_assoc_cat_reg
     assoc_filtered = filter_by_univariate_associations(
         prepared=prep_train,
         associations=associations,
@@ -403,13 +419,16 @@ def filter_select_features(
         n_cat=options.n_filter_cat,
         n_total=options.n_feat_filter,
     )
-    pred_filtered = filter_by_univariate_predictions(
-        prepared=prep_train,
-        predictions=predictions,
-        cont_metric=options.filter_pred_reg_score,
-        cat_metric=options.filter_pred_cls_score,
-        n_cont=options.n_filter_cont,
-        n_cat=options.n_filter_cat,
-        significant_only=False,
-    )
+    if predictions is not None:
+        pred_filtered = filter_by_univariate_predictions(
+            prepared=prep_train,
+            predictions=predictions,
+            cont_metric=options.filter_pred_reg_score,
+            cat_metric=options.filter_pred_cls_score,
+            n_cont=options.n_filter_cont,
+            n_cat=options.n_filter_cat,
+            significant_only=False,
+        )
+    else:
+        pred_filtered = None
     return assoc_filtered, pred_filtered

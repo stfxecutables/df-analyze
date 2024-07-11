@@ -71,9 +71,7 @@ class PredResults:
             DataFrame().to_parquet(root / self.files.conts_raw)
         if self.idx_subsample is not None:
             with open(root / self.files.idx, "wb") as handle:
-                np.save(
-                    handle, self.idx_subsample, allow_pickle=False, fix_imports=False
-                )
+                np.save(handle, self.idx_subsample, allow_pickle=False, fix_imports=False)
 
     def save_tables(self, root: Path) -> None:
         if self.conts is not None:
@@ -102,9 +100,7 @@ class PredResults:
 
         npy_file = cachedir / preds.files.idx
         if npy_file.exists():
-            preds.idx_subsample = np.load(
-                npy_file, allow_pickle=False, fix_imports=False
-            )
+            preds.idx_subsample = np.load(npy_file, allow_pickle=False, fix_imports=False)
         return preds
 
     def to_markdown(self, path: Optional[Path] = None) -> Optional[str]:

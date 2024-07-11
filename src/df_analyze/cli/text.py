@@ -659,6 +659,13 @@ current working directory {Path.cwd().resolve()}, or a temporary directory).
 
 """
 
+NO_PRED_HELP = """
+Do not compute univariate predictions, and thus do not filter features based
+on univariate predictive utility. Useful for datasets with over 1 million
+samples and a large (e.g. 30+) number of features, where even scikit-learn
+SGDClassifer and SGDRegressor are often too slow / expensive.
+"""
+
 VERBOSITY_HELP = """
 Controls amount of output to stdout and stderr. Options:
 

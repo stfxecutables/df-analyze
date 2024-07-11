@@ -14,6 +14,7 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    overload,
     Literal,
     Optional,
     Tuple,
@@ -396,7 +397,7 @@ def evaluate_tuned(
     prep_train: PreparedData,
     prep_test: PreparedData,
     assoc_filtered: FilterSelected,
-    pred_filtered: FilterSelected,
+    pred_filtered: Optional[FilterSelected],
     model_selected: ModelSelected,
     options: ProgramOptions,
 ) -> EvaluationResults:
@@ -407,8 +408,10 @@ def evaluate_tuned(
     selections: dict[str, Optional[list[str]]] = {
         "none": None,
         "assoc": assoc_filtered.selected,
-        "pred": pred_filtered.selected,
     }
+    if pred_filtered is not None:
+        selections["pred"] = pred_filtered.selected
+
     embed_models: dict[str, EmbedSelectionModel] = {}
     if model_selected.embed_selected is not None:
         for selected in model_selected.embed_selected:

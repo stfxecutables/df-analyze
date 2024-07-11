@@ -132,9 +132,12 @@ def main() -> None:
     prog_dirs.save_univariate_assocs(associations)
     prog_dirs.save_assoc_report(associations.to_markdown())
 
-    predictions = univariate_predictions(prep_train, is_cls)
-    prog_dirs.save_univariate_preds(predictions)
-    prog_dirs.save_pred_report(predictions.to_markdown())
+    if options.no_preds:
+        predictions = None
+    else:
+        predictions = univariate_predictions(prep_train, is_cls)
+        prog_dirs.save_univariate_preds(predictions)
+        prog_dirs.save_pred_report(predictions.to_markdown())
 
     # select features via filter methods first
     assoc_filtered, pred_filtered = filter_select_features(

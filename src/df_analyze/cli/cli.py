@@ -72,6 +72,7 @@ from df_analyze.cli.text import (
     N_FEAT_TOTAL_FILTER_HELP,
     N_FEAT_WRAPPER_HELP,
     NAN_HELP,
+    NO_PRED_HELP,
     NORM_HELP,
     ORDINAL_HELP_STR,
     OUTDIR_HELP,
@@ -196,6 +197,7 @@ class ProgramOptions(Debug):
         separator: str,
         verbosity: Verbosity,
         no_warn_explosion: bool,
+        no_preds: bool,
     ) -> None:
         # memoization-related
         # other
@@ -248,6 +250,8 @@ class ProgramOptions(Debug):
         self.separator: str = separator
         self.verbosity: Verbosity = verbosity
         self.no_warn_explosion: bool = no_warn_explosion
+        self.no_preds: bool = no_preds
+
         self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir, self.hash())
 
         # cleanup
@@ -842,6 +846,11 @@ def make_parser() -> ArgumentParser:
         required=False,
         default=None,
         help=OUTDIR_HELP,
+    )
+    parser.add_argument(
+        "--no-preds",
+        action="store_true",
+        help=NO_PRED_HELP,
     )
     parser.add_argument(
         "--verbosity",
