@@ -34,6 +34,7 @@ from df_analyze.preprocessing.cleaning import (
 )
 from df_analyze.preprocessing.inspection.inspection import (
     InspectionResults,
+    InspectionInfo,
     inspect_data,
 )
 from df_analyze.preprocessing.prepare import PreparedData, prepare_data
@@ -87,31 +88,42 @@ class TestDataset:
 
         if load_cached and self.inspect_cachefile.exists() and not force:
             results = jsonpickle.decode(self.inspect_cachefile.read_text())
+            if not isinstance(results, InspectionResults):
+                raise ValueError("Garbage jsonpickle failed again.")
             return cast(InspectionResults, results)
 
         df = self.load()
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
-            results = inspect_data(df, "target", self.categoricals, [], _warn=False)
+            df, results = inspect_data(df, "target", self.categoricals, [], _warn=False)
         if force:
-            enc = str(jsonpickle.encode(results))
+            enc = str(jsonpickle.encode(results, keys=True))
             self.inspect_cachefile.write_text(enc)
+            saved = jsonpickle.decode(self.inspect_cachefile.read_text())
+            if not isinstance(saved, InspectionResults):
+                raise ValueError("Garbage jsonpickle failed again.")
             return results
 
         if not self.inspect_cachefile.exists():
-            enc = str(jsonpickle.encode(results))
+            enc = str(jsonpickle.encode(results, keys=True))
             self.inspect_cachefile.write_text(enc)
+            saved = jsonpickle.decode(self.inspect_cachefile.read_text())
+            if not isinstance(saved, InspectionResults):
+                raise ValueError("Garbage jsonpickle failed again.")
         return results
 
     def prepared(self, load_cached: bool = True, force: bool = False) -> PreparedData:
         if load_cached and self.prep_cachefile.exists() and (not force):
             # results = jsonpickle.decode(self.prep_cachefile.read_text())
-            with open(self.prep_cachefile, "rb") as handle:
-                results = pickle.load(handle)
-            return cast(PreparedData, results)
+            try:
+                with open(self.prep_cachefile, "rb") as handle:
+                    results = pickle.load(handle)
+                return cast(PreparedData, results)
+            except ModuleNotFoundError:
+                pass  # probably the pickle predates the refactor, so we need to rebuild...
 
         df = self.load()
-        inspect = self.inspect(load_cached=True)
+        inspect = self.inspect(load_cached=not force)
         prep = prepare_data(df, "target", inspect, self.is_classification)
 
         if force:

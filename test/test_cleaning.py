@@ -67,9 +67,9 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 
     for nans in [NanHandling.Drop]:
         try:
-            dfc = handle_continuous_nans(
-                df, target="target", results=results, nans=nans
-            )[0]
+            dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[
+                0
+            ]
             clean = dfc.drop(columns=["target", *cats])
             assert clean.isna().sum().sum() == 0, f"NaNs remaining in data {dsname}"
         except RuntimeError as e:

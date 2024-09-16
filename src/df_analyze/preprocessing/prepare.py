@@ -254,7 +254,7 @@ class PreparedData:
                     f"Argument `is_classification` left at default. Inferred "
                     f"`is_classification={self.is_classification}`, since y is {tname}. "
                     "If this is incorrect, or to silence this warning, specify the value for "
-                    "`is_classification`"
+                    f"`is_classification`.\ny={y}"
                 )
         else:
             self.is_classification = is_classification
