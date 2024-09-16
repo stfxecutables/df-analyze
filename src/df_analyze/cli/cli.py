@@ -366,6 +366,7 @@ class ProgramOptions(Debug):
             separator=separator,
             verbosity=verbosity,
             no_warn_explosion=no_warn_explosion,
+            no_preds=False,
         )
 
     def spam_warnings(self) -> None:
@@ -1078,8 +1079,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     cli_args = parse_and_merge_args(parser, args)
     mode = str(cli_args.mode).lower()
     is_cls = True if "class" in mode else False
+
     cats = set(cli_args.categoricals)
     ords = set(cli_args.ordinals)
+
     for cat in cats:
         if cat in ords:
             warn(

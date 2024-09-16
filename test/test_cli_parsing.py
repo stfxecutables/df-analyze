@@ -45,7 +45,7 @@ def test_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "one two three",
+        "one,two,three",  # spaces are allow but count as names, must be comma-separated
     ):
         # opts = get_options(f"--df {PATH} --categoricals one two three")
         opts = get_options()
@@ -61,7 +61,7 @@ def test_quoted_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "'a one' 'a two'",
+        "a one,a two",
         "--verbosity",
         "0",
     ):
@@ -93,6 +93,7 @@ def test_random_types(dataset: tuple[str, TestDataset]) -> None:
         "separator": (str,),
         "verbosity": (Verbosity,),
         "no_warn_explosion": (bool,),
+        "no_preds": (bool,),
     }
     comparables: dict[str, tuple[Union[EnumMeta, Type[None]], ...]] = {
         "feat_select": (FeatureSelection,),

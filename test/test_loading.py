@@ -38,7 +38,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX)
     assert (
         meta
-        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan median --norm robust --classifiers knn lgbm dummy --feat-select filter embed"
+        == "--outdir ./results --target y --mode classify --categoricals s,x0 --nan median --norm robust --classifiers knn lgbm dummy --feat-select filter embed"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)
@@ -47,7 +47,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX2)
     assert (
         meta
-        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan mean --norm minmax --classifiers knn lgbm dummy --feat-select filter wrap"
+        == "--outdir ./results --target y --mode classify --categoricals s,x0 --nan mean --norm minmax --classifiers knn lgbm dummy --feat-select filter wrap"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)

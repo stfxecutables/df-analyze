@@ -36,6 +36,11 @@ def load_excel(path: Path) -> tuple[DataFrame, str]:
             line = " ".join([str(value) for value in row if value is not None])
             meta[i] = line
             continue
+        if first is not None and str(first).strip().startswith("--categorical"):
+            line = "".join([str(value) for value in row if value is not None])
+            meta[i] = line
+            continue
+
         if all(val is None for val in row):  # ignore blank rows
             continue
         data.append(row)
