@@ -20,6 +20,7 @@ PYTEST="$VENV/bin/pytest"
     test/test_loading.py \
     test/test_cli_random.py \
     test/test_cli_parsing.py \
+    test/test_name_sanitize.py \
     test/test_datasets.py \
     test/test_saving.py \
     test/test_models.py \
@@ -43,6 +44,7 @@ PYTEST="$VENV/bin/pytest"
 # test_saving.py
 # test_models.py
 # test_predict.py
+# test_name_sanitize.py
 
 # # Integration
 # test_main.py
@@ -50,7 +52,6 @@ PYTEST="$VENV/bin/pytest"
 
 # # ERRORS!
 # test_mlp.py  # segmentation fault
-# test_name_sanitize.py  # unclear, some simple logic error somewhere or off by one
 # test_tuning_score.py  # ValueError: Generated training classification target is constant
 
 

@@ -4,6 +4,7 @@
 # Contents
 
 - [Overview](#overview)
+  - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
   - [Quickstart With `pip`](#quickstart-with-pip)
     - [Installing Latest / Development Releases](#installing-latest--development-releases)
@@ -91,10 +92,22 @@ If you have any questions about:
 - contributing to `df-analyze`
 - anything else that you think is relevant to the `df-analyze` software
   specifically (and not course-related issue or complaints, if encountering
-  `df-analyze` as part of a university/college course)
+  `df-analyze` as part of a [university/college
+  course](#for-students-or-novices-to-machine-and-deep-learning))
 
 Don't be shy about asking for help in the
 [Discussions](https://github.com/stfxecutables/df-analyze/discussions)!
+
+
+## For Students or Novices to Machine and Deep Learning
+
+For students encountering `df-analyze` through a course, see the [student
+README]() in this repo. This contains some descriptions and tips that are
+helpful for those just starting to learn about AutoML tools, and also some
+explanations and tips for running `df-analyze` on SLURM High-Performance
+Computing (HPC) clusters, particularly the [Digitial Research Alliance of
+Canada (formerly Compute Canada)
+clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
 
 

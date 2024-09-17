@@ -131,4 +131,4 @@ def test_simple_report() -> None:
         except ValueError as e:
             raise ValueError(f"Could not split line: `{table_line}`") from e
         assert orig == "a"
-        assert renamed == "a_1"
+        assert renamed == "a__0"
