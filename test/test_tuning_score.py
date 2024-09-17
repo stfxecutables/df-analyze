@@ -51,6 +51,7 @@ def check_optuna_tune(
         y_train=y_tr,
         metric=metric,  # type: ignore
         n_trials=8,
+        n_jobs=4,
     )
     higher_better = metric.higher_is_better()
     direction = Direction.MAXIMIZE if higher_better else Direction.MINIMIZE

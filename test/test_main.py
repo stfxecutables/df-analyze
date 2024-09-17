@@ -103,7 +103,7 @@ def do_main(dataset: tuple[str, TestDataset]) -> None:
     ordinals = renames.rename_columns(ordinals)
     drops = renames.rename_columns(drops)
 
-    inspection = inspect_data(df, target, categoricals, ordinals, drops, _warn=True)
+    df, inspection = inspect_data(df, target, categoricals, ordinals, drops, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 

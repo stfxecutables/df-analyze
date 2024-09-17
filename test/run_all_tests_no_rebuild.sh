@@ -17,8 +17,42 @@ PYTEST="$VENV/bin/pytest"
     test/test_cleaning.py
 
 "$PYTEST" \
-    test/test_datasets.py \
     test/test_loading.py \
     test/test_cli_random.py \
     test/test_cli_parsing.py \
+    test/test_datasets.py \
+    test/test_saving.py \
+    test/test_models.py \
     -x
+
+"$PYTEST" \
+    test/test_predict.py \
+    test/test_selection.py \
+    -m 'fast' -x
+
+
+# # Done
+# test_inspection.py
+# test_prepare.py
+# test_associate.py
+# test_cleaning.py
+# test_loading.py
+# test_cli_random.py
+# test_cli_parsing.py
+# test_datasets.py
+# test_saving.py
+# test_models.py
+# test_predict.py
+
+# # Integration
+# test_main.py
+# test_spreadsheets.py
+
+# # ERRORS!
+# test_mlp.py  # segmentation fault
+# test_name_sanitize.py  # unclear, some simple logic error somewhere or off by one
+# test_tuning_score.py  # ValueError: Generated training classification target is constant
+
+
+## TODO
+# test_selection.py

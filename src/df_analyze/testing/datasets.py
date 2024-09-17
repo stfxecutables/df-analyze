@@ -269,6 +269,11 @@ def fake_data(
 
     target_tr = Series(np.asarray(y_tr).ravel(), name="target")
     target_test = Series(np.asarray(y_test).ravel(), name="target")
+    if mode == "classify":
+        if len(target_tr.unique()) == 1:
+            raise ValueError("Generated training classification target is constant")
+        if len(target_test.unique()) == 1:
+            raise ValueError("Generated testing classification target is constant")
 
     return df_tr, df_test, target_tr, target_test
 
