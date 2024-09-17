@@ -12,15 +12,17 @@ data/testing/**/*.csv
 data/testing/**/*.parquet
 data/testing/**/*.txt
 
-cc_results
-results/reports
-secrets
-test_results
-
-runtimes/*.txt
+*data*
+*results*
 *runtime*txt
 
+cmc_ata
+runtimes/*.txt
+
+secrets
+
 __cache__
+__JOBLIB_CACHE__
 .mplconfig
 mplconfig
 
