@@ -24,6 +24,7 @@ PYTEST="$VENV/bin/pytest"
     test/test_datasets.py \
     test/test_saving.py \
     test/test_models.py \
+    test/test_tuning_score.py \
     -x
 
 "$PYTEST" \
@@ -45,6 +46,7 @@ PYTEST="$VENV/bin/pytest"
 # test_models.py
 # test_predict.py
 # test_name_sanitize.py
+# test_tuning_score.py
 
 # # Integration
 # test_main.py
@@ -52,7 +54,6 @@ PYTEST="$VENV/bin/pytest"
 
 # # ERRORS!
 # test_mlp.py  # segmentation fault
-# test_tuning_score.py  # ValueError: Generated training classification target is constant
 
 
 ## TODO

@@ -36,7 +36,18 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
+universal = true
 dev-dependencies = ["pytest>=8.2.1", "ruff>=0.4.4"]
+
+[[tool.rye.sources]]
+name = "torch"
+url = "https://download.pytorch.org/whl/cpu"
+type = "index"
+
+[[tool.rye.sources]]
+name = "torchvision"
+url = "https://download.pytorch.org/whl/cpu"
+type = "index"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -74,8 +85,16 @@ filterwarnings = [
   'ignore:DeprecationWarning',
   'ignore:Lazy Modules:UserWarning',
   'ignore:ConvergenceWarning',
-  # note the use of single quote below to denote "raw" strings in TOML
-  # 'ignore:function ham\(\) is deprecated:DeprecationWarning',
+  'ignore:FutureWarning',
+  # Below comes from pd.get_dummies in src.df_analyze.preprocessing.cleaning.py:563
+  # so is not our problem, Pandas can fix
+  'ignore:The behavior of Index.insert:FutureWarning',
+  # Below errors are only relevant to users, not in testing
+  'ignore:Dropping NaNs is currently not implemented:UserWarning',
+  'ignore:AUROC cannot be used for tuning as it requires probabilities:UserWarning',
+  'ignore:Maximum number of iteration reached before convergence',
+  'ignore:The max_iter was reached',
+  'ignore:Without pruning, Optuna:UserWarning',
 ]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -87,15 +106,6 @@ markers = [
   "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
 ]
 
-[[tool.rye.sources]]
-name = "torch"
-url = "https://download.pytorch.org/whl/cpu"
-type = "index"
-
-[[tool.rye.sources]]
-name = "torchvision"
-url = "https://download.pytorch.org/whl/cpu"
-type = "index"
 
 # torch = [
 #   { version = "=2.1.1", source = "pypi", platform = "darwin" },

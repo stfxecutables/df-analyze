@@ -318,6 +318,7 @@ class PreparedData:
             labels=self.labels,
             inspection=self.inspection,
             info=info_sub,
+            is_classification=self.is_classification,
         )
 
     def representative_subsample(
@@ -362,6 +363,7 @@ class PreparedData:
             labels=self.labels,
             inspection=self.inspection,
             info=self.info,
+            is_classification=self.is_classification,
         ), idx
 
     def validate(
@@ -457,6 +459,10 @@ class PreparedData:
         else:
             labels = None
         info = PreparationInfo.from_json(root / files.info)
+        if info is not None:
+            is_cls = info.is_classification
+        else:
+            is_cls = None
         return PreparedData(
             X=X,
             X_cont=X_cont,
@@ -465,6 +471,7 @@ class PreparedData:
             labels=labels,
             inspection=inspection,
             info=info,
+            is_classification=is_cls,
         )
 
 

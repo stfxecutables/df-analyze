@@ -231,8 +231,8 @@ def fake_data(
     X_cont_test = np.random.uniform(0, 1, [N, C])
 
     cat_sizes = np.random.randint(2, 20, C)
-    cats_tr = [np.random.randint(0, c) for c in cat_sizes]
-    cats_test = [np.random.randint(0, c) for c in cat_sizes]
+    cats_tr = [np.random.randint(0, c, [N]) for c in cat_sizes]
+    cats_test = [np.random.randint(0, c, [N]) for c in cat_sizes]
 
     X_cat_tr = np.empty([N, C])
     for i, cat in enumerate(cats_tr):

@@ -102,7 +102,7 @@ class HtuneResult:
             other.probs_test, ndarray
         ):
             probs_test_equal = np.all(
-                (self.probs_test.round(8) == other.probs_test.round(8)).ravel()
+                (self.probs_test.round(8) == other.probs_test.round(8)).to_numpy()
             ).item()
         else:
             probs_test_equal = False
@@ -113,7 +113,7 @@ class HtuneResult:
             other.probs_train, ndarray
         ):
             probs_train_equal = np.all(
-                (self.probs_train.round(8) == other.probs_train.round(8)).ravel()
+                (self.probs_train.round(8) == other.probs_train.round(8)).to_numpy()
             ).item()
         else:
             probs_train_equal = False
@@ -130,8 +130,10 @@ class HtuneResult:
             self.params == other.params
             and round(self.score, 8) == round(other.score, 8)
             and self.metric == other.metric
-            and np.all((self.preds_test.round(8) == other.preds_test.round(8)).ravel())
-            and np.all((self.preds_train.round(8) == other.preds_train.round(8)).ravel())
+            and np.all((self.preds_test.round(8) == other.preds_test.round(8)).to_numpy())
+            and np.all(
+                (self.preds_train.round(8) == other.preds_train.round(8)).to_numpy()
+            )
             and probs_equal
         )
         return bool(ret)
