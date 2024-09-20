@@ -138,7 +138,7 @@ Include: apt
     "$PYTEST" --version
     bash test/rebuild_test_cache.sh
 
-%apphelp pytest
+%apphelp pytest-rebuild
     Rebuild test cache. Should be run prior to running the testing app
 
     USAGE:
