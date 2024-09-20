@@ -6,7 +6,7 @@ ROOT="$(dirname "$TESTS")"
 echo "$ROOT"
 cd "$ROOT" || exit 1
 
-cmd pwd
+echo "$(pwd)"
 exit 0
 
 echo "Testing inspection: should take about 2-4 minutes..."
