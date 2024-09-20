@@ -45,7 +45,7 @@ def test_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "one,two,three",  # spaces are allow but count as names, must be comma-separated
+        "one,two,three",  # spaces are allowed but count in names; commas separate
     ):
         # opts = get_options(f"--df {PATH} --categoricals one two three")
         opts = get_options()
