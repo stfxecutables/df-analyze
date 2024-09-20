@@ -1,5 +1,4 @@
-```txt
-
+```text
 usage:
 
 The df-analyze program can be used in one of two modes: CLI mode, and
@@ -514,6 +513,11 @@ optional arguments:
                         to default to a number of common locations (/Users/derekberger, the
                         current working directory /Users/derekberger/Documents/Antigonish/df-analyze, or a temporary directory).
 
+  --no-preds
+                        Do not compute univariate predictions, and thus do not filter features based
+                        on univariate predictive utility. Useful for datasets with over 1 million
+                        samples and a large (e.g. 30+) number of features, where even scikit-learn
+                        SGDClassifer and SGDRegressor are often too slow / expensive.
   --verbosity VERBOSITY
 
                         Controls amount of output to stdout and stderr. Options:
@@ -547,5 +551,4 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
         --n-feat-wrappper 10 \
         --test-val-size=0.25 \
         --outdir='./results'
-
 ```
