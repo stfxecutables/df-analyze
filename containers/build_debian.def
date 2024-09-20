@@ -131,16 +131,18 @@ Include: apt
 #                                PyTest Stuff                                 #
 ###############################################################################
 
-%apprun pytest
+%apprun pytest-rebuild
     echo -n "Using "
     "$PYTHON" --version
-    "$PYTEST" $*
+    echo -n "Using "
+    "$PYTEST" --version
+    bash test/rebuild_test_cache.sh
 
 %apphelp pytest
-    Run the container pytest binary with user-provided CLI arguments
+    Rebuild test cache. Should be run prior to running the testing app
 
     USAGE:
-        apptainer run --app pytestt debian_app.sif [args]
+        apptainer run --app pytest-rebuild debian_app.sif
 
 
 ###############################################################################
