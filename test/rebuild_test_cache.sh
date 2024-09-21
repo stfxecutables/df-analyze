@@ -5,9 +5,15 @@ TESTS=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT="$(dirname "$TESTS")"
 echo "$ROOT"
 cd "$ROOT" || exit 1
-VENV="$ROOT/.venv"
-PYTHON="$VENV/bin/python"
-PYTEST="$VENV/bin/pytest"
+
+if [[ -z "${CC_CLUSTER}" ]]; then
+    echo "On Compute Canada, will use container-defined '$PYTEST' variable"
+else
+    echo "On local machine, will use virtual environment for testing"
+    VENV="$ROOT/.venv"
+    PYTHON="$VENV/bin/python"
+    PYTEST="$VENV/bin/pytest"
+fi
 
 echo "Testing inspection: should take about 2-4 minutes..."
 "$PYTEST" test/test_inspection.py -m 'regen' -x || echo "Failed to regenerate inspections" && exit 1
