@@ -864,6 +864,12 @@ def make_parser() -> ArgumentParser:
         action="store_true",
         help=EXPLODE_HELP,
     )
+    parser.add_subparsers(
+        title="embed",
+        description="Tools for embedding image or NLP datasets into a tabular form",
+        required=False,
+        help="I am subcommand!",
+    )
     return parser
 
 

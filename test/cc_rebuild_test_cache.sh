@@ -7,7 +7,7 @@ echo "$ROOT"
 cd "$ROOT" || exit 1
 
 echo "$(pwd)"
-exit 0
+# exit 0
 
 echo "Testing inspection: should take about 2-4 minutes..."
 "$PYTEST" test/test_inspection.py -m 'regen' -x || echo "Failed to regenerate inspections" && exit 1

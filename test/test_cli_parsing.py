@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 from typing import Type, Union
 
 import pytest
+from pytest import CaptureFixture
 from cli_test_helpers import ArgvContext
 
 from df_analyze.analysis.univariate.associate import (
@@ -36,6 +37,16 @@ from df_analyze.enumerables import (
 from df_analyze.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
 
 PATH = list(TEST_DATASETS.values())[0].datapath
+
+
+@pytest.mark.fast
+def test_subcommand(capsys: CaptureFixture) -> None:
+    with ArgvContext(
+        "df-analyze.py",
+        "embed",
+        "--help",
+    ):
+
 
 
 @pytest.mark.fast
