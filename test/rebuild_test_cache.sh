@@ -6,8 +6,14 @@ ROOT="$(dirname "$TESTS")"
 echo "$ROOT"
 cd "$ROOT" || exit 1
 
+
 if [[ -z "${CC_CLUSTER}" ]]; then
     echo "On Compute Canada, will use container-defined '$PYTEST' variable"
+    module load apptainer
+    export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
+    export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
+    apptainer run --home "$(readlink -f .)" df_analyze.sif "$(readlink -f test/cc_rebuild_test_cache.sh)"
+    exit 0
 else
     echo "On local machine, will use virtual environment for testing"
     VENV="$ROOT/.venv"
