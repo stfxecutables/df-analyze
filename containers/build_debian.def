@@ -128,6 +128,25 @@ Include: apt
 
 
 ###############################################################################
+#                              App: Shell Script                              #
+###############################################################################
+
+%apprun bash
+    source "$ACTIVATE"
+    echo -n "Using "
+    python --version
+    echo -n "Using "
+    pytest --version
+    /bin/bash $*
+
+%apphelp bash
+    Run shell script (/bin/bash $*) with container Python virtual env activated
+
+    USAGE:
+        apptainer run --app bash debian_app.sif [full path to shell script]
+
+
+###############################################################################
 #                                PyTest Stuff                                 #
 ###############################################################################
 
