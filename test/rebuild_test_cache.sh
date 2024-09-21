@@ -12,7 +12,8 @@ if [[ -z "${CC_CLUSTER}" ]]; then
     VENV="$ROOT/.venv"
     PYTEST="$VENV/bin/pytest"
 else
-    echo "On Compute Canada, will use container-defined '$PYTEST' variable"
+    # shellcheck disable=SC2016
+    echo 'On Compute Canada, will use container-defined $PYTEST variable'
     module load apptainer
     export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
     export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
