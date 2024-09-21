@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import logging
+import os
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -102,6 +103,7 @@ def check_optuna_tune_metric(
     mode: Literal["classify", "regress"],
     metric: Union[ClassifierScorer, RegressorScorer],
 ) -> tuple[float, ndarray | None]:
+    ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     X_tr, X_test, y_tr, y_test = fake_data(mode)
     # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
     model = deepcopy(model)
@@ -109,7 +111,23 @@ def check_optuna_tune_metric(
         X_train=X_tr,
         y_train=y_tr,
         metric=metric,  # type: ignore
-        n_trials=8,
+        # shitty Optuna implementation seems to dispatch as many jobs as cores,
+        # even if you specify less trials, and but then also have some kind of
+        # improper process.join() or other race condition so that it doesn't
+        # properly wait for things to finish, resulting in an error like below:
+        #
+        # def get_best_trial(self, study_id: int) -> FrozenTrial:
+        #     with self._lock:
+        #         self._check_study_id(study_id)
+        #
+        #         best_trial_id = self._studies[study_id].best_trial_id
+        #
+        #         if best_trial_id is None:
+        # >               raise ValueError("No trials are completed yet.")
+        # E               ValueError: No trials are completed yet.
+        # n_trials=40 if ON_CLUSTER else 8,
+        n_trials=4,
+        n_jobs=2,
     )
 
     overrides = study.best_params
