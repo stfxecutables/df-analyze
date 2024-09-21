@@ -1,6 +1,7 @@
 #!/bin/bash
 
 ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 cd "$ROOT" || exit 1
 echo "Running script from: $ROOT"
 
@@ -11,6 +12,6 @@ export PATH="$PATH:$DF_ANALYZE_SRC"
 export APPTAINERENV_PATH="$PATH:$APPTAINERENV_PATH"
 
 # silence matlplotlib warning on readonly filesystems
-export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
+export APPTAINERENV_MPLCONFIGDIR="$ROOT"/.mplconfig
 export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
 apptainer run --home $(readlink -f .) --app python df_analyze.sif $@
