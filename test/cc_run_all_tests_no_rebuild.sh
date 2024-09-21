@@ -1,25 +1,9 @@
 #!/bin/bash
 
-# Only intended for use on MacOS and/or Linux local install
 TESTS=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT="$(dirname "$TESTS")"
 echo "$ROOT"
 cd "$ROOT" || exit 1
-
-if [[ -z "${CC_CLUSTER}" ]]; then
-    echo "On local machine, will use virtual environment for testing"
-    VENV="$ROOT/.venv"
-    PYTEST="$VENV/bin/pytest"
-else
-    # shellcheck disable=SC2016
-    echo 'On Compute Canada, will use container-defined $PYTEST variable'
-    module load apptainer
-    export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
-    export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
-    apptainer run --home "$(readlink -f .)" df_analyze.sif "$(readlink -f test/cc_run_all_tests_no_rebuild.sh)"
-    exit 0
-fi
-
 
 "$PYTEST" \
     -m 'not regen' -m 'cached' -x \
