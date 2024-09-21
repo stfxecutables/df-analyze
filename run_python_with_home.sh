@@ -1,7 +1,6 @@
 #!/bin/bash
 
-PROJECT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-ROOT="$(dirname "$PROJECT")"
+ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$ROOT" || exit 1
 echo "Running script from: $ROOT"
 
