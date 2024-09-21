@@ -8,18 +8,18 @@ cd "$ROOT" || exit 1
 
 
 if [[ -z "${CC_CLUSTER}" ]]; then
+    echo "On local machine, will use virtual environment for testing"
+    VENV="$ROOT/.venv"
+    PYTEST="$VENV/bin/pytest"
+else
     echo "On Compute Canada, will use container-defined '$PYTEST' variable"
     module load apptainer
     export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
     export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
     apptainer run --home "$(readlink -f .)" df_analyze.sif "$(readlink -f test/cc_rebuild_test_cache.sh)"
     exit 0
-else
-    echo "On local machine, will use virtual environment for testing"
-    VENV="$ROOT/.venv"
-    PYTHON="$VENV/bin/python"
-    PYTEST="$VENV/bin/pytest"
 fi
+
 
 echo "Testing inspection: should take about 2-4 minutes..."
 "$PYTEST" test/test_inspection.py -m 'regen' -x || echo "Failed to regenerate inspections" && exit 1
