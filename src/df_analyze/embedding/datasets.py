@@ -70,6 +70,8 @@ from df_analyze.embedding.dataset_files import (
     VISION_CLS,
     VISION_REG,
 )
+from df_analyze.embedding.loading import load_json_lines, _load_datafile
+from df_analyze.embedding.utils import batched
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
 INTFLOAT_MULTILINGUAL_TOKENIZER = (
@@ -85,65 +87,6 @@ MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
 NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
-
-
-def batched(iterable, n):
-    # https://docs.python.org/3/library/itertools.html#itertools.batched
-    # batched('ABCDEFG', 3) → ABC DEF G
-    if n < 1:
-        raise ValueError("n must be at least one")
-    iterator = iter(iterable)
-    while batch := list(tuple(islice(iterator, n))):
-        yield batch
-
-
-def load_json_lines(path: Path) -> DataFrame:
-    text = path.read_text()
-    lines = [(s.strip() + "}").replace("}}", "}") for s in text.split("}\n")]
-    objs = []
-    for i, line in enumerate(lines):
-        if len(line) <= 1:  # handles last line, blanks
-            continue
-        try:
-            obj = json.loads(line)
-            objs.append(obj)
-        except json.decoder.JSONDecodeError as e:
-            ix_prv = max(0, i - 1)
-            ix_nxt = min(i + 1, len(lines) - 1)
-            ix_cur = i
-            prv = lines[ix_prv]
-            nxt = lines[ix_nxt]
-            raise ValueError(
-                f"Got error parsing line {i}: `{line}` of file: {path}.\n"
-                f"[{ix_prv:d}] Previous line: {prv}\n"
-                f"[{ix_cur:d}] Current line:  {line}\n"
-                f"[{ix_nxt:d}] Next line:     {nxt}\n"
-            ) from e
-    df = DataFrame(objs).infer_objects().convert_dtypes()
-    return df
-
-
-def _load_datafile(path: Path | None) -> DataFrame | None:
-    if path is None:
-        return None
-
-    if path.suffix == ".parquet":
-        return pd.read_parquet(path)
-    if path.suffix == ".csv":
-        return pd.read_csv(path)
-
-    if path.suffix == ".jsonl":  # json-list, it seems, each line is an object
-        return load_json_lines(path)
-
-    try:
-        if path.suffix == ".json":
-            text = path.read_text()
-            info = json.loads(text)
-            return DataFrame(info)
-    except json.decoder.JSONDecodeError as e:
-        return load_json_lines(path)
-
-    raise ValueError(f"Unrecognized filetype: `{path.suffix}` from data file: {path}")
 
 
 class VisionDataset:
@@ -586,6 +529,11 @@ def load_siglip_offline() -> tuple[SiglipModel, SiglipProcessor]:
     return model, tokenizer
 
 
+def download_models() -> None:
+    download_nlp_intfloat_ml_model()
+    download_siglip_model()
+
+
 def estimate_nlp_embedding_times() -> None:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     N = 256 if ON_CLUSTER else 32
@@ -721,18 +669,18 @@ def estimate_vision_embedding_times() -> None:
             )
             wide_stats = pd.concat(
                 [
-                    stats.loc["h"]
+                    stats.loc["h"]  # type: ignore
                     .to_frame()
                     .T.rename(columns=lambda col: f"{col}_h")
                     .reset_index(drop=True),
-                    stats.loc["w"]
+                    stats.loc["w"]  # type: ignore
                     .to_frame()
                     .T.rename(columns=lambda col: f"{col}_w")
                     .reset_index(drop=True),
                 ],
                 axis=1,
             )
-            wide_stats = wide_stats.loc[
+            wide_stats = wide_stats.loc[  # type: ignore
                 :,
                 [
                     "min_h",

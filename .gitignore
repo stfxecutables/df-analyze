@@ -17,6 +17,7 @@ data/testing/**/*.txt
 *runtime*txt
 
 cmc_ata
+downloaded_models
 runtimes/*.txt
 
 secrets
