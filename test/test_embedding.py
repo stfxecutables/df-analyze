@@ -60,6 +60,7 @@ from torch import Tensor
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer, AutoProcessor
 from typing_extensions import Literal
+from pytest import CaptureFixture
 
 from df_analyze.embedding.datasets import download_models
 from df_analyze.embedding.dataset_files import (
@@ -89,5 +90,6 @@ NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
 
 
-def test_download_models() -> None:
-    download_models()
+def test_download_models(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        download_models()
