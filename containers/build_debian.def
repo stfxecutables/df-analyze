@@ -44,19 +44,14 @@ Include: apt
     echo "================================================================================="
     echo "Installing Python libraries"
     echo "================================================================================="
-    "$PYTHON" -m pip install coverage \
-	    monai \
-        featuretools \
+    "$PYTHON" -m pip install \
         joblib \
         jsonpickle \
         lightgbm \
-        lightning \
-        lightning-bolts \
         llvmlite \
         matplotlib \
         numba \
         numpy \
-        openml \
         openpyxl \
         optuna \
         pandas \
@@ -69,15 +64,13 @@ Include: apt
         scipy \
         seaborn \
         statsmodels \
-        tabulate
         tabulate \
         torch \
         torchaudio \
         torchvision \
         tqdm \
-        typing-extensions \
-        ucimlrepo \
-        typing_extensions || echo "Failed to install some python libs"
+        typing_extensions \
+        || echo "Failed to install some python libs"
 
     echo "================================================================================="
     echo "Installing some libs separately because pip is trashy"
