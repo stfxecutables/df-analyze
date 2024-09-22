@@ -62,7 +62,11 @@ from transformers import AutoModel, AutoTokenizer, AutoProcessor
 from typing_extensions import Literal
 from pytest import CaptureFixture
 
-from df_analyze.embedding.datasets import download_models
+from df_analyze.embedding.datasets import (
+    download_models,
+    cluster_nlp_sanity_check,
+    cluster_vision_sanity_check,
+)
 from df_analyze.embedding.dataset_files import (
     CLS_DATAFILES,
     NLP_CLS,
@@ -93,3 +97,13 @@ NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
 def test_download_models(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         download_models()
+
+
+def test_cluster_sanity_vision(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        cluster_vision_sanity_check(n_samples=16)
+
+
+def test_cluster_sanity_nlp(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        cluster_nlp_sanity_check(n_samples=16)

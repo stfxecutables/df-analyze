@@ -54,7 +54,7 @@ def load_json_lines(path: Path) -> DataFrame:
     return df
 
 
-def _load_datafile(path: Path | None) -> DataFrame | None:
+def _load_datafile(path: Optional[Path]) -> Optional[DataFrame]:
     if path is None:
         return None
 

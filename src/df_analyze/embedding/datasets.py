@@ -71,7 +71,7 @@ from df_analyze.embedding.dataset_files import (
     VISION_REG,
 )
 from df_analyze.embedding.loading import load_json_lines, _load_datafile
-from df_analyze.embedding.utils import batched
+from df_analyze.embedding.utils import batched, get_n_test_samples
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
 INTFLOAT_MULTILINGUAL_MODEL.mkdir(exist_ok=True, parents=True)
@@ -653,9 +653,9 @@ def get_optimal_vision_batch(ds: VisionDataset) -> int:
     return runtimes[runtimes["ds"] == ds.name]["batch"].item()
 
 
-def estimate_vision_embedding_times() -> None:
+def estimate_vision_embedding_times(n_samples: Optional[int] = None) -> None:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
-    N = 256 if ON_CLUSTER else 32
+    N = get_n_test_samples(n_samples)
     BATCHES = [8, 16, 40] if ON_CLUSTER else [2, 4, 8]
     OUT = NIAGARA_VISION_RUNTIMES if ON_CLUSTER else MACOS_VISION_RUNTIMES
     # on Macbook, batch=2 seems fastest (4 very close, 1 by far too slow)
@@ -757,9 +757,12 @@ def get_reg_stratify(y: Series) -> Series:
     return strat
 
 
-def cluster_nlp_sanity_check() -> None:
+def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
-    N = 256 if ON_CLUSTER else 128
+    if n_samples is None:
+        N = 256 if ON_CLUSTER else 128
+    else:
+        N = get_n_test_samples(n_samples)
     BATCHES = [8, 16, 40] if ON_CLUSTER else [2, 4, 8]
     # on Macbook, batch=2 seems fastest (4 very close, 1 by far too slow)
     OUT = NIAGARA_NLP_RUNTIMES if ON_CLUSTER else MACOS_NLP_RUNTIMES
@@ -787,7 +790,7 @@ def cluster_nlp_sanity_check() -> None:
                     ix = strat == clust
                     df = sims.loc[ix, ix]
                     df = (
-                        df.where(np.triu(np.ones(df.shape), k=1).astype(np.bool))
+                        df.where(np.triu(np.ones(df.shape), k=1).astype(bool))
                         .stack()
                         .reset_index()
                     )
@@ -815,9 +818,12 @@ def cluster_nlp_sanity_check() -> None:
             continue
 
 
-def cluster_vision_sanity_check() -> None:
+def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
-    N = 256 if ON_CLUSTER else 16
+    if n_samples is None:
+        N = 256 if ON_CLUSTER else 16
+    else:
+        N = get_n_test_samples(n_samples)
 
     model, processor = load_siglip_offline()
     dses = VisionDataset.get_all_cls()
@@ -844,7 +850,7 @@ def cluster_vision_sanity_check() -> None:
                     ix = strat == clust
                     df = sims.loc[ix, ix]
                     df = (
-                        df.where(np.triu(np.ones(df.shape), k=1).astype(np.bool))
+                        df.where(np.triu(np.ones(df.shape), k=1).astype(bool))
                         .stack()
                         .reset_index()
                     )
