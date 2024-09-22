@@ -45,6 +45,7 @@ Include: apt
     echo "Installing Python libraries"
     echo "================================================================================="
     "$PYTHON" -m pip install \
+        cli-test-helpers \
         joblib \
         jsonpickle \
         lightgbm \
