@@ -74,14 +74,36 @@ from df_analyze.embedding.loading import load_json_lines, _load_datafile
 from df_analyze.embedding.utils import batched
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
+INTFLOAT_MULTILINGUAL_MODEL.mkdir(exist_ok=True, parents=True)
+INTFLOAT_MODEL_FILES = [
+    INTFLOAT_MULTILINGUAL_MODEL / "config.json",
+    INTFLOAT_MULTILINGUAL_MODEL / "model.safetensors",
+]
+
+
 INTFLOAT_MULTILINGUAL_TOKENIZER = (
     ROOT / "downloaded_models/intfloat_multi_large/tokenizer"
 )
-INTFLOAT_MULTILINGUAL_MODEL.mkdir(exist_ok=True, parents=True)
 INTFLOAT_MULTILINGUAL_TOKENIZER.mkdir(exist_ok=True, parents=True)
+INTFLOAT_TOKENIZER_FILES = [
+    INTFLOAT_MULTILINGUAL_TOKENIZER / "special_tokens_map.json",
+    INTFLOAT_MULTILINGUAL_TOKENIZER / "tokenizer_config.json",
+    INTFLOAT_MULTILINGUAL_TOKENIZER / "tokenizer.json",
+]
 
 SIGLIP_MODEL = ROOT / "downloaded_models/siglip_so400m_patch14_384/model"
+SIGLIP_MODEL_FILES = [
+    SIGLIP_MODEL / "config.json",
+    SIGLIP_MODEL / "model.safetensors",
+]
+
 SIGLIP_PREPROCESSOR = ROOT / "downloaded_models/siglip_so400m_patch14_384/preprocessor"
+SIGLIP_PREPROCESSOR_FILES = [
+    SIGLIP_PREPROCESSOR / "preprocessor_config.json",
+    SIGLIP_PREPROCESSOR / "special_tokens_map.json",
+    SIGLIP_PREPROCESSOR / "spiece.model",
+    SIGLIP_PREPROCESSOR / "tokenizer_config.json",
+]
 
 MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
@@ -530,8 +552,10 @@ def load_siglip_offline() -> tuple[SiglipModel, SiglipProcessor]:
 
 
 def download_models() -> None:
-    download_nlp_intfloat_ml_model()
-    download_siglip_model()
+    if not all(file.exists() for file in INTFLOAT_MODEL_FILES):
+        download_nlp_intfloat_ml_model()
+    if not all(file.exists() for file in SIGLIP_MODEL_FILES):
+        download_siglip_model()
 
 
 def estimate_nlp_embedding_times() -> None:
