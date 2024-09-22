@@ -769,6 +769,8 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
 
     model, tokenizer = load_nlp_intfloat_ml_model_offline()
     dses = NLPDataset.get_all_cls()
+    if len(dses) < 1:
+        raise FileNotFoundError("Could not find any NLP datasets.")
     results = []
 
     for ds in dses:
@@ -827,6 +829,8 @@ def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:
 
     model, processor = load_siglip_offline()
     dses = VisionDataset.get_all_cls()
+    if len(dses) < 1:
+        raise FileNotFoundError("Could not find any vision datasets.")
     results = []
 
     for ds in dses:
