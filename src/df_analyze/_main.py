@@ -1,3 +1,15 @@
+from __future__ import annotations
+
+# fmt: off
+import sys  # isort: skip
+from pathlib import Path  # isort: skip
+ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
+SRC = Path(__file__).resolve().parent.parent  # isort: skip
+sys.path.append(str(ROOT))  # isort: skip
+sys.path.append(str(SRC))  # isort: skip
+# fmt: on
+
+
 import sys
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
@@ -120,9 +132,12 @@ def main() -> None:
     prog_dirs.save_univariate_assocs(associations)
     prog_dirs.save_assoc_report(associations.to_markdown())
 
-    predictions = univariate_predictions(prep_train, is_cls)
-    prog_dirs.save_univariate_preds(predictions)
-    prog_dirs.save_pred_report(predictions.to_markdown())
+    if options.no_preds:
+        predictions = None
+    else:
+        predictions = univariate_predictions(prep_train, is_cls)
+        prog_dirs.save_univariate_preds(predictions)
+        prog_dirs.save_pred_report(predictions.to_markdown())
 
     # select features via filter methods first
     assoc_filtered, pred_filtered = filter_select_features(

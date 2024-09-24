@@ -7,33 +7,19 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-import traceback
-from io import BytesIO
-from PIL import Image
-import torch
-from time import perf_counter
-from itertools import islice
-from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
-    XLMRobertaTokenizerFast,
-)
-from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel
-from transformers.models.siglip.modeling_siglip import SiglipModel
-from transformers.models.siglip.processing_siglip import SiglipProcessor
-from transformers.models.siglip.image_processing_siglip import SiglipImageProcessor
-from transformers.feature_extraction_utils import BatchFeature
-
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from sklearn.preprocessing import KBinsDiscretizer
 import json
 import os
 import sys
-from functools import cache
+import traceback
 from argparse import ArgumentParser, Namespace
 from copy import deepcopy
-from sklearn.model_selection import StratifiedShuffleSplit
 from dataclasses import dataclass
 from enum import Enum
+from functools import cache
+from io import BytesIO
+from itertools import islice
 from pathlib import Path
+from time import perf_counter
 from typing import (
     Any,
     Callable,
@@ -51,14 +37,27 @@ from warnings import warn
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import torch
 import torch.nn.functional as F
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy import ndarray
 from pandas import DataFrame, Series
+from PIL import Image
+from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
+from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.preprocessing import KBinsDiscretizer
 from torch import Tensor
 from tqdm import tqdm
-from transformers import AutoModel, AutoTokenizer, AutoProcessor
+from transformers import AutoModel, AutoProcessor, AutoTokenizer
+from transformers.feature_extraction_utils import BatchFeature
+from transformers.models.siglip.image_processing_siglip import SiglipImageProcessor
+from transformers.models.siglip.modeling_siglip import SiglipModel
+from transformers.models.siglip.processing_siglip import SiglipProcessor
+from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel
+from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
+    XLMRobertaTokenizerFast,
+)
 from typing_extensions import Literal
 
 from df_analyze.embedding.dataset_files import (
@@ -70,7 +69,7 @@ from df_analyze.embedding.dataset_files import (
     VISION_CLS,
     VISION_REG,
 )
-from df_analyze.embedding.loading import load_json_lines, _load_datafile
+from df_analyze.embedding.loading import _load_datafile, load_json_lines
 from df_analyze.embedding.utils import batched, get_n_test_samples
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
@@ -945,7 +944,7 @@ if __name__ == "__main__":
     # download_nlp_intfloat_ml_model()
     # sys.exit()
     # load_nlp_intfloat_ml_model_offline()
-    # estimate_embedding_times()
+    estimate_nlp_embedding_times()
     # cluster_nlp_sanity_check()
 
     # model, tokenizer = load_nlp_intfloat_ml_model_offline()
@@ -954,5 +953,5 @@ if __name__ == "__main__":
     # SUS ds is nsfw_detect
     # model, processor = load_siglip_offline()
     # dses = VisionDataset.get_all_cls()
-    estimate_vision_embedding_times()
+    # estimate_vision_embedding_times()
     # cluster_vision_sanity_check()

@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 sys.path.append(str(SRC))  # isort: skip
 # fmt: on
 
-from src.df_analyze._main import main
+from src.df_analyze.embedding.main import main
 
 if __name__ == "__main__":
     main()

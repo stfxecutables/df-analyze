@@ -40,16 +40,6 @@ PATH = list(TEST_DATASETS.values())[0].datapath
 
 
 @pytest.mark.fast
-def test_subcommand(capsys: CaptureFixture) -> None:
-    with ArgvContext(
-        "df-analyze.py",
-        "embed",
-        "--help",
-    ):
-
-
-
-@pytest.mark.fast
 def test_classifiers() -> None:
     with ArgvContext(
         "df-analyze.py",
