@@ -7,11 +7,18 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-from df_analyze.embedding.cli import make_parser
+from df_analyze.embedding.cli import EmbeddingOptions, make_parser
+from df_analyze.embedding.download import (
+    dl_models_from_opts,
+    error_if_download_needed,
+)
 
 
 def main() -> None:
     """Do embedding logic here"""
     parser = make_parser()
-    args = parser.parse_known_args()[0]
-    print(args)
+    opts = EmbeddingOptions.from_parser(parser)
+    error_if_download_needed(opts)
+    dl_models_from_opts(opts)
+
+    print(opts)

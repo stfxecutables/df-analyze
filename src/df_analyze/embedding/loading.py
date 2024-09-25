@@ -75,3 +75,5 @@ def _load_datafile(path: Optional[Path]) -> Optional[DataFrame]:
         return load_json_lines(path)
 
     raise ValueError(f"Unrecognized filetype: `{path.suffix}` from data file: {path}")
+
+def load_nlp(file: Path) ->
