@@ -26,6 +26,11 @@ from torch import Tensor
 from tqdm import tqdm
 
 from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
+from df_analyze.embedding.dataset_files import (
+    CLS_DATAFILES,
+    REG_DATAFILES,
+    VISION_CLS,
+)
 
 
 class EmbeddingDataset:
@@ -51,7 +56,7 @@ class EmbeddingDataset:
             )
         if path.suffix != ".parquet":
             raise ValueError(
-                "Data must be in .parquet format. Please refer to df-analyze documentation"
+                f"Data must be in .parquet format, but got: {path}. Please refer to df-analyze documentation"
             )
         return path
 
@@ -69,7 +74,6 @@ class EmbeddingDataset:
     @abstractproperty
     def y(self) -> Series: ...
 
-    @abstractmethod
     def load(self) -> DataFrame:
         if self._df is not None:
             return self._df
@@ -90,6 +94,12 @@ class EmbeddingDataset:
         ]
 
         cols = sorted(df.columns.tolist())
+        if len(cols) > 2:  # drop junk
+            keeps = ["image", "text", "label", "target"]
+            drops = list(set(cols).difference(keeps))
+            df.drop(columns=drops, inplace=True)
+            cols = sorted(df.columns.tolist())
+
         if cols not in VALID_COLS:
             raise ValueError(
                 "Malformed data. Data must have only two columns, i.e. be one of:"
@@ -101,9 +111,12 @@ class EmbeddingDataset:
                     "Found column 'image' in data, but not all rows are `bytes` type"
                 )
         if "text" in cols:
-            if not df["image"].apply(lambda x: isinstance(x, str)).all():
+            if not df["text"].apply(lambda x: isinstance(x, str)).all():
+                ix = df["text"].apply(lambda x: not isinstance(x, str))
+                strange = df["text"][ix]
                 raise TypeError(
-                    "Found column 'text' in data, but not all rows are `str` type"
+                    "Found column 'text' in data, but not all rows are `str` type.\n"
+                    f"Non-string values:\n{strange}"
                 )
         if "label" in cols:
             try:
@@ -111,9 +124,9 @@ class EmbeddingDataset:
             except Exception as e:
                 raise TypeError(
                     "Found column 'label' in data, but encountered error (above) "
-                    "when attempting to coerce to np.int64."
+                    f"when attempting to coerce to np.int64. Series:\n{df['label']}"
                 ) from e
-            if not (labels == df["label"]).all():
+            if not (labels.apply(str) == df["label"].apply(str)).all():
                 raise TypeError(
                     "Found column 'label' in data, but labels change values after "
                     "coercion to np.int64. This likely means labels are stored in "
@@ -242,64 +255,15 @@ class NLPDataset(EmbeddingDataset):
         df = self.load_raw()
         return df[self.targets[0]]
 
-    def load_raw(self, ignore_decompression_warning: bool = True) -> DataFrame:
-        # https://github.com/python-pillow/Pillow/issues/4987#issuecomment-710994934
-        #
-        # "
-        # To protect against potential DOS attacks caused by “decompression
-        # bombs” (i.e. malicious files which decompress into a huge amount of
-        # data and are designed to crash or cause disruption by using up a lot of
-        # memory), Pillow will issue a DecompressionBombWarning if the number of
-        # pixels in an image is over a certain limit, PIL.Image.MAX_IMAGE_PIXELS.
-        #
-        # This threshold can be changed by setting PIL.Image.MAX_IMAGE_PIXELS. It
-        # can be disabled by setting Image.MAX_IMAGE_PIXELS = None.
-        #
-        # If desired, the warning can be turned into an error with
-        # warnings.simplefilter('error', Image.DecompressionBombWarning) or
-        # suppressed entirely with warnings.simplefilter('ignore',
-        # Image.DecompressionBombWarning). See also the logging documentation to
-        # have warnings output to the logging facility instead of stderr.
-        #
-        # If the number of pixels is greater than twice
-        # PIL.Image.MAX_IMAGE_PIXELS, then a DecompressionBombError will be
-        # raised instead. So:
-        #
-        #   from PIL import Image
-        #   Image.MAX_IMAGE_PIXELS = None   # disables the warning
-        #   Image.open(...)   # whatever operation you now run should work
-        # "
-        if ignore_decompression_warning:
-            Image.MAX_IMAGE_PIXELS = None  # disables the warning
+    # def load(self) -> DataFrame:
+    #     raw = self.load_raw()
+    #     if len(self.targets) == 1:
+    #         targetcol = self.targets[0]
+    #     else:  # for now, just use first target
+    #         targetcol = self.targets[0]
 
-        if self._df is not None:
-            return self._df
-
-        if self.datafiles["all"] is not None:  # just load this file instead
-            df = _load_datafile(self.datafiles["all"])
-            if df is None:
-                raise ValueError("Impossible!")
-            self._df = df
-            return df
-
-        # If a simple "all" file is not provided, vertically concat all others
-        datafiles = deepcopy(self.datafiles)
-        datafiles.pop("all")
-        dfs = [_load_datafile(file) for file in datafiles.values()]
-        # TODO: check for duplicates
-        df = pd.concat(dfs, axis=0, ignore_index=True)
-        self._df = df
-        return df
-
-    def load(self) -> DataFrame:
-        raw = self.load_raw()
-        if len(self.targets) == 1:
-            targetcol = self.targets[0]
-        else:  # for now, just use first target
-            targetcol = self.targets[0]
-
-        textcol = self.textcol
-        return raw.loc[:, [textcol, targetcol]].copy()
+    #     textcol = self.textcol
+    #     return raw.loc[:, [textcol, targetcol]].copy()
 
 
 def dataset_from_opts(opts: EmbeddingOptions) -> Union[VisionDataset, NLPDataset]:

@@ -14,6 +14,8 @@ from pytest import CaptureFixture
 
 from src.df_analyze.embedding.download import download_models
 from src.df_analyze.embedding.testing import (
+    NLPTestingDataset,
+    VisionTestingDataset,
     cluster_nlp_sanity_check,
     cluster_vision_sanity_check,
     vision_padding_check,
@@ -33,6 +35,18 @@ MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
 NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
+
+
+def test_main_ds_nlp_loading(capsys: CaptureFixture) -> None:
+    test_dses = NLPTestingDataset.get_all()
+    dses = [ds.to_embedding_dataset() for ds in test_dses]
+    for ds in dses:
+        if ds.name == "go_emotions":
+            continue  # multilabel
+        try:
+            ds.load()
+        except Exception as e:
+            raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
 
 
 def test_download_models(capsys: CaptureFixture) -> None:

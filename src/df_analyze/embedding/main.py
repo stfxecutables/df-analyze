@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 from df_analyze.embedding.cli import EmbeddingOptions, make_parser
+from df_analyze.embedding.datasets import EmbeddingDataset
 from df_analyze.embedding.download import (
     dl_models_from_opts,
     error_if_download_needed,
@@ -20,5 +21,6 @@ def main() -> None:
     opts = EmbeddingOptions.from_parser(parser)
     error_if_download_needed(opts)
     dl_models_from_opts(opts)
+    ds
 
     print(opts)

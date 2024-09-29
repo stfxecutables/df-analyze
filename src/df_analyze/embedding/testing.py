@@ -4,7 +4,9 @@ from __future__ import annotations
 import sys  # isort: skip
 from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
+ROOT2 = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
+sys.path.append(str(ROOT2))  # isort: skip
 # fmt: on
 
 import os
@@ -64,6 +66,13 @@ MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
 NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
+
+
+def parquet_file(path: Path) -> Path:
+    if path.suffix == ".parquet":
+        return path
+    out = Path(str(path).replace(path.suffix, ".parquet"))
+    return out
 
 
 class VisionTestingDataset:
@@ -138,6 +147,10 @@ class VisionTestingDataset:
         self._df = pd.concat([df["label"], im], axis=1) if "label" in df.columns else im
         return self._df
 
+    def to_embedding_dataset(self) -> VisionDataset:
+        pq = self.root / "all.parquet"
+        return VisionDataset(datapath=pq, name=self.name)
+
     @classmethod
     def get_all_cls(cls) -> list[VisionTestingDataset]:
         datas = []
@@ -193,43 +206,35 @@ class NLPTestingDataset:
         df = self.load_raw()
         return df[self.targets[0]]
 
-    def load_raw(self, ignore_decompression_warning: bool = True) -> DataFrame:
-        # https://github.com/python-pillow/Pillow/issues/4987#issuecomment-710994934
-        #
-        # "
-        # To protect against potential DOS attacks caused by “decompression
-        # bombs” (i.e. malicious files which decompress into a huge amount of
-        # data and are designed to crash or cause disruption by using up a lot of
-        # memory), Pillow will issue a DecompressionBombWarning if the number of
-        # pixels in an image is over a certain limit, PIL.Image.MAX_IMAGE_PIXELS.
-        #
-        # This threshold can be changed by setting PIL.Image.MAX_IMAGE_PIXELS. It
-        # can be disabled by setting Image.MAX_IMAGE_PIXELS = None.
-        #
-        # If desired, the warning can be turned into an error with
-        # warnings.simplefilter('error', Image.DecompressionBombWarning) or
-        # suppressed entirely with warnings.simplefilter('ignore',
-        # Image.DecompressionBombWarning). See also the logging documentation to
-        # have warnings output to the logging facility instead of stderr.
-        #
-        # If the number of pixels is greater than twice
-        # PIL.Image.MAX_IMAGE_PIXELS, then a DecompressionBombError will be
-        # raised instead. So:
-        #
-        #   from PIL import Image
-        #   Image.MAX_IMAGE_PIXELS = None   # disables the warning
-        #   Image.open(...)   # whatever operation you now run should work
-        # "
-        if ignore_decompression_warning:
-            Image.MAX_IMAGE_PIXELS = None  # disables the warning
-
+    def load_raw(self) -> DataFrame:
         if self._df is not None:
             return self._df
 
-        if self.datafiles["all"] is not None:  # just load this file instead
-            df = _load_datafile(self.datafiles["all"])  # type: ignore
+        all_out = self.datafiles["all"]
+        assert all_out is not None, f"Impossible: {self.name}"
+        assert isinstance(all_out, Path), f"Impossible: {self.name}"
+        pq = parquet_file(all_out)
+
+        if pq.exists():
+            df = _load_datafile(pq)  # type: ignore
             if df is None:
                 raise ValueError("Impossible!")
+            self.rename_cols(df)
+            self.drop_corrupt(df)
+            # df.to_parquet(pq)  # REMOVE
+            self._df = df
+            return df
+
+        # no pq, must save
+        if all_out.exists():  # just load this file instead
+            df = _load_datafile(all_out)  # type: ignore
+            if df is None:
+                raise ValueError("Impossible!")
+            self.rename_cols(df)
+            self.drop_corrupt(df)
+
+            df.to_parquet(pq)
+            print(f"Saved concatenated data to {pq}")
             self._df = df
             return df
 
@@ -239,7 +244,12 @@ class NLPTestingDataset:
         dfs = [_load_datafile(file) for file in datafiles.values()]  # type: ignore
         # TODO: check for duplicates
         df = pd.concat(dfs, axis=0, ignore_index=True)
+        self.rename_cols(df)
+        self.drop_corrupt(df)
         self._df = df
+
+        df.to_parquet(pq)
+        print(f"Saved concatenated data to {pq}")
         return df
 
     def load(self) -> DataFrame:
@@ -251,6 +261,30 @@ class NLPTestingDataset:
 
         textcol = self.textcol
         return raw.loc[:, [textcol, targetcol]].copy()
+
+    def rename_cols(self, df: DataFrame) -> None:
+        textcol = self.textcol
+        targetcol = self.targets[0]
+        target = "label" if self.is_cls else "target"
+        df.rename(columns={textcol: "text", targetcol: target}, inplace=True)
+        self.textcol = "text"
+        self.targets[0] = target
+
+    def drop_corrupt(self, df: DataFrame) -> None:
+        ix = df["text"].apply(lambda x: not isinstance(x, str))
+        ix = np.where(ix)[0]
+        if len(ix) > 10:
+            raise ValueError("WARNING!!!")
+        df.drop(index=ix, inplace=True)
+
+    def to_embedding_dataset(self) -> NLPDataset:
+        all_out = self.datafiles["all"]
+        assert all_out is not None, f"Impossible: {self.name}"
+        assert isinstance(all_out, Path), f"Impossible: {self.name}"
+        pq = parquet_file(all_out)
+        if not pq.exists():
+            self.load()  # this will generate the .parquet file
+        return NLPDataset(datapath=pq, name=self.name, is_cls=self.is_cls)
 
     @staticmethod
     def get_all_cls() -> list[NLPTestingDataset]:
@@ -785,7 +819,6 @@ def vision_padding_check() -> None:
             print(f"Got error: {e} for dataset: {ds.name}")
 
 
-
 def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     if n_samples is None:
@@ -908,10 +941,14 @@ if __name__ == "__main__":
     # test_load_all_and_preview_sizes()
     # sys.exit()
 
+    for ds in NLPTestingDataset.get_all():
+        ds.load()
+        # ds.to_embedding_dataset()
+
     # download_nlp_intfloat_ml_model()
     # sys.exit()
     # load_nlp_intfloat_ml_model_offline()
-    estimate_nlp_embedding_times()
+    # estimate_nlp_embedding_times()
     # cluster_nlp_sanity_check()
 
     # model, tokenizer = load_nlp_intfloat_ml_model_offline()
