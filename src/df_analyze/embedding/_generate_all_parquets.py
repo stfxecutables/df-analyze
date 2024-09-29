@@ -9,7 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # sys.path.append(str(ROOT2))  # isort: skip
 # fmt: on
 
-from df_analyze.embedding.testing import NLPTestingDataset
+from src.df_analyze.embedding.testing import NLPTestingDataset
 
 if __name__ == "__main__":
     for ds in NLPTestingDataset.get_all():
