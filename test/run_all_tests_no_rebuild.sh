@@ -10,6 +10,7 @@ if [[ -z "${CC_CLUSTER}" ]]; then
     echo "On local machine, will use virtual environment for testing"
     VENV="$ROOT/.venv"
     PYTEST="$VENV/bin/pytest"
+    PYTHON="$VENV/bin/python"
 else
     # shellcheck disable=SC2016
     echo 'On Compute Canada, will use container-defined $PYTEST variable'
@@ -65,6 +66,14 @@ echo "Testing selection. This is very slow, and if the first 5-10 pass, the rest
 echo "likely will, so feel free to Ctrl+C or Ctrl+Z at this point..."
 echo "================================================================================="
 "$PYTEST" test/test_selection.py -m 'fast' -x
+
+echo "================================================================================="
+echo "Testing embeddding functionality."
+echo "================================================================================="
+"$PYTHON" df-embed.py --modality nlp --download
+"$PYTHON" df-embed.py --modality vision --download
+"$PYTEST" test/test_embedding.py -m 'not slow' -x
+
 
 # # Done
 # test_inspection.py
