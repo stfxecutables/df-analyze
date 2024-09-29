@@ -3,22 +3,9 @@
 TESTS=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT="$(dirname "$TESTS")"
 TEST_DATA="$ROOT/data/testing/embedding"
+# PYTHON="$ROOT/.venv/bin/python"  # container defines this
 TEMPTEST="$ROOT/bash_manual_test_temp"
 rm -rf "$TEMPTEST"
-
-if [[ -z "${CC_CLUSTER}" ]]; then
-    echo "On local machine, will use virtual environment for testing"
-    PYTHON="$ROOT/.venv/bin/python"
-else
-    # shellcheck disable=SC2016
-    echo 'On Compute Canada, will use container-defined $PYTHON variable'
-    module load apptainer
-    export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
-    export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
-    apptainer run --home "$(readlink -f .)" df_analyze.sif "$(readlink -f test/cc_bash_test_embedding.sh)"
-    exit 0
-fi
-
 
 declare -a NLP_DATASETS=(
   "$TEST_DATA/NLP/classification/ag_news/all.parquet"
