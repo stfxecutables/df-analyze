@@ -49,6 +49,8 @@ calibration.py
 clean_logfiles.py
 gen_student_scripts.py
 generate_jobscripts.py
+run_slow.py
+run.py
 traffic.py
 
 
