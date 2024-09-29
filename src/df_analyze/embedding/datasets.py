@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 import traceback
@@ -5,6 +7,7 @@ from abc import abstractmethod, abstractproperty
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
+from tempfile import TemporaryDirectory, TemporaryFile
 from time import perf_counter
 from typing import (
     Optional,
@@ -17,7 +20,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from pandas import DataFrame, Series
+from pandas import DataFrame, Index, RangeIndex, Series
 from PIL import Image
 from PIL.Image import Image as ImageObject
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
@@ -235,6 +238,41 @@ class VisionDataset(EmbeddingDataset):
     ) -> None:
         super().__init__(datapath=datapath, name=name)
         self.images_converted: bool = False
+
+    @staticmethod
+    def random(tempdir: str, load_limit: Optional[int] = None) -> VisionDataset:
+        """
+        Notes
+        -----
+        We must pass in an existing `tempdir` since otherwise it would be destroyed
+        if created within this function, and then subsequent EmbeddingOptions
+        validation would fail.
+        """
+        N = np.random.randint(20, 500)
+        all_bytes = DataFrame(index=RangeIndex(N), columns=["image"])
+        for i in range(N):
+            W = np.random.randint(32, 1024)
+            H = np.random.randint(32, 1024)
+            sigma = np.random.uniform(0.1, 10)
+            img = Image.effect_noise(size=(W, H), sigma=sigma).convert("RGB")
+            buf = BytesIO()
+            img.save(buf, format="JPEG")
+            byts = buf.getvalue()
+            all_bytes.loc[i] = byts
+        labels = Series(
+            data=np.random.randint(0, 2, N), name="label", index=all_bytes.index
+        )
+        try:
+            file = Path(tempdir) / "data.parquet"
+            df = pd.concat([all_bytes, labels], axis=1)
+            df.to_parquet(file)
+            randname = f"random__{np.random.randint(0, 999, 1).item():03d}"
+            ds = VisionDataset(datapath=file, name=randname)
+            # must call before tempdir is destroyed
+            ds.load(limit=load_limit)
+        except Exception as e:
+            raise RuntimeError("Problem during creation of temporary datafile") from e
+        return ds
 
     def load(self, limit: Optional[int] = None) -> DataFrame:
         if self.images_converted and (self._df is not None):

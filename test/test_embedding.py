@@ -23,6 +23,8 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
 
 from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
 from df_analyze.embedding.datasets import (
+    NLPDataset,
+    VisionDataset,
     dataset_from_opts,
 )
 from df_analyze.embedding.download import (
@@ -58,6 +60,13 @@ MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
 NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
+
+
+def test_vision_random(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        for _ in tqdm(range(10), desc="Creating random Vision data"):
+            with TemporaryDirectory() as tempdir:
+                VisionDataset.random(tempdir=tempdir)
 
 
 @pytest.mark.fast
@@ -130,15 +139,15 @@ def test_vision_embed(capsys: CaptureFixture) -> None:
 
 def test_main_vision(capsys: CaptureFixture) -> None:
     with capsys.disabled():
-        for ds in tqdm(
-            VisionTestingDataset.get_all_cls(), desc="Processing vision datasets"
-        ):
-            if ds.name == "Anime-dataset":  # working...
-                continue
-            if ds.name == "rare-species":
-                continue  # string labels
-            ds = ds.to_embedding_dataset()
-            with TemporaryDirectory() as tempdir:
+        dses = VisionTestingDataset.get_all_cls()
+        dses = [ds.to_embedding_dataset() for ds in dses]
+        with TemporaryDirectory() as tempdir:
+            dses = dses + [VisionDataset.random(tempdir=tempdir) for _ in range(10)]
+            for ds in tqdm(dses, desc="Processing vision datasets"):
+                if ds.name == "Anime-dataset":  # working...
+                    continue
+                if ds.name == "rare-species":
+                    continue  # string labels
                 out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
                 opts = EmbeddingOptions(
                     datapath=ds.datapath,
@@ -163,7 +172,7 @@ def test_main_vision(capsys: CaptureFixture) -> None:
 
                 # print(df)
                 # print(opts)
-                df.to_parquet(opts.outpath)
+                # df.to_parquet(opts.outpath)
                 # print(f"Saved embeddings to {opts.outpath}")
 
 
