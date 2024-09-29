@@ -12,7 +12,6 @@ sys.path.append(str(SRC))  # isort: skip
 
 import sys
 import traceback
-from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 from pathlib import Path
 from pprint import pprint

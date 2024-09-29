@@ -7,32 +7,13 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-import os
 import sys
-import traceback
-from copy import deepcopy
-from io import BytesIO
 from pathlib import Path
-from time import perf_counter
 from typing import (
-    Optional,
     cast,
 )
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import torch
-import torch.nn.functional as F
-from pandas import DataFrame, Series
-from PIL import Image
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer
-from torch import Tensor
-from tqdm import tqdm
 from transformers import AutoModel, AutoProcessor, AutoTokenizer
-from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.siglip.modeling_siglip import SiglipModel
 from transformers.models.siglip.processing_siglip import SiglipProcessor
 from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel

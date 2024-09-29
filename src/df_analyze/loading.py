@@ -8,7 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 from io import StringIO
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 from openpyxl import load_workbook

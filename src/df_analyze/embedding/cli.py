@@ -10,7 +10,6 @@ sys.path.append(str(ROOT))  # isort: skip
 from argparse import ArgumentParser, RawTextHelpFormatter
 from enum import Enum
 from pathlib import Path
-from pprint import pformat
 from typing import TYPE_CHECKING, Optional, Type, Union
 
 from df_analyze.cli.parsing import (
@@ -237,7 +236,6 @@ class EmbeddingOptions(Debug):
         cls: Type[EmbeddingOptions], parser: ArgumentParser
     ) -> EmbeddingOptions:
         args = parser.parse_known_args()[0]
-        any_download = args.download or args.force_download
         return cls(
             datapath=args.data,
             modality=args.modality,

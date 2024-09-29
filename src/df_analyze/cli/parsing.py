@@ -124,20 +124,8 @@ def separator(s: str) -> str:
 def column_parser(s: str) -> list[str]:
     s = re.sub(r" +", " ", s)
     s = re.sub(r",+", ",", s)
-    columns = []
-    quoted_cols = []
     cols = [w for w in s.split(",") if len(w) > 0]
     return cols
-
-    if len(cols) <= 1:
-        return [s]
-    for start, end in zip(starts, ends):
-        columns.append(s[start + 1 : end])
-        quoted_cols.append(s[start : end + 1])
-    for col in quoted_cols:
-        s = s.replace(col, "")
-    columns.extend(s.split())
-    return columns
 
 
 class EnumParser(Action):

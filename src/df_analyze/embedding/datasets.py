@@ -1,40 +1,22 @@
 from __future__ import annotations
 
 import os
-import sys
-import traceback
-from abc import abstractmethod, abstractproperty
-from copy import deepcopy
+from abc import abstractmethod
 from io import BytesIO
 from pathlib import Path
-from tempfile import TemporaryDirectory, TemporaryFile
-from time import perf_counter
 from typing import (
     Optional,
     Union,
-    cast,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
-import torch.nn.functional as F
-from pandas import DataFrame, Index, RangeIndex, Series
+from pandas import DataFrame, RangeIndex, Series
 from PIL import Image
 from PIL.Image import Image as ImageObject
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer
-from torch import Tensor
 from tqdm import tqdm
 
 from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
-from df_analyze.embedding.dataset_files import (
-    CLS_DATAFILES,
-    REG_DATAFILES,
-    VISION_CLS,
-)
 
 
 class EmbeddingDataset:

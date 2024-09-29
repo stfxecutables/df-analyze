@@ -7,11 +7,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions, make_parser
+from df_analyze.embedding.cli import EmbeddingOptions, make_parser
 from df_analyze.embedding.datasets import (
-    EmbeddingDataset,
-    NLPDataset,
-    VisionDataset,
     dataset_from_opts,
 )
 from df_analyze.embedding.download import (

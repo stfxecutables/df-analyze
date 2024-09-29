@@ -9,7 +9,6 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pickle
-import traceback
 from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
@@ -34,7 +33,6 @@ from df_analyze.preprocessing.cleaning import (
 )
 from df_analyze.preprocessing.inspection.inspection import (
     InspectionResults,
-    InspectionInfo,
     inspect_data,
 )
 from df_analyze.preprocessing.prepare import PreparedData, prepare_data

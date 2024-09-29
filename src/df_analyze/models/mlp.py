@@ -36,8 +36,6 @@ from numpy import ndarray
 from optuna import Study, Trial
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
-from sklearn.metrics import accuracy_score as acc
-from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
 
 from skorch import NeuralNetClassifier, NeuralNetRegressor

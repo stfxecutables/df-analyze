@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 from dataclasses import dataclass
 from math import ceil
 from time import perf_counter
-from typing import Literal, Type, Union
 
 import numpy as np
 from df_analyze._constants import DEFAULT_N_STEPWISE_SELECT
@@ -20,9 +19,6 @@ from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from df_analyze.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from df_analyze.preprocessing.prepare import PreparedData
-from joblib import Parallel, delayed
-from numpy import ndarray
-from numpy.typing import NDArray
 from pandas import DataFrame, Series
 from tqdm import tqdm
 

@@ -34,8 +34,6 @@ import optuna
 import pandas as pd
 from df_analyze._constants import SEED
 from df_analyze.enumerables import (
-    ClassifierScorer,
-    RegressorScorer,
     Scorer,
     WrapperSelection,
 )

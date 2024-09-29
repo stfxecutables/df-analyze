@@ -1,33 +1,12 @@
 import json
-import os
-import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
     Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
 )
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
-from pandas import DataFrame, Series
-from typing_extensions import Literal
+from pandas import DataFrame
 
-from df_analyze.embedding.datasets import NLPDataset, VisionDataset
 
 
 def load_json_lines(path: Path) -> DataFrame:
@@ -73,7 +52,7 @@ def _load_datafile(path: Optional[Path]) -> Optional[DataFrame]:
             text = path.read_text()
             info = json.loads(text)
             return DataFrame(info)
-    except json.decoder.JSONDecodeError as e:
+    except json.decoder.JSONDecodeError:
         return load_json_lines(path)
 
     raise ValueError(f"Unrecognized filetype: `{path.suffix}` from data file: {path}")

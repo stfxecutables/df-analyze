@@ -25,15 +25,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn.functional as F
 from pandas import DataFrame, Series
 from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer
 from torch import Tensor
 from tqdm import tqdm
-from transformers import AutoModel, AutoProcessor, AutoTokenizer
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.models.siglip.modeling_siglip import SiglipModel
 from transformers.models.siglip.processing_siglip import SiglipProcessor
@@ -49,13 +46,6 @@ from df_analyze.embedding.dataset_files import (
 )
 from df_analyze.embedding.datasets import NLPDataset, VisionDataset
 from df_analyze.embedding.download import (
-    INTFLOAT_MODEL_FILES,
-    INTFLOAT_MULTILINGUAL_MODEL,
-    INTFLOAT_MULTILINGUAL_TOKENIZER,
-    SIGLIP_MODEL,
-    SIGLIP_MODEL_FILES,
-    SIGLIP_PREPROCESSOR,
-    SIGLIP_PREPROCESSOR_FILES,
     load_nlp_intfloat_ml_model_offline,
     load_siglip_offline,
 )
@@ -455,7 +445,7 @@ def check_ds_vision_padding(
     strat = y if ds.is_cls else get_reg_stratify(y)
     ss = StratifiedShuffleSplit(n_splits=1, train_size=max_imgs)
     ix_train = next(ss.split(y, strat))[0]  # type: ignore
-    X_tr, y_tr = X.iloc[ix_train], y.iloc[ix_train]
+    X_tr = X.iloc[ix_train]
     strat = strat.iloc[ix_train]
     all_imgs = X_tr.tolist()
 
@@ -740,9 +730,9 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
         N = 256 if ON_CLUSTER else 128
     else:
         N = get_n_test_samples(n_samples)
-    BATCHES = [8, 16, 40] if ON_CLUSTER else [2, 4, 8]
+    # BATCHES = [8, 16, 40] if ON_CLUSTER else [2, 4, 8]
     # on Macbook, batch=2 seems fastest (4 very close, 1 by far too slow)
-    OUT = NIAGARA_NLP_RUNTIMES if ON_CLUSTER else MACOS_NLP_RUNTIMES
+    # OUT = NIAGARA_NLP_RUNTIMES if ON_CLUSTER else MACOS_NLP_RUNTIMES
 
     model, tokenizer = load_nlp_intfloat_ml_model_offline()
     dses = NLPTestingDataset.get_all_cls()

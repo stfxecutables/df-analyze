@@ -6,57 +6,21 @@ from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
-import os
-import re
 import sys
-import traceback
 import warnings
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
-from pprint import pprint
-from random import choice, randint
 from typing import (
     TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Literal,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
     cast,
-    no_type_check,
 )
-from warnings import warn
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import optuna
-import pandas as pd
-from df_analyze._constants import SEED, VAL_SIZE
-from df_analyze._types import Classifier, CVMethod, EstimationMode, Estimator
-from df_analyze.cli.cli import ProgramOptions
-from df_analyze.legacy.src.objectives import (
-    bagging_classifier_objective,
-    dtree_classifier_objective,
-    mlp_classifier_objective,
-    rf_classifier_objective,
-    svm_classifier_objective,
-)
-from df_analyze.models.dummy import DummyClassifier, DummyRegressor
-from df_analyze.testing.datasets import TestDataset, fake_data
-from lightgbm import LGBMClassifier, early_stopping, log_evaluation
+from lightgbm import LGBMClassifier
 from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from numpy import ndarray
-from pandas import DataFrame, Index, Series
+from pandas import DataFrame, Series
 from scipy.stats import linregress
 from scipy.stats._stats_mstats_common import LinregressResult
 from sklearn.calibration import CalibrationDisplay
@@ -65,33 +29,14 @@ from sklearn.linear_model import LogisticRegressionCV
 from sklearn.metrics import (
     accuracy_score,
     brier_score_loss,
-    explained_variance_score,
     log_loss,
-    mean_absolute_error,
-    mean_absolute_percentage_error,
-    mean_squared_error,
-    median_absolute_error,
-    r2_score,
-    roc_auc_score,
 )
 from sklearn.model_selection import (
     train_test_split,
 )
-from typing_extensions import Literal
 
 if TYPE_CHECKING:
-    from df_analyze.models.base import DfAnalyzeModel
-import jsonpickle
-from df_analyze.enumerables import ClassifierScorer, RegressorScorer
-from df_analyze.models.mlp import MLPEstimator
-from df_analyze.preprocessing.prepare import PreparedData
-from df_analyze.scoring import (
-    sensitivity,
-    specificity,
-)
-from df_analyze.selection.embedded import EmbedSelectionModel
-from df_analyze.selection.filter import FilterSelected
-from df_analyze.selection.models import ModelSelected
+    pass
 
 
 def calibration_scores(

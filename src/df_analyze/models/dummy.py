@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # fmt: off
-from logging import ERROR
 import sys  # isort: skip
 from pathlib import Path
 from typing import Any, Mapping, Optional
