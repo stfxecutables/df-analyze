@@ -40,7 +40,7 @@ def main() -> None:
         load_limit=opts.limit_samples,
     )
 
-    print(df)
-    print(opts)
+    # print(df)
+    # print(opts)
     df.to_parquet(opts.outpath)
     print(f"Saved embeddings to {opts.outpath}")

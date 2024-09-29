@@ -23,6 +23,7 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
 
 from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
 from df_analyze.embedding.datasets import (
+    EmbeddingDataset,
     NLPDataset,
     VisionDataset,
     dataset_from_opts,
@@ -114,6 +115,35 @@ def test_nlp_embed(capsys: CaptureFixture) -> None:
             assert df.shape[1] == 1024 + 1
 
 
+def _main_loop(ds: EmbeddingDataset, tempdir: str, modality: EmbeddingModality) -> None:
+    out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
+    opts = EmbeddingOptions(
+        datapath=ds.datapath,
+        modality=EmbeddingModality(modality.value),
+        name=ds.name,
+        outpath=out,
+        limit_samples=8,
+        batch_size=2,
+    )
+    assert opts.outpath is not None
+    error_if_download_needed(opts)
+    dl_models_from_opts(opts)
+    ds = dataset_from_opts(opts)
+    model, processor = get_model(opts.modality)
+    df = get_embeddings(
+        ds=ds,  # type: ignore
+        processor=processor,  # type: ignore
+        model=model,  # type: ignore
+        batch_size=opts.batch_size,
+        load_limit=opts.limit_samples,
+    )
+
+    # print(df)
+    # print(opts)
+    # df.to_parquet(opts.outpath)
+    # print(f"Saved embeddings to {opts.outpath}")
+
+
 def test_vision_embed(capsys: CaptureFixture) -> None:
     model, processor = get_model(EmbeddingModality.Vision)
     assert isinstance(model, SiglipModel)
@@ -142,38 +172,15 @@ def test_main_vision(capsys: CaptureFixture) -> None:
         dses = VisionTestingDataset.get_all_cls()
         dses = [ds.to_embedding_dataset() for ds in dses]
         with TemporaryDirectory() as tempdir:
+            # we test some random images since we have less of these datasets
             dses = dses + [VisionDataset.random(tempdir=tempdir) for _ in range(10)]
             for ds in tqdm(dses, desc="Processing vision datasets"):
-                if ds.name == "Anime-dataset":  # working...
-                    continue
                 if ds.name == "rare-species":
                     continue  # string labels
-                out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
-                opts = EmbeddingOptions(
-                    datapath=ds.datapath,
-                    modality=EmbeddingModality.Vision,
-                    name=ds.name,
-                    outpath=out,
-                    limit_samples=8,
-                    batch_size=2,
-                )
-                assert opts.outpath is not None
-                error_if_download_needed(opts)
-                dl_models_from_opts(opts)
-                ds = dataset_from_opts(opts)
-                model, processor = get_model(opts.modality)
-                df = get_embeddings(
-                    ds=ds,  # type: ignore
-                    processor=processor,  # type: ignore
-                    model=model,  # type: ignore
-                    batch_size=opts.batch_size,
-                    load_limit=opts.limit_samples,
-                )
-
-                # print(df)
-                # print(opts)
-                # df.to_parquet(opts.outpath)
-                # print(f"Saved embeddings to {opts.outpath}")
+                try:
+                    _main_loop(ds=ds, tempdir=tempdir, modality=EmbeddingModality.Vision)
+                except Exception as e:
+                    raise RuntimeError(f"Got exception for dataset: {ds.name}") from e
 
 
 def test_main_nlp(capsys: CaptureFixture) -> None:
@@ -183,32 +190,10 @@ def test_main_nlp(capsys: CaptureFixture) -> None:
                 continue  # multilabel
             ds = ds.to_embedding_dataset()
             with TemporaryDirectory() as tempdir:
-                out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
-                opts = EmbeddingOptions(
-                    datapath=ds.datapath,
-                    modality=EmbeddingModality.NLP,
-                    name=ds.name,
-                    outpath=out,
-                    limit_samples=8,
-                    batch_size=2,
-                )
-                assert opts.outpath is not None
-                error_if_download_needed(opts)
-                dl_models_from_opts(opts)
-                ds = dataset_from_opts(opts)
-                model, processor = get_model(opts.modality)
-                df = get_embeddings(
-                    ds=ds,  # type: ignore
-                    processor=processor,  # type: ignore
-                    model=model,  # type: ignore
-                    batch_size=opts.batch_size,
-                    load_limit=opts.limit_samples,
-                )
-
-                # print(df)
-                # print(opts)
-                df.to_parquet(opts.outpath)
-                # print(f"Saved embeddings to {opts.outpath}")
+                try:
+                    _main_loop(ds=ds, tempdir=tempdir, modality=EmbeddingModality.NLP)
+                except Exception as e:
+                    raise RuntimeError(f"Got exception for dataset: {ds.name}") from e
 
 
 def test_download_models(capsys: CaptureFixture) -> None:

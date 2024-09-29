@@ -428,3 +428,9 @@ REG_DATAFILES = {
         "dropcols": ["brand", "product_name"],
     },
 }
+
+if __name__ == "__main__":
+    for name, info in CLS_DATAFILES.items():
+        print(info["all"])
+    for name, info in REG_DATAFILES.items():
+        print(info["all"])
