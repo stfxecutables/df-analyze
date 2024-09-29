@@ -184,15 +184,30 @@ class EmbeddingOptions(Debug):
     ) -> None:
         # memoization-related
         # other
-        self.datapath: Path = self.validate_datapath(datapath)
+        any_download = download or force_download
+        self.datapath: Optional[Path] = self.validate_datapath(datapath, any_download)
         self.modality = EmbeddingModality(modality)
-        self.name = name or self.datapath.stem
-        self.outpath = outpath or self.datapath.parent / "embedded.parquet"
+        if self.datapath is not None:
+            self.name = name or self.datapath.stem
+            self.outpath = outpath or self.datapath.parent / "embedded.parquet"
+        else:
+            self.name = None
+            self.outpath = None
         self.download: bool = download
         self.force_download: bool = force_download
+        self.any_download = any_download
 
     @staticmethod
-    def validate_datapath(df_path: Path) -> Path:
+    def validate_datapath(df_path: Optional[Path], any_download: bool) -> Optional[Path]:
+        if any_download:
+            return
+        if df_path is None:
+            raise ValueError(
+                "No data path (`--data`) was provided, and neither "
+                "`--download` nor `--force-download` was specified. If you are not "
+                "pre-downloading a model for later use, then you must specifify a "
+                "data path with the `--data` argument."
+            )
         datapath = resolved_path(df_path)
         if not datapath.exists():
             raise FileNotFoundError(f"The specified file {datapath} does not exist.")
@@ -225,7 +240,13 @@ class EmbeddingOptions(Debug):
         for key, value in fields.items():
             info.append(f"    '{key}': {repr(value)}")  # yes, will break on recursive
         info = "\n".join(info)
-        return f"{cls}({self.name}.{mod} @ {self.datapath.parent}\n{info}\n)"
+        if self.datapath is not None:
+            return f"{cls}({self.name}.{mod} @ {self.datapath.parent}\n{info}\n)"
+        else:
+            if self.name is not None:
+                return f"{cls}({self.name}.{mod}@DOWNLOAD-ONLY\n{info}\n)"
+            else:
+                return f"{cls}({mod}@DOWNLOAD-ONLY\n{info}\n)"
 
     __repr__ = __str__
 

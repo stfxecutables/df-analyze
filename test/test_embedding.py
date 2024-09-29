@@ -12,10 +12,10 @@ from pathlib import Path
 
 from pytest import CaptureFixture
 
-from df_analyze.embedding.testing import (
+from src.df_analyze.embedding.download import download_models
+from src.df_analyze.embedding.testing import (
     cluster_nlp_sanity_check,
     cluster_vision_sanity_check,
-    download_models,
 )
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
@@ -47,3 +47,7 @@ def test_cluster_sanity_vision(capsys: CaptureFixture) -> None:
 def test_cluster_sanity_nlp(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         cluster_nlp_sanity_check(n_samples=16)
+
+
+if __name__ == "__main__":
+    download_models(force=True)

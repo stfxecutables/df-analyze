@@ -1,6 +1,7 @@
 import os
 import sys
 import traceback
+from abc import abstractmethod, abstractproperty
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
@@ -24,34 +25,26 @@ from sklearn.preprocessing import KBinsDiscretizer
 from torch import Tensor
 from tqdm import tqdm
 
+from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
 
-class VisionDataset:
+
+class EmbeddingDataset:
     def __init__(
         self,
+        datapath: Path,
         name: Optional[str],
-        path: Path,
     ) -> None:
-        self.name = name
-        self.path = path
+        self.datapath = self.validate_datapath(datapath)
+        self.name = name or self.datapath.name
         self._df = None
 
     def __str__(self) -> str:
         cls = f"{self.__class__.__name__}"
-        return f"{cls}('{self.name}')"
+        return f"{cls}('{self.name}' @ {self.datapath})"
 
     __repr__ = __str__
 
-    @property
-    def X(self) -> Series:
-        df = self.load_raw()
-        return df["image"]
-
-    @property
-    def y(self) -> Series:
-        df = self.load_raw()
-        return df["target"]
-
-    def validate_datapath(path: Path) -> Path:
+    def validate_datapath(self, path: Path) -> Path:
         if not path.exists():
             raise FileNotFoundError(
                 f"No data found at {path} (realpath: {os.path.realpath(path)})"
@@ -63,6 +56,122 @@ class VisionDataset:
         return path
 
     def load_raw(self) -> DataFrame:
+        try:
+            return pd.read_parquet(self.datapath)
+        except Exception as e:
+            raise RuntimeError(
+                f"Could not load .parquet data at {self.datapath}. Details above."
+            ) from e
+
+    @abstractproperty
+    def X(self) -> Series: ...
+
+    @abstractproperty
+    def y(self) -> Series: ...
+
+    @abstractmethod
+    def load(self) -> DataFrame:
+        if self._df is not None:
+            return self._df
+        df = self.load_raw()
+        self.validate_cols(df)
+        df = self.validate_data(df)
+        self._df = df
+        return self._df
+
+    @abstractmethod
+    def validate_cols(self, df: DataFrame) -> DataFrame:
+        """Check that columns are correctly named and with the correct type"""
+        df = df.reset_index(drop=True)  # just in case
+        VALID_COLS = [
+            sorted(["image", "label"]),
+            sorted(["image", "target"]),
+            sorted(["text", "label"]),
+            sorted(["text", "target"]),
+        ]
+
+        cols = sorted(df.columns.tolist())
+        if cols not in VALID_COLS:
+            raise ValueError(
+                "Malformed data. Data must have only two columns, i.e. be one of:"
+                f"{VALID_COLS}. Got: {cols}"
+            )
+        if "image" in cols:
+            if not df["image"].apply(lambda x: isinstance(x, bytes)).all():
+                raise TypeError(
+                    "Found column 'image' in data, but not all rows are `bytes` type"
+                )
+        if "text" in cols:
+            if not df["image"].apply(lambda x: isinstance(x, str)).all():
+                raise TypeError(
+                    "Found column 'text' in data, but not all rows are `str` type"
+                )
+        if "label" in cols:
+            try:
+                labels = df["label"].astype(np.int64, errors="raise")
+            except Exception as e:
+                raise TypeError(
+                    "Found column 'label' in data, but encountered error (above) "
+                    "when attempting to coerce to np.int64."
+                ) from e
+            if not (labels == df["label"]).all():
+                raise TypeError(
+                    "Found column 'label' in data, but labels change values after "
+                    "coercion to np.int64. This likely means labels are stored in "
+                    "a floating point or other format. Convert them to an integer format "
+                    "to resolve this error."
+                )
+        if "target" in cols:
+            try:
+                target = df["target"].astype(float, errors="raise")
+            except Exception as e:
+                raise TypeError(
+                    "Found column 'target' in data, but encountered error (above) "
+                    "when attempting to coerce to float."
+                ) from e
+            if not (target == df["target"]).all():
+                raise TypeError(
+                    "Found column 'target' in data, but targets change values after "
+                    "coercion to float. This likely means you have either NaN values "
+                    "or other inappropriate data types (e.g. object, string) in your "
+                    "target column. Convert these values to floating point or remove "
+                    "them in order to resolve this error."
+                )
+
+    @abstractmethod
+    def validate_data(self, df: DataFrame) -> DataFrame:
+        """
+        To be performed AFTER .load(), this checks some basic sanity stuff
+        like whether all images have a reasonable shape, such as image size and
+        channels, or text length, and also number of samples.
+        """
+
+
+class VisionDataset(EmbeddingDataset):
+    def __init__(
+        self,
+        datapath: Path,
+        name: Optional[str],
+    ) -> None:
+        super().__init__(datapath=datapath, name=name)
+
+    @property
+    def X(self) -> Series:
+        df = self.load_raw()
+        return df["image"]
+
+    @property
+    def y(self) -> Series:
+        df = self.load_raw()
+        return df["target"]
+
+    def validate_data(self, df: DataFrame) -> DataFrame:
+        pass
+
+    def load(self) -> DataFrame:
+        if self._df is not None:
+            return self._df
+
         # https://github.com/python-pillow/Pillow/issues/4987#issuecomment-710994934
         #
         # "
@@ -89,48 +198,24 @@ class VisionDataset:
         #   Image.MAX_IMAGE_PIXELS = None   # disables the warning
         #   Image.open(...)   # whatever operation you now run should work
         # "
-
         Image.MAX_IMAGE_PIXELS = None  # disables the warning
 
-        if self._df is not None:
-            return self._df
-        pq = self.root / "all.parquet"
         # PyArrow engine needed to properly decode bytes column
-        df = pd.read_parquet(pq, engine="pyarrow")
+        df = pd.read_parquet(self.datapath, engine="pyarrow")
         im = df["image"].apply(lambda b: Image.open(BytesIO(b)))
-        if self.name == "Handwritten-Mathematical-Expression-Convert-LaTeX":
-            # TODO: these images have only two dimensions since BW, so expand
-            ...
+
         self._df = pd.concat([df["label"], im], axis=1) if "label" in df.columns else im
         return self._df
 
 
-class NLPDataset:
+class NLPDataset(EmbeddingDataset):
     def __init__(
         self,
-        name: str,
-        root: Path,
-        datafiles: dict[str, Union[Path, list[str], None]],
+        datapath: Path,
+        name: Optional[str],
         is_cls: bool,
     ) -> None:
-        self.name = name
-        self.root = root
-        self.is_cls = self.is_classification = is_cls
-        self.datafiles: dict[str, Union[Path, list[str], None]] = deepcopy(datafiles)
-        self.datafiles.pop("root")
-        self.labels = self.datafiles.pop("labels", None)
-        for subset, path in self.datafiles.items():  # make paths rel to root
-            if path is not None and isinstance(path, Path):
-                self.datafiles[subset] = self.root / path
-        targets = self.datafiles.pop("targetcols")
-        assert isinstance(targets, list)
-        if len(targets) < 1:
-            raise ValueError(f"Must specify targets for data: {name} at {root}")
-        self.targets: list[str] = targets
-        self.textcol = cast(str, self.datafiles.pop("textcol"))
-        self.dropcols = cast(list[str], self.datafiles.pop("dropcols"))
-        self.namecols = cast(list[str], self.datafiles.pop("labelnamecols"))
-        self._df = None
+        super().__init__(datapath=datapath, name=name)
 
     @property
     def X(self) -> Series:
@@ -200,3 +285,8 @@ class NLPDataset:
 
         textcol = self.textcol
         return raw.loc[:, [textcol, targetcol]].copy()
+
+
+def dataset_from_opts(opts: EmbeddingOptions) -> Union[VisionDataset, NLPDataset]:
+    if opts.modality is EmbeddingModality.NLP:
+        return NLPDataset(name=opts.name, datapath=opts.datapath)

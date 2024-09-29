@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from argparse import ArgumentParser, Namespace
@@ -20,12 +21,13 @@ from typing import (
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import json
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from numpy import ndarray
 from pandas import DataFrame, Series
 from typing_extensions import Literal
+
+from df_analyze.embedding.datasets import NLPDataset, VisionDataset
 
 
 def load_json_lines(path: Path) -> DataFrame:
@@ -75,5 +77,3 @@ def _load_datafile(path: Optional[Path]) -> Optional[DataFrame]:
         return load_json_lines(path)
 
     raise ValueError(f"Unrecognized filetype: `{path.suffix}` from data file: {path}")
-
-def load_nlp(file: Path) ->

@@ -378,7 +378,7 @@ def get_nlp_embeddings(
 
             outputs = model(**batch_dict)
             embeddings = avg_pool(outputs.last_hidden_state, attention_mask=mask)
-            embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
+            # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
             all_embeddings.append(embeddings)
         elapsed_s = perf_counter() - start
     samples_per_s = max_texts / elapsed_s
@@ -430,6 +430,8 @@ def get_vision_embeddings(
             processed: BatchFeature = processor(
                 text=None,  # type: ignore
                 images=img,
+                padding="longest",
+                truncation=True,
                 return_tensors="pt",  # type: ignore
             )
             outputs = model.vision_model(
