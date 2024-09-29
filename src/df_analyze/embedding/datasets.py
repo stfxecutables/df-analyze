@@ -79,7 +79,6 @@ class EmbeddingDataset:
         self._df = df
         return self._df
 
-    @abstractmethod
     def validate_cols(self, df: DataFrame) -> DataFrame:
         """Check that columns are correctly named and with the correct type"""
         df = df.reset_index(drop=True)  # just in case
@@ -137,6 +136,22 @@ class EmbeddingDataset:
                     "target column. Convert these values to floating point or remove "
                     "them in order to resolve this error."
                 )
+
+    def get_modality(self, validated: DataFrame) -> EmbeddingModality:
+        VISION_COLS = [
+            sorted(["image", "label"]),
+            sorted(["image", "target"]),
+        ]
+        NLP_COLS = [
+            sorted(["text", "label"]),
+            sorted(["text", "target"]),
+        ]
+        if sorted(validated.columns.tolist()) in VISION_COLS:
+            return EmbeddingModality.Vision
+        elif sorted(validated.columns.tolist()) in NLP_COLS:
+            return EmbeddingModality.NLP
+        else:
+            raise RuntimeError("Impossible!")
 
     @abstractmethod
     def validate_data(self, df: DataFrame) -> DataFrame:
