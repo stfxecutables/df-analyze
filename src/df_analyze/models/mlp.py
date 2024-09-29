@@ -39,6 +39,7 @@ from sklearn.datasets import make_classification
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.model_selection import KFold, StratifiedKFold
+
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
@@ -212,9 +213,9 @@ class MLPEstimator(DfAnalyzeModel):
     def __init__(self, num_classes: int, model_args: Mapping | None = None) -> None:
         super().__init__(model_args)
         self.is_classifier = num_classes > 1
-        self.model_cls = (
-            NeuralNetClassifier if self.is_classifier else NeuralNetRegressor
-        )
+        # class NeuralNetClassifier: pass
+        # class NeuralNetRegressor: pass
+        self.model_cls = NeuralNetClassifier if self.is_classifier else NeuralNetRegressor
         self.model: Union[NeuralNetClassifier, NeuralNetRegressor]
         self.fixed_args = dict(
             module=SkorchMLP,

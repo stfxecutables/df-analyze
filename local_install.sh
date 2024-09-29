@@ -61,9 +61,8 @@ echo "==========================================================================
 
 source "$ACTIVATE"
 
-"$PYTHON" -m pip install --upgrade pip setuptools wheel
-
-"$PYTHON" -m pip install \
+python -m pip install --upgrade pip setuptools wheel --no-cache-dir
+python -m pip install \
     cli-test-helpers \
     joblib \
     jsonpickle \
@@ -98,16 +97,4 @@ source "$ACTIVATE"
     sentencepiece \
     || echo "Failed to install some python libs"
 
-
-# python 3.12.5, working torch versions with HuggingFace
-# 2.4.1 FAIL
-# 2.4.0 FAIL
-# 2.3.1 FAIL
-# 2.3.0 FAIL
-# 2.2.2 WORKS
-
-# python 3.11.9, working torch versions with HuggingFace
-# 2.4.1 FAIL
-# 2.4.0 FAIL
-# 2.3.1 FAIL
-# 2.2.2 WORKS
+python -m pytest test/test_embedding.py::test_vision_padding || echo "Basic embedding test failed!"

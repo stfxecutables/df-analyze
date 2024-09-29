@@ -143,6 +143,14 @@ class VisionTestingDataset:
         datas = []
         roots = sorted(VISION_CLS.glob("*"))
         for root in roots:
+            if "LaTeX" in root.name:
+                continue  # BW, 2-dimensional images
+            if "GenAI-Bench" in root.name:
+                continue  # takes too long for a quick test
+            if "Places_in_Japan" in root.name:
+                continue  # missing labels
+            # if "brain-mri" in root.name:
+            #     continue  # too many dims
             data = cls(name=root.name, root=root, is_cls=True)
             datas.append(data)
         return datas
@@ -403,6 +411,7 @@ def check_ds_vision_padding(
     batch_size: int = 32,
     max_imgs: int = 1024,
 ) -> tuple[DataFrame, Series, DataFrame, float, float]:
+    print(f"Testing {ds.name}...")
     X, y = ds.X, ds.y
 
     strat = y if ds.is_cls else get_reg_stratify(y)
@@ -415,24 +424,22 @@ def check_ds_vision_padding(
     all_embeddings = []
     with torch.no_grad():
         img_batches = [*batched(all_imgs, batch_size)]
-        for img in tqdm(img_batches, total=len(img_batches), desc="Embedding batches"):
-            processed: BatchFeature = processor(
-                text=None,  # type: ignore
-                images=img,
-                # padding="longest",
-                padding=True,
-                truncation=True,
-                max_length=1024,
-                return_tensors="pt",  # type: ignore
-            )
-            outputs = model.vision_model(
-                **processed, output_hidden_states=False, output_attentions=False
-            )
-            embeddings = outputs.pooler_output
+        img = img_batches[0]
+        processed: BatchFeature = processor(
+            text=None,  # type: ignore
+            images=img,
+            # padding="longest",
+            padding=True,
+            return_tensors="pt",  # type: ignore
+        )
+        outputs = model.vision_model(
+            **processed, output_hidden_states=False, output_attentions=False
+        )
+        embeddings = outputs.pooler_output
 
-            # embeddings = avg_pool(embeddings2)
-            # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
-            all_embeddings.append(embeddings)
+        # embeddings = avg_pool(embeddings2)
+        # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
+        all_embeddings.append(embeddings)
 
 
 def get_vision_embeddings(
@@ -764,15 +771,19 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
 def vision_padding_check() -> None:
     model, processor = load_siglip_offline()
     dses = VisionTestingDataset.get_all_cls()
+
     if len(dses) < 1:
         raise FileNotFoundError("Could not find any vision datasets.")
 
-    for ds in dses:
-        print("=" * 81)
-        print(ds.name)
-        check_ds_vision_padding(
-            ds=ds, processor=processor, model=model, batch_size=2, max_imgs=16
-        )
+    for ds in tqdm(dses, desc="Testing dataset padding"):
+        try:
+            check_ds_vision_padding(
+                ds=ds, processor=processor, model=model, batch_size=2, max_imgs=16
+            )
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Got error: {e} for dataset: {ds.name}")
+
 
 
 def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:

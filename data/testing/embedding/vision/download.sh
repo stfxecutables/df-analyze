@@ -109,7 +109,7 @@ mkdir -p "$CLS/Places_in_Japan" || exit 1
 mkdir -p "$CLS/Anime-dataset" || exit 1
 mkdir -p "$CLS/Brain-Tumor-Classification" || exit 1
 mkdir -p "$CLS/data-food-classification" || exit 1
-mkdir -p "$CLS/Handwritten-Mathematical-Expression-Convert-LaTeX" || exit 1
+# mkdir -p "$CLS/Handwritten-Mathematical-Expression-Convert-LaTeX" || exit 1
 mkdir -p "$CLS/fast_food_image_classification" || exit 1
 mkdir -p "$CLS/garbage_detection" || exit 1
 mkdir -p "$CLS/Visual_Emotional_Analysis" || exit 1
@@ -170,8 +170,8 @@ cd "$CLS/data-food-classification" || exit 1
 wget 'https://huggingface.co/api/datasets/Kaludi/data-food-classification/parquet/default/train/0.parquet'
 wget 'https://huggingface.co/api/datasets/Kaludi/data-food-classification/parquet/default/validation/0.parquet'
 
-cd "$CLS/Handwritten-Mathematical-Expression-Convert-LaTeX" || exit 1
-wget 'https://huggingface.co/api/datasets/Azu/Handwritten-Mathematical-Expression-Convert-LaTeX/parquet/default/train/0.parquet'
+# cd "$CLS/Handwritten-Mathematical-Expression-Convert-LaTeX" || exit 1
+# wget 'https://huggingface.co/api/datasets/Azu/Handwritten-Mathematical-Expression-Convert-LaTeX/parquet/default/train/0.parquet'
 
 cd "$CLS/fast_food_image_classification" || exit 1
 wget 'https://huggingface.co/api/datasets/andrewsunanda/fast_food_image_classification/parquet/default/train/0.parquet'

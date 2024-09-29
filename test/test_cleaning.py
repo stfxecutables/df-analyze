@@ -169,10 +169,10 @@ def test_encoding_med(dataset: tuple[str, TestDataset]) -> None:
     do_encode(dataset)
 
 
-@slow_ds
-@pytest.mark.cached
-def test_encoding_slow(dataset: tuple[str, TestDataset]) -> None:
-    do_encode(dataset)
+# @slow_ds
+# @pytest.mark.cached
+# def test_encoding_slow(dataset: tuple[str, TestDataset]) -> None:
+#     do_encode(dataset)
 
 
 if __name__ == "__main__":

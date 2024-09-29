@@ -3,7 +3,6 @@ from __future__ import annotations
 # fmt: off
 # Stupid insane Python import garbage
 # https://github.com/huggingface/transformers/issues/5281#issuecomment-2365359156
-# https://github.com/huggingface/transformers/issues/5281#issuecomment-2365359156
 """
 # Segmentation fault when trying to load models #5281
 
