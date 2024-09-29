@@ -60,7 +60,7 @@ from df_analyze.embedding.download import (
     load_siglip_offline,
 )
 from df_analyze.embedding.loading import _load_datafile
-from df_analyze.embedding.utils import batched, get_n_test_samples
+from df_analyze.embedding.utils import batched, get_n_test_samples, get_reg_stratify
 
 MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
@@ -274,8 +274,12 @@ class NLPTestingDataset:
         ix = df["text"].apply(lambda x: not isinstance(x, str))
         ix = np.where(ix)[0]
         if len(ix) > 10:
-            raise ValueError("WARNING!!!")
-        df.drop(index=ix, inplace=True)
+            raise ValueError(
+                "WARNING! Appear to be dropping a very large amount of data! "
+                "Check to make sure you aren't over-writing existing data with "
+                "an empty DataFrame."
+            )
+        df.drop(index=ix, inplace=True)  # type: ignore
 
     def to_embedding_dataset(self) -> NLPDataset:
         all_out = self.datafiles["all"]
@@ -284,7 +288,7 @@ class NLPTestingDataset:
         pq = parquet_file(all_out)
         if not pq.exists():
             self.load()  # this will generate the .parquet file
-        return NLPDataset(datapath=pq, name=self.name, is_cls=self.is_cls)
+        return NLPDataset(datapath=pq, name=self.name)
 
     @staticmethod
     def get_all_cls() -> list[NLPTestingDataset]:
@@ -728,15 +732,6 @@ def estimate_vision_embedding_times(n_samples: Optional[int] = None) -> None:
         .sort_values(by="embed_speed")
     )
     print(f"Saved runtimes to {OUT}")
-
-
-def get_reg_stratify(y: Series) -> Series:
-    yy = y.to_numpy().reshape(-1, 1)
-    kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
-    strat = kb.fit_transform(yy)
-    strat = strat.ravel()
-    strat = Series(name=y.name, data=strat)
-    return strat
 
 
 def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:

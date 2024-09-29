@@ -62,28 +62,45 @@ class EmbeddingDataset:
 
     def load_raw(self) -> DataFrame:
         try:
-            return pd.read_parquet(self.datapath)
+            return pd.read_parquet(self.datapath).reset_index(drop=True)
         except Exception as e:
             raise RuntimeError(
                 f"Could not load .parquet data at {self.datapath}. Details above."
             ) from e
 
-    @abstractproperty
-    def X(self) -> Series: ...
+    @property
+    def is_cls(self) -> bool:
+        return "label" in self.load().columns.tolist()
 
-    @abstractproperty
-    def y(self) -> Series: ...
+    def X(self, limit: Optional[int] = None) -> Series:
+        df = self.load(limit=limit)
+        modality = EmbeddingDataset.get_modality(df)
+        if modality is EmbeddingModality.NLP:
+            return df["text"]
+        elif modality is EmbeddingModality.Vision:
+            return df["image"]
+        else:
+            raise NotImplementedError(f"Unknown modality: {modality}")
 
-    def load(self) -> DataFrame:
+    def y(self, limit: Optional[int] = None) -> Series:
+        df = self.load(limit=limit)
+        if self.is_cls:
+            return df["label"]
+        else:
+            return df["target"]
+
+    def load(self, limit: Optional[int] = None) -> DataFrame:
         if self._df is not None:
             return self._df
         df = self.load_raw()
+        if limit is not None:
+            df = df.iloc[:limit].copy()
         self.validate_cols(df)
-        df = self.validate_data(df)
+        self.validate_data(df)
         self._df = df
         return self._df
 
-    def validate_cols(self, df: DataFrame) -> DataFrame:
+    def validate_cols(self, df: DataFrame) -> None:
         """Check that columns are correctly named and with the correct type"""
         df = df.reset_index(drop=True)  # just in case
         VALID_COLS = [
@@ -150,7 +167,8 @@ class EmbeddingDataset:
                     "them in order to resolve this error."
                 )
 
-    def get_modality(self, validated: DataFrame) -> EmbeddingModality:
+    @staticmethod
+    def get_modality(validated: DataFrame) -> EmbeddingModality:
         VISION_COLS = [
             sorted(["image", "label"]),
             sorted(["image", "target"]),
@@ -159,20 +177,48 @@ class EmbeddingDataset:
             sorted(["text", "label"]),
             sorted(["text", "target"]),
         ]
-        if sorted(validated.columns.tolist()) in VISION_COLS:
+        valids = ["image", "text", "label", "target"]
+        cols = sorted(validated.columns.tolist())
+        cols = sorted(set(cols).intersection(valids))
+
+        if cols in VISION_COLS:
             return EmbeddingModality.Vision
-        elif sorted(validated.columns.tolist()) in NLP_COLS:
+        elif cols in NLP_COLS:
             return EmbeddingModality.NLP
         else:
-            raise RuntimeError("Impossible!")
+            raise RuntimeError(f"Impossible! Columns: {cols}")
 
     @abstractmethod
-    def validate_data(self, df: DataFrame) -> DataFrame:
+    def validate_data(self, df: DataFrame) -> None:
         """
         To be performed AFTER .load(), this checks some basic sanity stuff
         like whether all images have a reasonable shape, such as image size and
         channels, or text length, and also number of samples.
+
+        We do NOT validate e.g. the number of samples per class, this is handled
+        later by df-analyze tabular analysis functions.
         """
+        modality = EmbeddingDataset.get_modality(df)
+        if modality is EmbeddingModality.Vision:
+            pass
+            # for ix, im in enumerate(df["image"]):
+            #     if len(im.size) != 3:
+            #         plt.imshow(im)
+            #         plt.show()
+            #         raise ValueError(f"Invalid image shape: {im.size} at index {ix}")
+            #     if 3 not in im.size:
+            #         raise ValueError(
+            #             f"Possible one-channel image: {im.size} at index {ix}"
+            #         )
+        elif modality is EmbeddingModality.NLP:
+            # unclear what to do here besides running the tokenizer on all inputs
+            pass
+        else:
+            raise NotImplementedError(f"No validation logic impemented for {modality}")
+
+    @abstractmethod
+    def embed(self) -> DataFrame:
+        pass
 
 
 class VisionDataset(EmbeddingDataset):
@@ -182,22 +228,10 @@ class VisionDataset(EmbeddingDataset):
         name: Optional[str],
     ) -> None:
         super().__init__(datapath=datapath, name=name)
+        self.images_converted: bool = False
 
-    @property
-    def X(self) -> Series:
-        df = self.load_raw()
-        return df["image"]
-
-    @property
-    def y(self) -> Series:
-        df = self.load_raw()
-        return df["target"]
-
-    def validate_data(self, df: DataFrame) -> DataFrame:
-        pass
-
-    def load(self) -> DataFrame:
-        if self._df is not None:
+    def load(self, limit: Optional[int] = None) -> DataFrame:
+        if self.images_converted and (self._df is not None):
             return self._df
 
         # https://github.com/python-pillow/Pillow/issues/4987#issuecomment-710994934
@@ -228,11 +262,29 @@ class VisionDataset(EmbeddingDataset):
         # "
         Image.MAX_IMAGE_PIXELS = None  # disables the warning
 
-        # PyArrow engine needed to properly decode bytes column
-        df = pd.read_parquet(self.datapath, engine="pyarrow")
-        im = df["image"].apply(lambda b: Image.open(BytesIO(b)))
+        df = self.load_raw()
+        df.drop_duplicates(inplace=True)
+        self.validate_cols(df)
+        if limit is not None:
+            df = df.iloc[:limit].copy()
 
-        self._df = pd.concat([df["label"], im], axis=1) if "label" in df.columns else im
+        # we do this in a loop because we want to not explode
+        # memory with a new .apply column
+        for ix, byts in tqdm(
+            enumerate(df["image"]),
+            desc="Converting images to RGB",
+            total=len(df),
+            disable=len(df) < 10000,
+        ):
+            img = Image.open(BytesIO(byts)).convert("RGB")
+            del byts
+            df.loc[ix, "image"] = img
+        # im = df["image"].apply(lambda b: Image.open(BytesIO(b)).convert("RGB"))  # type: ignore
+        # df = pd.concat([im, df.drop(columns="image")], axis=1)
+        self.validate_data(df)
+
+        self._df = df
+        self.images_converted = True
         return self._df
 
 
@@ -241,29 +293,8 @@ class NLPDataset(EmbeddingDataset):
         self,
         datapath: Path,
         name: Optional[str],
-        is_cls: bool,
     ) -> None:
         super().__init__(datapath=datapath, name=name)
-
-    @property
-    def X(self) -> Series:
-        df = self.load_raw()
-        return df[self.textcol]
-
-    @property
-    def y(self) -> Series:
-        df = self.load_raw()
-        return df[self.targets[0]]
-
-    # def load(self) -> DataFrame:
-    #     raw = self.load_raw()
-    #     if len(self.targets) == 1:
-    #         targetcol = self.targets[0]
-    #     else:  # for now, just use first target
-    #         targetcol = self.targets[0]
-
-    #     textcol = self.textcol
-    #     return raw.loc[:, [textcol, targetcol]].copy()
 
 
 def dataset_from_opts(opts: EmbeddingOptions) -> Union[VisionDataset, NLPDataset]:

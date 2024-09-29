@@ -10,9 +10,23 @@ sys.path.append(str(ROOT))  # isort: skip
 import sys
 from pathlib import Path
 
+import pytest
 from pytest import CaptureFixture
+from tqdm import tqdm
+from transformers.models.siglip.modeling_siglip import SiglipModel
+from transformers.models.siglip.processing_siglip import SiglipProcessor
+from transformers.models.xlm_roberta.modeling_xlm_roberta import XLMRobertaModel
+from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
+    XLMRobertaTokenizerFast,
+)
 
+from src.df_analyze.embedding.cli import EmbeddingModality
 from src.df_analyze.embedding.download import download_models
+from src.df_analyze.embedding.embed import (
+    get_model,
+    get_nlp_embeddings,
+    get_vision_embeddings,
+)
 from src.df_analyze.embedding.testing import (
     NLPTestingDataset,
     VisionTestingDataset,
@@ -37,6 +51,7 @@ NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
 
 
+@pytest.mark.fast
 def test_main_ds_nlp_loading(capsys: CaptureFixture) -> None:
     test_dses = NLPTestingDataset.get_all()
     dses = [ds.to_embedding_dataset() for ds in test_dses]
@@ -49,21 +64,79 @@ def test_main_ds_nlp_loading(capsys: CaptureFixture) -> None:
             raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
 
 
+@pytest.mark.fast
+def test_main_ds_vision_loading(capsys: CaptureFixture) -> None:
+    test_dses = VisionTestingDataset.get_all_cls()
+    dses = [ds.to_embedding_dataset() for ds in test_dses]
+    for ds in dses:
+        try:
+            ds.load()
+        except Exception as e:
+            raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
+
+
+def test_nlp_embed(capsys: CaptureFixture) -> None:
+    model, tokenizer = get_model(EmbeddingModality.NLP)
+    assert isinstance(model, XLMRobertaModel)
+    assert isinstance(tokenizer, XLMRobertaTokenizerFast)
+    with capsys.disabled():
+        for ds in tqdm(NLPTestingDataset.get_all(), desc="Embedding NLP data..."):
+            if ds.name == "go_emotions":
+                continue  # multilabel
+            ds = ds.to_embedding_dataset()
+            df = get_nlp_embeddings(
+                ds=ds,
+                tokenizer=tokenizer,
+                model=model,
+                batch_size=2,
+                num_texts=4,
+                load_limit=1000,
+            )
+            assert len(df) == 4
+            assert df.shape[1] == 1024 + 1
+
+
+def test_vision_embed(capsys: CaptureFixture) -> None:
+    model, processor = get_model(EmbeddingModality.Vision)
+    assert isinstance(model, SiglipModel)
+    assert isinstance(processor, SiglipProcessor)
+    with capsys.disabled():
+        for ds in tqdm(VisionTestingDataset.get_all_cls(), desc="Embedding vision data"):
+            # if ds.name != "nsfw_detect":
+            #     continue
+            if ds.name == "rare-species":
+                continue  # text labels
+            ds = ds.to_embedding_dataset()
+            df = get_vision_embeddings(
+                ds=ds,
+                processor=processor,
+                model=model,
+                batch_size=2,
+                num_imgs=4,
+                load_limit=1000,
+            )
+            assert len(df) == 4
+            assert df.shape[1] == 1152 + 1
+
+
 def test_download_models(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         download_models()
 
 
+@pytest.mark.med
 def test_vision_padding(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         vision_padding_check()
 
 
+@pytest.mark.slow
 def test_cluster_sanity_vision(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         cluster_vision_sanity_check(n_samples=16)
 
 
+@pytest.mark.slow
 def test_cluster_sanity_nlp(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         cluster_nlp_sanity_check(n_samples=16)
