@@ -121,6 +121,9 @@ declare -a VISION_OUTDIRS=(
 # echo "$ROOT"
 cd "$ROOT" || exit 1
 
+echo "Ensuring NLP Dataset 'all.parquet' files exist..."
+"$PYTHON" "$ROOT/src/df_analyze/embedding/_generate_all_parquets.py"
+
 echo "================================================================================="
 echo "                              Testing NLP Datasets                             "
 echo "================================================================================="
