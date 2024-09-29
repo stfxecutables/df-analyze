@@ -1,3 +1,7 @@
+"""
+This file is just used for manual bash testing, i.e. test/bash_test_embedding.sh
+"""
+
 from __future__ import annotations
 
 # fmt: off
