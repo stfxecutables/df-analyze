@@ -9,6 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 from pytest import CaptureFixture
@@ -20,14 +21,22 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
     XLMRobertaTokenizerFast,
 )
 
-from src.df_analyze.embedding.cli import EmbeddingModality
-from src.df_analyze.embedding.download import download_models
-from src.df_analyze.embedding.embed import (
+from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
+from df_analyze.embedding.datasets import (
+    dataset_from_opts,
+)
+from df_analyze.embedding.download import (
+    dl_models_from_opts,
+    download_models,
+    error_if_download_needed,
+)
+from df_analyze.embedding.embed import (
+    get_embeddings,
     get_model,
     get_nlp_embeddings,
     get_vision_embeddings,
 )
-from src.df_analyze.embedding.testing import (
+from df_analyze.embedding.testing import (
     NLPTestingDataset,
     VisionTestingDataset,
     cluster_nlp_sanity_check,
@@ -117,6 +126,80 @@ def test_vision_embed(capsys: CaptureFixture) -> None:
             )
             assert len(df) == 4
             assert df.shape[1] == 1152 + 1
+
+
+def test_main_vision(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        for ds in tqdm(
+            VisionTestingDataset.get_all_cls(), desc="Processing vision datasets"
+        ):
+            if ds.name == "Anime-dataset":  # working...
+                continue
+            if ds.name == "rare-species":
+                continue  # string labels
+            ds = ds.to_embedding_dataset()
+            with TemporaryDirectory() as tempdir:
+                out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
+                opts = EmbeddingOptions(
+                    datapath=ds.datapath,
+                    modality=EmbeddingModality.Vision,
+                    name=ds.name,
+                    outpath=out,
+                    limit_samples=8,
+                    batch_size=2,
+                )
+                assert opts.outpath is not None
+                error_if_download_needed(opts)
+                dl_models_from_opts(opts)
+                ds = dataset_from_opts(opts)
+                model, processor = get_model(opts.modality)
+                df = get_embeddings(
+                    ds=ds,  # type: ignore
+                    processor=processor,  # type: ignore
+                    model=model,  # type: ignore
+                    batch_size=opts.batch_size,
+                    load_limit=opts.limit_samples,
+                )
+
+                # print(df)
+                # print(opts)
+                df.to_parquet(opts.outpath)
+                # print(f"Saved embeddings to {opts.outpath}")
+
+
+def test_main_nlp(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        for ds in tqdm(NLPTestingDataset.get_all(), desc="Processing NLP datasets"):
+            if ds.name == "go_emotions":
+                continue  # multilabel
+            ds = ds.to_embedding_dataset()
+            with TemporaryDirectory() as tempdir:
+                out = Path(tempdir) / f"{ds.name}_test_embed_out.parquet"
+                opts = EmbeddingOptions(
+                    datapath=ds.datapath,
+                    modality=EmbeddingModality.NLP,
+                    name=ds.name,
+                    outpath=out,
+                    limit_samples=8,
+                    batch_size=2,
+                )
+                assert opts.outpath is not None
+                error_if_download_needed(opts)
+                dl_models_from_opts(opts)
+                ds = dataset_from_opts(opts)
+                model, processor = get_model(opts.modality)
+                df = get_embeddings(
+                    ds=ds,  # type: ignore
+                    processor=processor,  # type: ignore
+                    model=model,  # type: ignore
+                    batch_size=opts.batch_size,
+                    load_limit=opts.limit_samples,
+                )
+
+                # print(df)
+                # print(opts)
+                df.to_parquet(opts.outpath)
+                # print(f"Saved embeddings to {opts.outpath}")
 
 
 def test_download_models(capsys: CaptureFixture) -> None:

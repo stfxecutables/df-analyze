@@ -166,6 +166,17 @@ files if present.
 
 """
 
+LIMIT_HELP = """
+If an integer N is passed, only embed the first N samples.
+
+"""
+
+BATCH_HELP = """
+Batch size for processing embeddings. Mostly intended for testing, and should
+generally be a small integer value like 2, 4, or 8.
+
+"""
+
 
 class EmbeddingModality(Enum):
     NLP = "nlp"
@@ -179,6 +190,8 @@ class EmbeddingOptions(Debug):
         modality: Union[str, EmbeddingModality],
         name: Optional[str] = None,
         outpath: Optional[Path] = None,
+        limit_samples: Optional[int] = None,
+        batch_size: Optional[int] = 2,
         download: bool = False,
         force_download: bool = False,
     ) -> None:
@@ -193,6 +206,8 @@ class EmbeddingOptions(Debug):
         else:
             self.name = None
             self.outpath = None
+        self.limit_samples = limit_samples
+        self.batch_size = batch_size
         self.download: bool = download
         self.force_download: bool = force_download
         self.any_download = any_download
@@ -225,6 +240,8 @@ class EmbeddingOptions(Debug):
             modality=args.modality,
             name=args.name,
             outpath=args.out,
+            limit_samples=args.limit_samples,
+            batch_size=args.batch_size,
             download=args.download,
             force_download=args.force_download,
         )
@@ -252,6 +269,15 @@ class EmbeddingOptions(Debug):
 
 
 def make_parser() -> ArgumentParser:
+    def pos_int(s: str) -> int:
+        try:
+            value = int(s)
+            if value < 1:
+                raise ValueError("Integer arguments must be positive and nonzero")
+            return value
+        except Exception as e:
+            raise ValueError(f"Invalid positive integer: {s}") from e
+
     parser = ArgumentParser(
         prog="df-embed",
         usage=USAGE_STRING,
@@ -281,6 +307,18 @@ def make_parser() -> ArgumentParser:
         type=Path,
         default=None,
         help=OUT_HELP,
+    )
+    parser.add_argument(
+        "--limit-samples",
+        type=pos_int,
+        default=None,
+        help=LIMIT_HELP,
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=pos_int,
+        default=2,
+        help=BATCH_HELP,
     )
     parser.add_argument(
         "--download",

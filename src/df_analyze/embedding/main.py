@@ -7,11 +7,20 @@ ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-from df_analyze.embedding.cli import EmbeddingOptions, make_parser
-from df_analyze.embedding.datasets import EmbeddingDataset
+from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions, make_parser
+from df_analyze.embedding.datasets import (
+    EmbeddingDataset,
+    NLPDataset,
+    VisionDataset,
+    dataset_from_opts,
+)
 from df_analyze.embedding.download import (
     dl_models_from_opts,
     error_if_download_needed,
+)
+from df_analyze.embedding.embed import (
+    get_embeddings,
+    get_model,
 )
 
 
@@ -21,6 +30,17 @@ def main() -> None:
     opts = EmbeddingOptions.from_parser(parser)
     error_if_download_needed(opts)
     dl_models_from_opts(opts)
-    ds
+    ds = dataset_from_opts(opts)
+    model, processor = get_model(opts.modality)
+    df = get_embeddings(
+        ds=ds,  # type: ignore
+        processor=processor,  # type: ignore
+        model=model,  # type: ignore
+        batch_size=opts.batch_size,
+        load_limit=opts.limit_samples,
+    )
 
+    print(df)
     print(opts)
+    df.to_parquet(opts.outpath)
+    print(f"Saved embeddings to {opts.outpath}")

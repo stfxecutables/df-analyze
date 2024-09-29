@@ -9,10 +9,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import sys
 from pathlib import Path
-from typing import (
-    Optional,
-    Union,
-)
+from typing import Optional, Union, cast, overload
 
 import pandas as pd
 import torch
@@ -113,6 +110,7 @@ def get_nlp_embeddings(
     cols = [f"embed{i:04d}" for i in range(p)]
     df_embed = DataFrame(data=embeddings.numpy(), columns=cols, index=y.index)
     df = pd.concat([df_embed, y], axis=1)
+    df.rename(columns={y.name: "target"}, inplace=True)
     return df
 
 
@@ -158,4 +156,58 @@ def get_vision_embeddings(
     cols = [f"embed{i:04d}" for i in range(p)]
     df_embed = DataFrame(data=embeddings.numpy(), columns=cols, index=y.index)
     df = pd.concat([df_embed, y], axis=1)
+    df.rename(columns={y.name: "target"}, inplace=True)
     return df
+
+
+@overload
+def get_embeddings(
+    ds: VisionDataset,
+    processor: SiglipProcessor,
+    model: SiglipModel,
+    batch_size: Optional[int] = 2,
+    load_limit: Optional[int] = None,
+    max_samples: Optional[int] = None,
+) -> DataFrame: ...
+
+
+@overload
+def get_embeddings(
+    ds: NLPDataset,
+    processor: XLMRobertaTokenizerFast,
+    model: XLMRobertaModel,
+    batch_size: Optional[int] = 2,
+    load_limit: Optional[int] = None,
+    max_samples: Optional[int] = None,
+) -> DataFrame: ...
+
+
+def get_embeddings(
+    ds: Union[VisionDataset, NLPDataset],
+    processor: Union[XLMRobertaTokenizerFast, SiglipProcessor],
+    model: Union[XLMRobertaModel, SiglipModel],
+    batch_size: Optional[int] = 2,
+    load_limit: Optional[int] = None,
+    max_samples: Optional[int] = None,
+) -> DataFrame:
+    batch_size = batch_size or 2
+    if isinstance(ds, VisionDataset):
+        return get_vision_embeddings(
+            ds=ds,
+            processor=cast(SiglipProcessor, processor),
+            model=cast(SiglipModel, model),
+            batch_size=batch_size,
+            load_limit=load_limit,
+            num_imgs=max_samples,
+        )
+    elif isinstance(ds, NLPDataset):
+        return get_nlp_embeddings(
+            ds=ds,
+            tokenizer=cast(XLMRobertaTokenizerFast, processor),
+            model=cast(XLMRobertaModel, model),
+            batch_size=batch_size,
+            load_limit=load_limit,
+            num_texts=max_samples,
+        )
+    else:
+        raise ValueError(f"Unrecognized dataset type: {ds}")

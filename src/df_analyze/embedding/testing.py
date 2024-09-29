@@ -4,9 +4,9 @@ from __future__ import annotations
 import sys  # isort: skip
 from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent.parent  # isort: skip
-ROOT2 = Path(__file__).resolve().parent.parent.parent  # isort: skip
+# ROOT2 = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
-sys.path.append(str(ROOT2))  # isort: skip
+# sys.path.append(str(ROOT2))  # isort: skip
 # fmt: on
 
 import os

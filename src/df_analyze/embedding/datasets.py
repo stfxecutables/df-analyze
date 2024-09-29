@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from pandas import DataFrame, Series
 from PIL import Image
+from PIL.Image import Image as ImageObject
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import KBinsDiscretizer
@@ -94,7 +95,7 @@ class EmbeddingDataset:
             return self._df
         df = self.load_raw()
         if limit is not None:
-            df = df.iloc[:limit].copy()
+            df = df.iloc[:limit]
         self.validate_cols(df)
         self.validate_data(df)
         self._df = df
@@ -200,6 +201,11 @@ class EmbeddingDataset:
         """
         modality = EmbeddingDataset.get_modality(df)
         if modality is EmbeddingModality.Vision:
+            are_PIL = df["image"].apply(lambda x: isinstance(x, ImageObject))
+            if not are_PIL.all():
+                raise ValueError(
+                    f"Some rows are not PIL Images:\n{df['image'][~are_PIL]}"
+                )
             pass
             # for ix, im in enumerate(df["image"]):
             #     if len(im.size) != 3:
@@ -278,7 +284,8 @@ class VisionDataset(EmbeddingDataset):
         ):
             img = Image.open(BytesIO(byts)).convert("RGB")
             del byts
-            df.loc[ix, "image"] = img
+            idx = df.index[ix]
+            df.loc[idx, "image"] = img
         # im = df["image"].apply(lambda b: Image.open(BytesIO(b)).convert("RGB"))  # type: ignore
         # df = pd.concat([im, df.drop(columns="image")], axis=1)
         self.validate_data(df)
@@ -300,3 +307,7 @@ class NLPDataset(EmbeddingDataset):
 def dataset_from_opts(opts: EmbeddingOptions) -> Union[VisionDataset, NLPDataset]:
     if opts.modality is EmbeddingModality.NLP:
         return NLPDataset(name=opts.name, datapath=opts.datapath)
+    elif opts.modality is EmbeddingModality.Vision:
+        return VisionDataset(datapath=opts.datapath, name=opts.name)
+    else:
+        raise NotImplementedError(f"No dataset defined for {opts.modality}")
