@@ -91,9 +91,9 @@ source "$ACTIVATE"
     tqdm \
     typing_extensions \
     skorch \
-    'transformers[torch]' \
+    "transformers[torch]" \
     accelerate \
-    'datasets[vision]' \
+    "datasets[vision]" \
     protobuf \
     sentencepiece \
     || echo "Failed to install some python libs"
