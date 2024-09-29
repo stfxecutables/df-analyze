@@ -16,6 +16,7 @@ from src.df_analyze.embedding.download import download_models
 from src.df_analyze.embedding.testing import (
     cluster_nlp_sanity_check,
     cluster_vision_sanity_check,
+    vision_padding_check,
 )
 
 INTFLOAT_MULTILINGUAL_MODEL = ROOT / "downloaded_models/intfloat_multi_large/model"
@@ -37,6 +38,11 @@ NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
 def test_download_models(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         download_models()
+
+
+def test_vision_padding(capsys: CaptureFixture) -> None:
+    with capsys.disabled():
+        vision_padding_check()
 
 
 def test_cluster_sanity_vision(capsys: CaptureFixture) -> None:

@@ -396,6 +396,45 @@ def get_nlp_embeddings(
     return df, strat, stats, samples_per_s, postproc_samples_per_s
 
 
+def check_ds_vision_padding(
+    ds: VisionTestingDataset,
+    processor: SiglipProcessor,
+    model: SiglipModel,
+    batch_size: int = 32,
+    max_imgs: int = 1024,
+) -> tuple[DataFrame, Series, DataFrame, float, float]:
+    X, y = ds.X, ds.y
+
+    strat = y if ds.is_cls else get_reg_stratify(y)
+    ss = StratifiedShuffleSplit(n_splits=1, train_size=max_imgs)
+    ix_train = next(ss.split(y, strat))[0]  # type: ignore
+    X_tr, y_tr = X.iloc[ix_train], y.iloc[ix_train]
+    strat = strat.iloc[ix_train]
+    all_imgs = X_tr.tolist()
+
+    all_embeddings = []
+    with torch.no_grad():
+        img_batches = [*batched(all_imgs, batch_size)]
+        for img in tqdm(img_batches, total=len(img_batches), desc="Embedding batches"):
+            processed: BatchFeature = processor(
+                text=None,  # type: ignore
+                images=img,
+                # padding="longest",
+                padding=True,
+                truncation=True,
+                max_length=1024,
+                return_tensors="pt",  # type: ignore
+            )
+            outputs = model.vision_model(
+                **processed, output_hidden_states=False, output_attentions=False
+            )
+            embeddings = outputs.pooler_output
+
+            # embeddings = avg_pool(embeddings2)
+            # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
+            all_embeddings.append(embeddings)
+
+
 def get_vision_embeddings(
     ds: VisionTestingDataset,
     processor: SiglipProcessor,
@@ -430,8 +469,10 @@ def get_vision_embeddings(
             processed: BatchFeature = processor(
                 text=None,  # type: ignore
                 images=img,
-                padding="longest",
+                # padding="longest",
+                padding=True,
                 truncation=True,
+                max_length=1024,
                 return_tensors="pt",  # type: ignore
             )
             outputs = model.vision_model(
@@ -718,6 +759,20 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
         except Exception as e:
             print(e)
             continue
+
+
+def vision_padding_check() -> None:
+    model, processor = load_siglip_offline()
+    dses = VisionTestingDataset.get_all_cls()
+    if len(dses) < 1:
+        raise FileNotFoundError("Could not find any vision datasets.")
+
+    for ds in dses:
+        print("=" * 81)
+        print(ds.name)
+        check_ds_vision_padding(
+            ds=ds, processor=processor, model=model, batch_size=2, max_imgs=16
+        )
 
 
 def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:

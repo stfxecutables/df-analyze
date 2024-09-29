@@ -12,7 +12,16 @@ def pytest_sessionstart(session):
     # Stupid insane Python import garbage
     # https://github.com/huggingface/transformers/issues/5281#issuecomment-2365359156
     # https://github.com/huggingface/transformers/issues/5281#issuecomment-2365359156
-    import torch
+    """
+    # Segmentation fault when trying to load models #5281
+
+    andr2w commented on Jan 25, 2023:
+
+    > I come across the same problem too.
+    >
+    > My solution is just to import torch before import the transformers
+    """
+    import torch  # noqa  # type: ignore
 
     ROOT = Path(__file__).resolve().parent
     SRC = ROOT / "src"
