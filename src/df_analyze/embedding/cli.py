@@ -30,7 +30,7 @@ IMPORTANT: In order to get this working, you will first have to download the
 underlying HuggingFace zero-shot models. Assuming you have used `cd` to
 change to where you have cloned this repo, then this can be done by running:
 
-    python df-embed.py --download
+    python df-embed.py --modality <nlp|vision> --download
 
 *once*. This will download the necessary files to ./downloaded_models. Then,
 all subsequent calls will work properly, even offline without internet
@@ -45,10 +45,15 @@ specify manually are:
 """
 
 USAGE_EXAMPLES = """
-USAGE EXAMPLE (assumes you have run `python df-embed --download`
-successfully):
+USAGE EXAMPLE:
 
-    python df-embed.py --data my_data.parquet --modality nlp
+Assuming you have run:
+
+    `python df-embed --download --modality <nlp|vision>`
+
+successfully, then basic usage is:
+
+    python df-embed.py --data my_data.parquet --modality <nlp|vision> --out ./my_data_embedded.parquet
 
 """
 
@@ -74,13 +79,11 @@ zero-shot embeddings.
   is loaded into a Pandas DataFrame `df`, then running
   `df["label"].astype(float)` should not raise any exceptions.
 
-  The "image" column must of `bytes` dtype, and must be readable by PIL
+  The "image" column must be of `bytes` dtype, and must be readable by PIL
   `Image.open`. Internally, all we do, again assuming that the data is loaded
   into a Pandas DataFrame `df`, is run:
 
-      images = df["image"].apply(lambda raw: Image.open(BytesIO(raw)))
-
-  TODO: Figure out channels first vs. last and what happens with BW images.
+      df["image"].apply(lambda raw: Image.open(BytesIO(raw)).convert("RGB"))
 
 
 # NLP Text Data
@@ -114,18 +117,17 @@ zero-shot embeddings.
 
 OUT_HELP = """
 Name of the .parquet file in which the embedded data will be saved. Can be
-one a name, filename and extension, or a directory.
+a name, filename and extension, or a directory.
 
 If passing in a name, e.g. 'my_embeddings', then the .parquet extension is
-automatically appended.
-
-Extensions other than .parquet are not valid and will raise an exception.
+automatically appended. Extensions other than .parquet are not valid and will
+raise an exception.
 
 For safety reasons, and to avoid file access issues on e.g. compute clusters,
 paths ABOVE the parent of the input data are not permitted. E.g. if your
 input image data to be embedded is in:
 
-    /path/to/my/inputs/my_images.parquet/
+    /path/to/my/inputs/my_images.parquet
 
 then you will only be able to specify outputs such as:
 
@@ -139,12 +141,12 @@ Compute Canada / DRAC, it is highly recommended that you use the `realpath`
 or `readlink -f` command first to find out the actual path to your input
 file. I.e. running:
 
-    python df-embed.py --data ./my_images.parquet
+    python df-embed.py --data ./my_images.parquet [...]
 
 tends to be a recipe for trouble. You might instead try:
 
-    python df-embed.py --data "$(realpath ./my_images.parquet)"
-    python df-embed.py --data "$(readlink -f ./my_images.parquet)"
+    python df-embed.py --data "$(realpath ./my_images.parquet)" [...]
+    python df-embed.py --data "$(readlink -f ./my_images.parquet)" [...]
 
 to avoid these issues.
 
@@ -235,6 +237,7 @@ class EmbeddingOptions(Debug):
         cls: Type[EmbeddingOptions], parser: ArgumentParser
     ) -> EmbeddingOptions:
         args = parser.parse_known_args()[0]
+        any_download = args.download or args.force_download
         return cls(
             datapath=args.data,
             modality=args.modality,
