@@ -44,6 +44,13 @@ poetry.lock
 **/*.xlsx
 **/*.zip
 
+# research scripts
+calibration.py
+clean_logfiles.py
+gen_student_scripts.py
+generate_jobscripts.py
+traffic.py
+
 
 ################################################################################
 ###                                 Generic                                 ####
