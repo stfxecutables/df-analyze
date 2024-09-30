@@ -136,10 +136,11 @@ def get_vision_embeddings(
             processed: BatchFeature = processor(
                 text=None,  # type: ignore
                 images=img,
-                # padding="longest",
-                padding=True,
-                truncation=True,
-                max_length=1024,
+                # padding below is what is recommended at:
+                # https://huggingface.co/docs/transformers/en/model_doc/siglip
+                padding="max_length",
+                # truncation=True,  # also leave at defauly, use later if needed
+                # max_length=1024,  # leave at default, only add this if needed
                 return_tensors="pt",  # type: ignore
             )
             outputs = model.vision_model(
