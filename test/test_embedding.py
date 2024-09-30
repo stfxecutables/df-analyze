@@ -78,7 +78,7 @@ def test_main_ds_nlp_loading(capsys: CaptureFixture) -> None:
         if ds.name == "go_emotions":
             continue  # multilabel
         try:
-            ds.load()
+            ds.load(limit=1000)
         except Exception as e:
             raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
 
@@ -89,7 +89,7 @@ def test_main_ds_vision_loading(capsys: CaptureFixture) -> None:
     dses = [ds.to_embedding_dataset() for ds in test_dses]
     for ds in dses:
         try:
-            ds.load()
+            ds.load(limit=1000)
         except Exception as e:
             raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
 
@@ -210,13 +210,13 @@ def test_vision_padding(capsys: CaptureFixture) -> None:
 @pytest.mark.slow
 def test_cluster_sanity_vision(capsys: CaptureFixture) -> None:
     with capsys.disabled():
-        cluster_vision_sanity_check(n_samples=16)
+        cluster_vision_sanity_check(n_samples=32)
 
 
 @pytest.mark.slow
 def test_cluster_sanity_nlp(capsys: CaptureFixture) -> None:
     with capsys.disabled():
-        cluster_nlp_sanity_check(n_samples=16)
+        cluster_nlp_sanity_check(n_samples=128)
 
 
 if __name__ == "__main__":

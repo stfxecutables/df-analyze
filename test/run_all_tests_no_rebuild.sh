@@ -70,9 +70,11 @@ echo "==========================================================================
 echo "================================================================================="
 echo "Testing embeddding functionality."
 echo "================================================================================="
-"$PYTHON" df-embed.py --modality nlp --download
-"$PYTHON" df-embed.py --modality vision --download
-"$PYTEST" test/test_embedding.py -m 'not slow' -x
+"$PYTHON" df-embed.py --modality nlp --download  || (echo "Failed to download NLP model" && exit 1)
+"$PYTHON" df-embed.py --modality vision --download || (echo "Failed to download vision model" && exit 1)
+# The faster tests also test the same things the slow ones do, so no need to
+# run them here. They can always be run manually to investigate issues.
+"$PYTEST" test/test_embedding.py -m 'not slow not med'
 
 
 # # Done

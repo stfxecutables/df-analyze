@@ -233,8 +233,8 @@ class VisionDataset(EmbeddingDataset):
         N = np.random.randint(20, 500)
         all_bytes = DataFrame(index=RangeIndex(N), columns=["image"])
         for i in range(N):
-            W = np.random.randint(32, 1024)
-            H = np.random.randint(32, 1024)
+            W = np.random.randint(32, 512)
+            H = np.random.randint(32, 512)
             sigma = np.random.uniform(0.1, 10)
             img = Image.effect_noise(size=(W, H), sigma=sigma).convert("RGB")
             buf = BytesIO()

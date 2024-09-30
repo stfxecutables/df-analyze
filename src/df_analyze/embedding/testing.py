@@ -356,7 +356,7 @@ def get_nlp_embeddings(
     batch_size: int = 32,
     max_texts: int = 1024,
 ) -> tuple[DataFrame, Series, DataFrame, float, float]:
-    X, y = ds.X, ds.y
+    X, y = ds.X.reset_index(drop=True), ds.y.reset_index(drop=True)
 
     strat = y if ds.is_cls else get_reg_stratify(y)
     ss = StratifiedShuffleSplit(n_splits=1, train_size=max_texts)
@@ -438,7 +438,7 @@ def check_ds_vision_padding(
     model: SiglipModel,
     batch_size: int = 32,
     max_imgs: int = 1024,
-) -> tuple[DataFrame, Series, DataFrame, float, float]:
+) -> None:
     print(f"Testing {ds.name}...")
     X, y = ds.X, ds.y
 
@@ -477,7 +477,7 @@ def get_vision_embeddings(
     batch_size: int = 32,
     max_imgs: int = 1024,
 ) -> tuple[DataFrame, Series, DataFrame, float, float]:
-    X, y = ds.X, ds.y
+    X, y = ds.X.reset_index(drop=True), ds.y.reset_index(drop=True)
 
     strat = y if ds.is_cls else get_reg_stratify(y)
     ss = StratifiedShuffleSplit(n_splits=1, train_size=max_imgs)
@@ -599,34 +599,46 @@ def get_optimal_nlp_batch(ds: NLPTestingDataset) -> int:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     OUT = NIAGARA_NLP_RUNTIMES if ON_CLUSTER else MACOS_NLP_RUNTIMES
     DEFAULT = 8 if ON_CLUSTER else 2
-    runtimes = pd.read_parquet(OUT)
-    runtimes = (
-        runtimes.groupby(["ds", "n_samp"])
-        .apply(lambda grp: grp.nsmallest(1, "total_s"), include_groups=False)
-        .droplevel(2)
-        .reset_index()
-    )
-    if ds.name not in runtimes["ds"].values:
+    try:
+        if not OUT.exists():
+            return DEFAULT
+        runtimes = pd.read_parquet(OUT)
+        runtimes = (
+            runtimes.groupby(["ds", "n_samp"])
+            .apply(lambda grp: grp.nsmallest(1, "total_s"), include_groups=False)
+            .droplevel(2)
+            .reset_index()
+        )
+        if ds.name not in runtimes["ds"].values:
+            return DEFAULT
+        return runtimes[runtimes["ds"] == ds.name]["batch"].item()
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Got error: {e}")
         return DEFAULT
-
-    return runtimes[runtimes["ds"] == ds.name]["batch"].item()
 
 
 def get_optimal_vision_batch(ds: VisionTestingDataset) -> int:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     OUT = NIAGARA_VISION_RUNTIMES if ON_CLUSTER else MACOS_VISION_RUNTIMES
     DEFAULT = 8 if ON_CLUSTER else 2
-    runtimes = pd.read_parquet(OUT)
-    runtimes = (
-        runtimes.groupby(["ds", "n_samp"])
-        .apply(lambda grp: grp.nsmallest(1, "total_s"), include_groups=False)
-        .droplevel(2)
-        .reset_index()
-    )
-    if ds.name not in runtimes["ds"].values:
+    try:
+        if not OUT.exists():
+            return DEFAULT
+        runtimes = pd.read_parquet(OUT)
+        runtimes = (
+            runtimes.groupby(["ds", "n_samp"])
+            .apply(lambda grp: grp.nsmallest(1, "total_s"), include_groups=False)
+            .droplevel(2)
+            .reset_index()
+        )
+        if ds.name not in runtimes["ds"].values:
+            return DEFAULT
+        return runtimes[runtimes["ds"] == ds.name]["batch"].item()
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Got error: {e}")
         return DEFAULT
-
-    return runtimes[runtimes["ds"] == ds.name]["batch"].item()
 
 
 def estimate_vision_embedding_times(n_samples: Optional[int] = None) -> None:
@@ -741,6 +753,8 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
     results = []
 
     for ds in dses:
+        if ds.name == "go_emotions":
+            continue  # multilabel
         print("=" * 81)
         print(ds.name)
         batch = get_optimal_nlp_batch(ds)
@@ -751,7 +765,8 @@ def cluster_nlp_sanity_check(n_samples: Optional[int] = None) -> None:
             X = embeds.drop(columns=["text", "target"])
             dfs = []
             for metricname, metric in dict(
-                cosine=cosine_similarity, euclid=lambda x: 1 - euclidean_distances(x)
+                cosine=cosine_similarity,
+                euclid=lambda x: 10 / (1 + euclidean_distances(x)),  # 10 since usu. small
             ).items():
                 sims = metric(X.values)
                 sims = DataFrame(data=sims, index=X.index, columns=X.index)
@@ -837,11 +852,15 @@ def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:
                 for clust in sorted(strat.unique()):
                     ix = strat == clust
                     df = sims.loc[ix, ix]
-                    df = (
-                        df.where(np.triu(np.ones(df.shape), k=1).astype(bool))
-                        .stack()
-                        .reset_index()
-                    )
+                    stacked = df.where(
+                        np.triu(np.ones(df.shape), k=1).astype(bool)
+                    ).stack()
+                    try:
+                        df = stacked.reset_index()
+                    except Exception as e:
+                        traceback.print_exc()
+                        raise RuntimeError(f"Some bullshit ^^^: {e} for data: {ds.name}")
+
                     df.columns = ["x1", "x2", "sim"]
                     within = df["sim"].mean()
                     between = sims.loc[ix, ~ix].values.mean()
@@ -862,6 +881,7 @@ def cluster_vision_sanity_check(n_samples: Optional[int] = None) -> None:
             print(df)
 
         except Exception as e:
+            traceback.print_exc()
             print(e)
             continue
 

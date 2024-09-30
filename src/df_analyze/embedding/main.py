@@ -27,6 +27,8 @@ def main() -> None:
     opts = EmbeddingOptions.from_parser(parser)
     error_if_download_needed(opts)
     dl_models_from_opts(opts)
+    if opts.any_download:
+        return
     ds = dataset_from_opts(opts)
     model, processor = get_model(opts.modality)
     df = get_embeddings(

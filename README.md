@@ -65,8 +65,9 @@
 
 `df-analyze` is a command-line tool for perfoming
 [AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
-on small to medium-sized tabular datasets. In particular, `df-analyze`
-attempts to automate:
+on small to medium-sized (less than about 200 000 samples, and less than
+about 50 to 100 features) tabular datasets. `df-analyze` attempts to
+automate:
 
 - feature type inference
 - feature description (e.g. univariate associations and stats)
