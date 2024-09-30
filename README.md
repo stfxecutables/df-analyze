@@ -145,10 +145,26 @@ you run
 bash local_instal.sh
 ```
 
-This *should* work on MacOS / Apple Silicon, and most major and up-to-date
-Linux distributions, and on Windows in the Windows Subsystem for Linux (WSL).
-However, Windows users wishing to avoid using the WSL should adapt the
-[install
+Then, you can activate the installed virtual environment by running
+
+```sh
+source .venv/bin/activate
+```
+
+in your shell (or by running `.venv/scripts/activate` on Windows -  see also
+[here](https://virtualenv.pypa.io/en/legacy/userguide.html#activate-script)
+if you run into permission issues when doing this). You should be able to see
+if the install working by running:
+
+```sh
+python df-analyze.py --help
+
+```
+
+This install procedure *should* work on MacOS (including Apple Silicon, e.g.
+MX series macs), and on most major and up-to-date Linux distributions, and on
+Windows in the Windows Subsystem for Linux (WSL). However, Windows users
+wishing to avoid using the WSL should adapt the [install
 script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
 for their needs.
 

@@ -504,10 +504,9 @@ def get_vision_embeddings(
             processed: BatchFeature = processor(
                 text=None,  # type: ignore
                 images=img,
-                # padding="longest",
-                padding=True,
-                truncation=True,
-                max_length=1024,
+                padding="max_length",
+                # truncation=True,
+                # max_length=1024,
                 return_tensors="pt",  # type: ignore
             )
             outputs = model.vision_model(
