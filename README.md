@@ -204,15 +204,10 @@ very well, so the [local install scripts](#local-install-by-shell-script)
 *should* just work there, as I have tried to avoid most platform-specific
 code.
 
-And, for better or worse, there is essentially zero real serious machine- or
-deep-learning development happening on or for WSL-free Windows anyway. The
-Windows OS is simply not even a contender in the machine- and deep-learning
-worlds—Windows OS is now mostly gaming + Microsoft Office.
-
-This is of course unfair to owners of Windows machines looking to get into
-ML/DL,, but the reality is, anyone serious either dual-boots, uses a VM, or
-otherwise ejects from Windows for core functionality in order to do serious
-computing. , because this is the only thing that works
+If for some reason you can't use the WSL, then there are experimental maual
+Windows installation instructions
+[here](https://github.com/stfxecutables/df-analyze/blob/master/docs/windows_install.md).
+But don't be surprised if things break when setting things up this way.
 
 # Usage
 
