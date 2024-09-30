@@ -7,7 +7,6 @@
   - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
   - [Local Install by Shell Script](#local-install-by-shell-script)
-  - [Quickstart With `pip`](#quickstart-with-pip)
   - [Windows Support](#windows-support)
     - [Installing Latest / Development Releases](#installing-latest--development-releases)
     - [Installing Editable (`pip install -e`)](#installing-editable-pip-install--e)
@@ -139,21 +138,21 @@ build](#building-the-singularity-container) for a Linux-based system,
 
 ## Local Install by Shell Script
 
-The
+After having cloned the repo, the
 [`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
-script can be used to install the supported Python version (through
-[`pyenv`](https://github.com/pyenv/pyenv) or
+script is rather minimal and can be used to install the supported Python
+version (through [`pyenv`](https://github.com/pyenv/pyenv) or
 [`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) and
-dependencies. This *should* work on MacOS (Apple Silicon, e.g. MX Mac) and
-most major Linux distributions, and on Windows in the Windows Subsystem for
-Linux (WSL). However, Windows users wishing to avoid using the WSL should
-adapt the [install
+dependencies. This *should* work on MacOS / Apple Silicon, and most major
+Linux distributions, and on Windows in the Windows Subsystem for Linux (WSL).
+However, Windows users wishing to avoid using the WSL should adapt the
+[install
 script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
 for their needs.
 
 To attempt to setup
 
-## Quickstart With `pip`
+<!-- ## Quickstart With `pip`
 
 To install, run:
 
@@ -168,7 +167,7 @@ to see the available options, just run:
 df-analyze --help
 ```
 
-to see usage and available options.
+to see usage and available options. -->
 
 
 ## Windows Support
