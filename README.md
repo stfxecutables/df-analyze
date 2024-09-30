@@ -278,7 +278,7 @@ Example of a `.csv` spreadsheet formatted for `df-analyze`:
 --outdir ./results
 --target y
 --mode classify
---categoricals s x0
+--categoricals s,x0
 --classifiers knn lgbm dummy
 --nan median
 --norm robust
@@ -308,7 +308,7 @@ Thus, the following is an **INVALIDLY FORMATTED** spreadsheet:
 --outdir ./results
 --target y
 --mode classify
---categoricals s x0
+--categoricals s,x0
 --classifiers knn dummy
 --nan median
 --norm minmax
