@@ -19,6 +19,10 @@
     - [Using Builtin Data](#using-builtin-data)
     - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
       - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
+  - [Embedding Functionality](#embedding-functionality)
+    - [Supported Dataset Formats](#supported-dataset-formats)
+      - [Image Data](#image-data)
+      - [Text Data](#text-data)
   - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
     - [Building the Singularity Container](#building-the-singularity-container)
 - [Analysis Pipeline](#analysis-pipeline)
@@ -65,9 +69,8 @@
 
 `df-analyze` is a command-line tool for perfoming
 [AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
-on small to medium-sized (less than about 200 000 samples, and less than
-about 50 to 100 features) tabular datasets. `df-analyze` attempts to
-automate:
+on small to medium-sized tabular datasets (less than about 200 000 samples,
+and less than about 50 to 100 features). `df-analyze` attempts to automate:
 
 - feature type inference
 - feature description (e.g. univariate associations and stats)
@@ -78,6 +81,13 @@ automate:
 - model selection and validation
 
 and saves all key tables and outputs from this process.
+
+**UPDATE - September 30 2024** Now, `df-analyze` supports [zero-shot
+embedding](#embedding-functionality) of image and text data via the
+`df-embed.py` script. This allows the conversion of [correctly
+formatted](#supported-dataset-formats) image and text datasets into tabular
+data that can be handled by the standard `df-analyze` tabular prediction
+tools.
 
 Currently, siginifcant efforts have been made to make `df-analyze` robust to
 a wide variety of tabular datasets. However, there are some significant
@@ -103,11 +113,12 @@ Don't be shy about asking for help in the
 ## For Students or Novices to Machine and Deep Learning
 
 For students encountering `df-analyze` through a course, see the [student
-README]() in this repo. This contains some descriptions and tips that are
-helpful for those just starting to learn about AutoML tools, and also some
-explanations and tips for running `df-analyze` on SLURM High-Performance
-Computing (HPC) clusters, particularly the [Digitial Research Alliance of
-Canada (formerly Compute Canada)
+README](https://github.com/stfxecutables/df-analyze/blob/experimental/docs/students.md)
+in this repo. The student README contains some descriptions and tips that are
+helpful for those just starting to learn about the CLI, containers, AutoML
+tools, and also some explanations and tips for running `df-analyze` on SLURM
+High-Performance Computing (HPC) clusters, particularly the [Digitial
+Research Alliance of Canada (formerly Compute Canada)
 clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
 
@@ -370,6 +381,16 @@ results are saved to a separate subfolder (with a unique hash reflecting the
 unique combinations of options passed to `df-analyze`). This ensures data
 should be overwritten only if the exact same arguments are passed twice (e.g.
 perhaps if manually cleaning your data and re-running).
+
+
+## Embedding Functionality
+
+### Supported Dataset Formats
+
+#### Image Data
+
+#### Text Data
+
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 

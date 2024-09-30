@@ -63,9 +63,10 @@ NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
 
 
+@pytest.mark.fast
 def test_vision_random(capsys: CaptureFixture) -> None:
     with capsys.disabled():
-        for _ in tqdm(range(10), desc="Creating random Vision data"):
+        for _ in tqdm(range(10), desc="Creating random Vision data", disable=True):
             with TemporaryDirectory() as tempdir:
                 VisionDataset.random(tempdir=tempdir)
 
@@ -88,18 +89,21 @@ def test_main_ds_vision_loading(capsys: CaptureFixture) -> None:
     test_dses = VisionTestingDataset.get_all_cls()
     dses = [ds.to_embedding_dataset() for ds in test_dses]
     for ds in dses:
+        if ds.name == "rare-species":
+            continue  # text labels
         try:
             ds.load(limit=1000)
         except Exception as e:
             raise ValueError(f"Got error for ds: {ds.name} @ {ds.datapath}") from e
 
 
+@pytest.mark.fast
 def test_nlp_embed(capsys: CaptureFixture) -> None:
     model, tokenizer = get_model(EmbeddingModality.NLP)
     assert isinstance(model, XLMRobertaModel)
     assert isinstance(tokenizer, XLMRobertaTokenizerFast)
     with capsys.disabled():
-        for ds in tqdm(NLPTestingDataset.get_all(), desc="Embedding NLP data..."):
+        for ds in tqdm(NLPTestingDataset.get_all(), desc="Embedding NLP data"):
             if ds.name == "go_emotions":
                 continue  # multilabel
             ds = ds.to_embedding_dataset()
@@ -144,6 +148,7 @@ def _main_loop(ds: EmbeddingDataset, tempdir: str, modality: EmbeddingModality) 
     # print(f"Saved embeddings to {opts.outpath}")
 
 
+@pytest.mark.fast
 def test_vision_embed(capsys: CaptureFixture) -> None:
     model, processor = get_model(EmbeddingModality.Vision)
     assert isinstance(model, SiglipModel)
@@ -167,6 +172,7 @@ def test_vision_embed(capsys: CaptureFixture) -> None:
             assert df.shape[1] == 1152 + 1
 
 
+@pytest.mark.fast
 def test_main_vision(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         dses = VisionTestingDataset.get_all_cls()
@@ -183,6 +189,7 @@ def test_main_vision(capsys: CaptureFixture) -> None:
                     raise RuntimeError(f"Got exception for dataset: {ds.name}") from e
 
 
+@pytest.mark.fast
 def test_main_nlp(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         for ds in tqdm(NLPTestingDataset.get_all(), desc="Processing NLP datasets"):
@@ -196,6 +203,7 @@ def test_main_nlp(capsys: CaptureFixture) -> None:
                     raise RuntimeError(f"Got exception for dataset: {ds.name}") from e
 
 
+@pytest.mark.fast
 def test_download_models(capsys: CaptureFixture) -> None:
     with capsys.disabled():
         download_models()
