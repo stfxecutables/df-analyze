@@ -76,7 +76,7 @@ python -m pip install \
     pandas \
     pyarrow \
     pytest \
-    pytest-xdist[psutil] \
+    "pytest-xdist[psutil]" \
     python-dateutil \
     scikit-image \
     scikit-learn \
