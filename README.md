@@ -109,10 +109,10 @@ Don't be shy about asking for help in the
 
 For students encountering `df-analyze` through a course, see the [student
 README](https://github.com/stfxecutables/df-analyze/blob/experimental/docs/students.md)
-in this repo. The student README contains some descriptions and tips that are
-helpful for those just starting to learn about the CLI, containers, AutoML
-tools, and also some explanations and tips for running `df-analyze` on SLURM
-High-Performance Computing (HPC) clusters, particularly the [Digitial
+[WIP!] in this repo. The student README contains some descriptions and tips
+that are helpful for those just starting to learn about the CLI, containers,
+AutoML tools, and also some explanations and tips for running `df-analyze` on
+SLURM High-Performance Computing (HPC) clusters, particularly the [Digitial
 Research Alliance of Canada (formerly Compute Canada)
 clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
@@ -142,7 +142,7 @@ for the install script to work, but then the script will compile Python
 you run
 
 ```sh
-bash local_instal.sh
+bash local_install.sh
 ```
 
 Then, you can activate the installed virtual environment by running
