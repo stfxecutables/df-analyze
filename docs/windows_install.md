@@ -11,7 +11,7 @@ You must use PowerShell for all commands, not cmd.exe.
 
 1. Install [`pyenv-win`](https://github.com/pyenv-win/pyenv-win?tab=readme-ov-file#quick-start)
    by doing the following steps, in order:
-   1. `Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"`
+   1. In PowerShell, run: `Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"`
    2. Reopen PowerShell
    3. Run `pyenv --version` to check if the installation was successful.
    4. Run `pyenv install 3.12.5`
