@@ -33,9 +33,9 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
     python df-analyze.py \\
         --df weather_data.json \\
         --target temperature \\
-        --categoricals weekday season \\
+        --categoricals weekday,season \\
         --ordinals rainfall_mm \\
-        --drops date sample_id \\
+        --drops date,sample_id \\
         --mode=regress \\
         --regressors=elastic lgbm knn \\
         --feat-select wrap embed filter \\
@@ -96,19 +96,27 @@ classification.
 CATEGORICAL_HELP_STR = """
 A string or list of strings, e.g.
 
-    --categoricals sex gender ancestry education
+    --categoricals sex,gender,ancestry,education
 
 that specifies which features will be treated as categorical regardless of the
 number of levels or format of the data. If during data cleaning categorical
 variables are detected that are NOT specified by the user, a warning will be
 raised.
 
+Commas currently must be used to separate feature names: spaces will be
+considered to be part of the feature name, i.e. if you pass:
+
+    --categoricals sex,gender, ancestry,education
+
+this will parse as the features "sex", "gender", " ancestry" (note space!),
+and "education".
+
 """
 
 ORDINAL_HELP_STR = """
 A string or list of strings, e.g.
 
-    --ordinals star_rating number_of_purchases times_signed_in
+    --ordinals star_rating,number_of_purchases,times_signed_in
 
 that specifies which features will be treated as ordinal regardless of the
 number of levels or format of the data. If during data cleaning ordinal
@@ -116,16 +124,20 @@ variables are detected that are NOT specified by the user, a warning will be
 raised. If the values of the specified variables cannot be interpreted as
 integers, then df-analyze will exit with an error.
 
+See documentation for `--categoricals` re: the use of commas to list features.
+
 """
 
 DROP_HELP_STR = """
 A string or list of strings, e.g.
 
-    --drops subject_id location_id useless_feature1 useless_feat2
+    --drops subject_id,location_id,useless_feature1,useless_feat2
 
 that specifies which features will be removed from the data and not considered
 for any inspection, description or univariate analysis, and which will not be
 included in any feature selection, model tuning, or final predictive models.
+
+See documentation for `--categoricals` re: the use of commas to list features.
 
 """
 

@@ -228,6 +228,12 @@ can see what the `--help` option outputs
 but keep mind the actual outputs of the `--help` command are less likely to
 be out of date.
 
+For documentation of the embedding functionality, run:
+
+```shell
+python df-embed.py --help
+```
+
 
 ## Quick Start and Examples
 
