@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional, Union, cast, overload
 
 import pandas as pd
+from pandas import Series
 import torch
 from pandas import DataFrame
 from torch import Tensor
@@ -46,6 +47,64 @@ def get_model(
     else:
         raise ValueError(f"Unrecognized modality: {modality}")
 
+def get_nlp_tokenizations(
+    ds: NLPDataset,
+    tokenizer: XLMRobertaTokenizerFast,
+    load_limit: Optional[int] = None,
+    num_texts: Optional[int] = None,
+) -> DataFrame:
+    X = ds.X(limit=load_limit)
+    y = ds.y(limit=load_limit)
+
+    # Each input text should start with "query: " or "passage: ", even for
+    # non-English texts. For tasks other than retrieval, you can simply use
+    # the "query: " prefix. See also the discussion for this model on HF, but
+    # the TL;DR is basically that it doesn't matter too much which you prepend,
+    # but empirically, using "query: " seems to give better performance overall
+    all_texts = X.apply(lambda text: f"query: {text}").tolist()
+    if num_texts is not None:
+        all_texts = all_texts[:num_texts]
+        y = y.iloc[:num_texts]
+
+    # Tokenize the input texts
+    # batch_dict is:
+    # { input_ids: Tensor[B, N], attention_mask: Tensor[B, N] }
+    #
+    # B = batch size, i.e. number of samples
+    # N = max number of tokens in longest sequence of tokens in batch
+    #
+    # input_ids has the tokens as integers (ones seem to be padding), i.e. is
+    # the tokenization of the input. This of course will only be loosely
+    # correlated with word count or etc.
+    #
+    # attention_mask is a boolean where mask[i, :] is such that for input i,
+    # mask[i] is all ones up to number of non-masking tokens in input_ids
+    all_tokenizations = []
+    with torch.no_grad():
+        for i, text in enumerate(all_texts):
+            bd = batch_dict = tokenizer(
+                text,
+                max_length=512,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            )
+            mask = batch_dict["attention_mask"]
+            assert isinstance(mask, Tensor)
+            batch_dict["texts"] = text
+            df = DataFrame(  # allow insert NumPy arrays without wrapping in []
+                {
+                    "token_ids": Series(dtype="object"),
+                    "mask": Series(dtype="object"),
+                    "text": Series(dtype="str"),
+                 }, index=[i]
+            )
+            df.loc[i, "token_ids"] = bd["input_ids"].ravel().numpy()
+            df.loc[i, "mask"] = bd["attention_mask"].ravel().numpy()
+            df.loc[i, "text"] = text
+            all_tokenizations.append(df)
+
+    return pd.concat(all_tokenizations, axis=0)
 
 def get_nlp_embeddings(
     ds: NLPDataset,
