@@ -52,7 +52,7 @@ python -m venv .venv
 This creates a virtual environment directory `.venv` in the `df-analyze`
 directory. Now, we need to activate this virtual environment (i.e. tell
 PowerShell to use the Python binary and libraries contained in the local
-`.venv` folder rather than the global python 3.12.5 installatio files).
+`.venv` folder rather than the global python 3.12.5 installation files).
 In order to this, it is best to first set some permissions by running:
 
 ```powershell
@@ -61,6 +61,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 It might be a good idea to restart PowerShell after running this command.
 
+## Activating the Virtual Environment
 
 The environment can then be activated by running one of:
 
@@ -92,7 +93,8 @@ or
 (get-command python).Path
 ```
 
-You should see something like `df-analyze/.venv/bin/python.exe` somehwere in the output.
+You should see something like `df-analyze/.venv/bin/python.exe` somewhere in the output.
+If you do, virtual environment creation was a success.
 
 # Installing Libraries to the Virtual Environment
 
@@ -117,6 +119,14 @@ python df-analyze.py --help
 ```
 
 This should produce the documentation for the `df-analyze` tabular prediction interface.
+
+# After Installation
+
+Anytime you open PowerShell and navigate to the `df-analyze` directory, you will have
+to [activate the virtual environment](#activating-the-virtual-environment) prior to
+running `df-analyze`. But you won't have to do any of the other install procedures again.
+
+
 
 
 
