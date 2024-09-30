@@ -7,14 +7,8 @@
   - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
   - [Local Install by Shell Script](#local-install-by-shell-script)
-  - [Windows Support](#windows-support)
-    - [Installing Latest / Development Releases](#installing-latest--development-releases)
-    - [Installing Editable (`pip install -e`)](#installing-editable-pip-install--e)
-  - [\[WIP\] With Rye](#wip-with-rye)
-  - [\[DEPRECATED\] By Poetry](#deprecated-by-poetry)
-    - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
-  - [By `pip` (in case of Poetry issues)](#by-pip-in-case-of-poetry-issues)
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
+  - [Windows Support](#windows-support)
 - [Usage](#usage)
   - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
@@ -140,17 +134,24 @@ build](#building-the-singularity-container) for a Linux-based system,
 
 After having cloned the repo, the
 [`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
-script is rather minimal and can be used to install the supported Python
-version (through [`pyenv`](https://github.com/pyenv/pyenv) or
-[`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) and
-dependencies. This *should* work on MacOS / Apple Silicon, and most major
+script can be used to install the dependencies for `df-analyze`. You will
+need to first install [`pyenv`](https://github.com/pyenv/pyenv) (or
+[`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) in order
+for the install script to work, but then the script will compile Python
+3.12.5 and create a virtual environment with the necessary dependencies when
+you run
+
+```sh
+bash local_instal.sh
+```
+
+This *should* work on MacOS / Apple Silicon, and most major and up-to-date
 Linux distributions, and on Windows in the Windows Subsystem for Linux (WSL).
 However, Windows users wishing to avoid using the WSL should adapt the
 [install
 script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
 for their needs.
 
-To attempt to setup
 
 <!-- ## Quickstart With `pip`
 
@@ -170,6 +171,15 @@ df-analyze --help
 to see usage and available options. -->
 
 
+
+## By Singularity / Apptainer Container
+
+Alternately, [build the Singularity / Apptainer
+container](#building-the-singularity-container) and use this for running any
+code that uses `df-analyze`. This should work on any Linux system (including
+HPC systems / clusters like Compute Canada / DRAC).
+
+
 ## Windows Support
 
 At the moment, there is no real capacity to test `df-analyze` on Windows
@@ -187,103 +197,6 @@ This is of course unfair to owners of Windows machines looking to get into
 ML/DL,, but the reality is, anyone serious either dual-boots, uses a VM, or
 otherwise ejects from Windows for core functionality in order to do serious
 computing. , because this is the only thing that works
-
-### Installing Latest / Development Releases
-
-
-To install the `develop` branch from the latest GitHub commit:
-
-```sh
-python -m pip install git+https://github.com/stfxecutables/df-analyze/@develop
-```
-
-**Note**: This branch is really only intended for developers, and should not be
-relied upon for stability.
-
-
-### Installing Editable (`pip install -e`)
-
-`df-analyze` is currently only distributed as a wheel
-
-
-## [WIP] With Rye
-
-This project recently transitioned to [Rye](https://rye-up.com/).
-
-
-## [DEPRECATED] By Poetry
-
-This project uses Poetry to manage dependencies, so if you want to reproduce
-the results you should [install Poetry](https://python-poetry.org/docs/).
-The project currently requires python 3.9 or python 3.10 to be installed.
-After installing Poetry, clone this repo:
-
-```shell
-git clone https://github.com/stfxecutables/df-analyze.git
-cd df-analyze
-```
-
-Then you can install dependencies and activate the venv with:
-
-```shell
-poetry config virtualenvs.in-project true
-poetry install --no-root  # setup virtual environment in project
-poetry shell  # activate venv
-```
-
-You will see a lot of warnings spam of the form:
-
-```txt
-Resolving dependencies... (47.1s)Source (pytorch): Authorization error
-```
-
-These can be ignored and is due to a hack to get PyTorch to install on
-different operating systems.
-
-While not strictly necessary, the setting the virtual environments to be
-in-project can prevent some permission issues or issues with Poetry choosing
-a bad default location on some machines and/or Compute Canada.
-
-
-### Installing a Compatible Python Version
-
-If you don't have an updated python version, you might want to look into
-[`pyenv`](https://github.com/pyenv/pyenv), which makes it very easy to install
-and switch between multiple python versions. For example, if you install
-`pyenv`, then you can install a version of python compatible with `df-analyze`
-by simply running
-
-```shell
-pyenv install 3.10.12
-```
-
-Then, running the poetry install commands above *should* automatically find
-this Python version.
-
-
-## By `pip` (in case of Poetry issues)
-
-If there is an issue with the poetry install process, as a fallback, you can
-try creating a new virtual environment and installing the versions listed in
-the `requirements.txt` file:
-
-```shell
-python3 -m venv .venv                      # create a virtual environment
-source .venv/bin/activate                  # activate environment
-python -m pip install -r requirements.txt  # install requirements
-```
-
-Note the above assumes that the `python3` command is a Python 3.9 or 3.10
-version, which you could check by running `python3 --version` beforehand.
-Also, the `requirements.txt` file does not specify versions (!!), so expect
-things to break with this approach...
-
-## By Singularity / Apptainer Container
-
-Alternately, [build the Singularity
-container](#building-the-singularity-container) and use this for running any
-code that uses `df-analyze`.
-
 
 # Usage
 
