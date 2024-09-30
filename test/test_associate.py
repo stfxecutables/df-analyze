@@ -16,9 +16,9 @@ from typing import Optional
 import numpy as np
 import pytest
 
-from src._constants import TEST_RESULTS
-from src.analysis.univariate.associate import AssocResults
-from src.testing.datasets import (
+from df_analyze._constants import TEST_RESULTS
+from df_analyze.analysis.univariate.associate import AssocResults
+from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     TestDataset,
     fast_ds,

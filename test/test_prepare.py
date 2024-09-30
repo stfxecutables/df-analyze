@@ -15,7 +15,7 @@ from pandas import DataFrame
 from sklearn.utils.validation import check_X_y
 from tqdm import tqdm
 
-from src.testing.datasets import (
+from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     TestDataset,
     fast_ds,

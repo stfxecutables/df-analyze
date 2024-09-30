@@ -22,22 +22,22 @@ import numpy as np
 from numpy import ndarray
 from pandas import DataFrame, Series
 
-from src.cli.cli import ProgramOptions
-from src.hypertune import EvaluationResults
-from src.preprocessing.inspection.inspection import InspectionResults
-from src.selection.embedded import EmbedSelected
-from src.selection.wrapper import WrapperSelected
-from src.testing.datasets import TestDataset, all_ds
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.hypertune import EvaluationResults
+from df_analyze.preprocessing.inspection.inspection import InspectionResults
+from df_analyze.selection.embedded import EmbedSelected
+from df_analyze.selection.wrapper import WrapperSelected
+from df_analyze.testing.datasets import TestDataset, fast_ds
 
 
-@all_ds
+@fast_ds
 def test_random_options(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     for _ in range(100):
         ProgramOptions.random(ds)
 
 
-@all_ds
+@fast_ds
 def test_hashing(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     for _ in range(100):
@@ -77,13 +77,15 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
         return True
     elif isinstance(obj1, ndarray) and isinstance(obj2, ndarray):
         return (obj1.ravel().round(8) == obj2.ravel().round(8)).all()
-    elif isinstance(obj1, (DataFrame, Series)) and isinstance(obj2, (DataFrame, Series)):
+    elif isinstance(obj1, (DataFrame, Series)) and isinstance(
+        obj2, (DataFrame, Series)
+    ):
         return np.all((obj1.round(8).values == obj2.round(8).values)).item()
     else:
         return obj1 == obj2
 
 
-@all_ds
+@fast_ds
 def test_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     try:
@@ -108,7 +110,7 @@ def test_json(dataset: Tuple[str, TestDataset]) -> None:
         raise e
 
 
-@all_ds
+@fast_ds
 def test_inspection_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     with TemporaryDirectory() as tempdir:
@@ -127,7 +129,7 @@ def test_inspection_json(dataset: Tuple[str, TestDataset]) -> None:
                 )
 
 
-@all_ds
+@fast_ds
 def test_embed_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     tempdir = TemporaryDirectory()
@@ -146,7 +148,7 @@ def test_embed_json(dataset: Tuple[str, TestDataset]) -> None:
             )
 
 
-@all_ds
+@fast_ds
 def test_wrap_json(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     tempdir = TemporaryDirectory()
@@ -165,7 +167,7 @@ def test_wrap_json(dataset: Tuple[str, TestDataset]) -> None:
             )
 
 
-@all_ds
+@fast_ds
 def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:

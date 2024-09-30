@@ -12,16 +12,17 @@ from tempfile import TemporaryDirectory
 from typing import Type, Union
 
 import pytest
+from pytest import CaptureFixture
 from cli_test_helpers import ArgvContext
 
-from src.analysis.univariate.associate import (
+from df_analyze.analysis.univariate.associate import (
     CatClsStats,
     CatRegStats,
     ContClsStats,
     ContRegStats,
 )
-from src.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
-from src.enumerables import (
+from df_analyze.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
+from df_analyze.enumerables import (
     ClsScore,
     DfAnalyzeClassifier,
     DfAnalyzeRegressor,
@@ -33,7 +34,7 @@ from src.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
-from src.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
+from df_analyze.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
 
 PATH = list(TEST_DATASETS.values())[0].datapath
 
@@ -45,7 +46,7 @@ def test_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "one two three",
+        "one,two,three",  # spaces are allowed but count in names; commas separate
     ):
         # opts = get_options(f"--df {PATH} --categoricals one two three")
         opts = get_options()
@@ -61,7 +62,7 @@ def test_quoted_classifiers() -> None:
         "--df",
         f"{PATH}",
         "--categoricals",
-        "'a one' 'a two'",
+        "a one,a two",
         "--verbosity",
         "0",
     ):
@@ -93,6 +94,7 @@ def test_random_types(dataset: tuple[str, TestDataset]) -> None:
         "separator": (str,),
         "verbosity": (Verbosity,),
         "no_warn_explosion": (bool,),
+        "no_preds": (bool,),
     }
     comparables: dict[str, tuple[Union[EnumMeta, Type[None]], ...]] = {
         "feat_select": (FeatureSelection,),

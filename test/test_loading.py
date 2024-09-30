@@ -9,20 +9,19 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import pytest
 
-from src._constants import (
+from df_analyze._constants import (
     COMPLEX_XLSX,
     COMPLEX_XLSX2,
     SIMPLE_CSV,
     SIMPLE_CSV2,
     SIMPLE_XLSX,
 )
-from src.cli.cli import ProgramOptions
-from src.loading import load_csv, load_excel
-from src.testing.datasets import ALL_DATASETS, TestDataset, all_ds
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.loading import load_csv, load_excel
+from df_analyze.testing.datasets import ALL_DATASETS, TestDataset, all_ds
 
 
-def generate_spreadsheet(tempdir: Path) -> Path:
-    ...
+def generate_spreadsheet(tempdir: Path) -> Path: ...
 
 
 @pytest.mark.fast
@@ -39,7 +38,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX)
     assert (
         meta
-        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan median --norm robust --classifiers knn lgbm dummy --feat-select filter embed"
+        == "--outdir ./results --target y --mode classify --categoricals s,x0 --nan median --norm robust --classifiers knn lgbm dummy --feat-select filter embed"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)
@@ -48,7 +47,7 @@ def test_complex_xlsx_loading() -> None:
     df, meta = load_excel(COMPLEX_XLSX2)
     assert (
         meta
-        == "--outdir ./results --target y --mode classify --categoricals s x0 --nan mean --norm minmax --classifiers knn lgbm dummy --feat-select filter wrap"
+        == "--outdir ./results --target y --mode classify --categoricals s,x0 --nan mean --norm minmax --classifiers knn lgbm dummy --feat-select filter wrap"
     )
     assert list(df.columns) == ["s", "x0", "x1", "x2", "x3", "y"]
     dtypes = list(df.dtypes)

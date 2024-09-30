@@ -24,10 +24,11 @@ Include: apt
 
     PYENV=/root/.pyenv/bin/pyenv
     echo "================================================================================="
-    echo "Installing Python 3.10.12 via pyenv"
+    echo "Installing Python 3.12.5 via pyenv"
     echo "================================================================================="
-    "$PYENV" install 3.10.12
-    PYTHON=/root/.pyenv/versions/3.10.12/bin/python
+    "$PYENV" install 3.12.5
+    PYTHON=/root/.pyenv/versions/3.12.5/bin/python
+    PYTEST=/root/.pyenv/versions/3.12.5/bin/pytest
 
     mkdir -p /app
     cd /app
@@ -43,36 +44,55 @@ Include: apt
     echo "================================================================================="
     echo "Installing Python libraries"
     echo "================================================================================="
-    "$PYTHON" -m pip install arrow \
-        coverage \
-        featuretools \
+    "$PYTHON" -m pip install \
+        cli-test-helpers \
         joblib \
+        jsonpickle \
+        lightgbm \
+        llvmlite \
         matplotlib \
+        numba \
         numpy \
+        openpyxl \
         optuna \
         pandas \
+        pyarrow \
         pytest \
+        pytest-xdist[psutil] \
+        python-dateutil \
+        scikit-image \
         scikit-learn \
         scipy \
+        seaborn \
+        statsmodels \
         tabulate \
-        typing-extensions \
-        python-dateutil \
-        ucimlrepo \
-        lightgbm \
-        openpyxl \
-        fastparquet \
-        openml \
-        pytest-xdist[psutil] \
-        jsonpickle \
-        typing_extensions || echo "Failed to install some python libs"
+        torch \
+        torchaudio \
+        torchvision \
+        tqdm \
+        typing_extensions \
+        || echo "Failed to install some python libs"
 
-    "$PYTHON" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu || echo "Failed to install torch libs"
+    echo "================================================================================="
+    echo "Installing some libs separately because pip is trashy"
+    echo "================================================================================="
+
     "$PYTHON" -m pip install skorch || echo "Failed to install skorch"
+    # "$PYTHON" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu || echo "Failed to install torch libs"
+
+    "$PYTHON" -m pip install \
+        'transformers[torch]' \
+        accelerate \
+        'datasets[vision]' \
+        protobuf \
+        sentencepiece \
+        || echo "Failed to install HuggingFace dependencies"
 
 %environment
     export VENV=/app/.venv
     export ACTIVATE=$VENV/bin/activate
     export PYTHON=/app/.venv/bin/python
+    export PYTEST=/app/.venv/bin/pytest
 
 %runscript
     # Note for local development we can manually change this after building
@@ -86,7 +106,7 @@ Include: apt
 
 
 ###############################################################################
-#                             App: Python testing                             #
+#                          App: Python CUDA testing                           #
 ###############################################################################
 
 %apprun cuda-test
@@ -102,7 +122,44 @@ Include: apt
 
 
 ###############################################################################
-#            App: Pass arbitrary args to 3.10.12 python installation           #
+#                              App: Shell Script                              #
+###############################################################################
+
+%apprun bash
+    source "$ACTIVATE"
+    echo -n "Using "
+    python --version
+    echo -n "Using "
+    pytest --version
+    /bin/bash $*
+
+%apphelp bash
+    Run shell script (/bin/bash $*) with container Python virtual env activated
+
+    USAGE:
+        apptainer run --app bash debian_app.sif [full path to shell script]
+
+
+###############################################################################
+#                                PyTest Stuff                                 #
+###############################################################################
+
+%apprun pytest-rebuild
+    echo -n "Using "
+    "$PYTHON" --version
+    echo -n "Using "
+    "$PYTEST" --version
+    bash test/rebuild_test_cache.sh
+
+%apphelp pytest-rebuild
+    Rebuild test cache. Should be run prior to running the testing app
+
+    USAGE:
+        apptainer run --app pytest-rebuild debian_app.sif
+
+
+###############################################################################
+#            App: Pass arbitrary args to 3.12.5 python installation           #
 ###############################################################################
 
 %apprun python
@@ -111,7 +168,7 @@ Include: apt
     "$PYTHON" $*
 
 %apphelp python
-    Run python using the 3.10.12 python virtual env setup with arbitrary args.
+    Run python using the 3.12.5 python virtual env setup with arbitrary args.
 
     USAGE:
         apptainer run --app python debian_app.sif PYTHON_PROGRAM_ARGS

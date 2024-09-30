@@ -15,7 +15,7 @@ import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.model_selection import ParameterGrid
 
-from src.models.lgbm import LightGBMRegressor
+from df_analyze.models.lgbm import LightGBMRegressor
 
 FILES = sorted(Path(__file__).resolve().parent.glob("*.txt"))
 
@@ -27,7 +27,9 @@ def extrapolate() -> None:
         "n_iter": [10],
     }
     args = [
-        DataFrame({"N_sub": arg["N_sub"], "p": arg["p"], "n_iter": arg["n_iter"]}, index=[i])
+        DataFrame(
+            {"N_sub": arg["N_sub"], "p": arg["p"], "n_iter": arg["n_iter"]}, index=[i]
+        )
         for i, arg in enumerate(ParameterGrid(grid))
     ]
     X_test = pd.concat(args, axis=0)
@@ -45,7 +47,9 @@ def extrapolate() -> None:
         print(f"MAE: {mae.round(3)}")
         print("Extrapolated:")
         print(
-            df_ex.round(3).sort_values(by="minutes", ascending=False).to_markdown(tablefmt="simple")
+            df_ex.round(3)
+            .sort_values(by="minutes", ascending=False)
+            .to_markdown(tablefmt="simple")
         )
 
 
@@ -62,7 +66,11 @@ if __name__ == "__main__":
         df.insert(0, "direction", direction)
         df.insert(0, "model", model)
         df["dsname"] = df["dsname"].apply(lambda s: s[:20])
-        print(df.round(3).sort_values(by="minutes", ascending=False).to_markdown(tablefmt="simple"))
+        print(
+            df.round(3)
+            .sort_values(by="minutes", ascending=False)
+            .to_markdown(tablefmt="simple")
+        )
         dfs.append(df)
     df = pd.concat(dfs, axis=0)
     largest = (
@@ -70,7 +78,8 @@ if __name__ == "__main__":
         .apply(lambda grp: grp.nlargest(5, "minutes"))
         .reset_index(drop=True)
         .sort_values(
-            by=["model", "direction", "subsample", "minutes"], ascending=[True, False, False, False]
+            by=["model", "direction", "subsample", "minutes"],
+            ascending=[True, False, False, False],
         )
     )
     smallest = (
@@ -78,7 +87,8 @@ if __name__ == "__main__":
         .apply(lambda grp: grp.nsmallest(5, "minutes"))
         .reset_index(drop=True)
         .sort_values(
-            by=["model", "direction", "subsample", "minutes"], ascending=[True, False, False, False]
+            by=["model", "direction", "subsample", "minutes"],
+            ascending=[True, False, False, False],
         )
     )
     idx_keep = df["minutes"] != np.inf

@@ -8,10 +8,9 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-
 import numpy as np
 
-from src.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
+from df_analyze.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
 
 @fast_ds

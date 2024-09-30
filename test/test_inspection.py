@@ -17,13 +17,13 @@ import numpy as np
 import pytest
 from pandas import DataFrame
 
-from src.preprocessing.inspection.inspection import (
+from df_analyze.preprocessing.inspection.inspection import (
     get_str_cols,
     inspect_data,
     inspect_str_columns,
     inspect_target,
 )
-from src.testing.datasets import (
+from df_analyze.testing.datasets import (
     TEST_DATASETS,
     TestDataset,
     all_ds,

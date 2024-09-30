@@ -3,28 +3,36 @@
 ################################################################################
 data/*.csv
 data/*.rar
-data/testing/**/*.csv
-data/testing/**/*.txt
-data/testing/**/*.parquet
-data/**/*.tar.gz
+data/**/*.gz
+data/buggy
 data/testing/__*_CACHE__
-data/testing/__TEST*
 data/testing/__FULL*
+data/testing/__TEST*
+data/testing/**/*.csv
+data/testing/**/*.parquet
+data/testing/**/*.txt
 
-test_results
-
-cc_results
-results/reports
-runtimes/*.txt
+*data*
+*results*
 *runtime*txt
 
+cmc_ata
+downloaded_models
+runtimes/*.txt
+
+secrets
+
 __cache__
+__JOBLIB_CACHE__
 .mplconfig
 mplconfig
 
 poetry.lock
 
+*.sh
+
 **/*.csv
+**/*.gz
 **/*.json
 **/*.md
 **/*.npy
@@ -35,6 +43,15 @@ poetry.lock
 **/*.txt
 **/*.xlsx
 **/*.zip
+
+# research scripts
+calibration.py
+clean_logfiles.py
+gen_student_scripts.py
+generate_jobscripts.py
+run_slow.py
+run.py
+traffic.py
 
 
 ################################################################################

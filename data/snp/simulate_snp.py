@@ -41,9 +41,9 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from tqdm import tqdm
 from typing_extensions import Literal
 
-from src.enumerables import ClassifierScorer
-from src.models.dummy import DummyClassifier
-from src.models.lgbm import LightGBMClassifier
+from df_analyze.enumerables import ClassifierScorer
+from df_analyze.models.dummy import DummyClassifier
+from df_analyze.models.lgbm import LightGBMClassifier
 
 DATA = Path(__file__).resolve().parent
 

@@ -4,16 +4,20 @@
 # Contents
 
 - [Overview](#overview)
+  - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
-  - [By Poetry](#by-poetry)
-    - [Installing a Compatible Python Version](#installing-a-compatible-python-version)
-  - [By `pip` (in case of Poetry issues)](#by-pip-in-case-of-poetry-issues)
+  - [Local Install by Shell Script](#local-install-by-shell-script)
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
+  - [Windows Support](#windows-support)
 - [Usage](#usage)
   - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
     - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
       - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
+  - [Embedding Functionality](#embedding-functionality)
+    - [Supported Dataset Formats](#supported-dataset-formats)
+      - [Image Data](#image-data)
+      - [Text Data](#text-data)
   - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
     - [Building the Singularity Container](#building-the-singularity-container)
 - [Analysis Pipeline](#analysis-pipeline)
@@ -60,8 +64,8 @@
 
 `df-analyze` is a command-line tool for perfoming
 [AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
-on small to medium-sized tabular datasets. In particular, `df-analyze`
-attempts to automate:
+on small to medium-sized tabular datasets (less than about 200 000 samples,
+and less than about 50 to 100 features). `df-analyze` attempts to automate:
 
 - feature type inference
 - feature description (e.g. univariate associations and stats)
@@ -72,6 +76,13 @@ attempts to automate:
 - model selection and validation
 
 and saves all key tables and outputs from this process.
+
+**\*\*UPDATE - September 30 2024\*\*** Now, `df-analyze` supports [zero-shot
+embedding](#embedding-functionality) of image and text data via the
+`df-embed.py` script. This allows the conversion of [correctly
+formatted](#supported-dataset-formats) image and text datasets into tabular
+data that can be handled by the standard `df-analyze` tabular prediction
+tools.
 
 Currently, siginifcant efforts have been made to make `df-analyze` robust to
 a wide variety of tabular datasets. However, there are some significant
@@ -87,95 +98,121 @@ If you have any questions about:
 - contributing to `df-analyze`
 - anything else that you think is relevant to the `df-analyze` software
   specifically (and not course-related issue or complaints, if encountering
-  `df-analyze` as part of a university/college course)
+  `df-analyze` as part of a [university/college
+  course](#for-students-or-novices-to-machine-and-deep-learning))
 
 Don't be shy about asking for help in the
 [Discussions](https://github.com/stfxecutables/df-analyze/discussions)!
 
 
+## For Students or Novices to Machine and Deep Learning
+
+For students encountering `df-analyze` through a course, see the [student
+README](https://github.com/stfxecutables/df-analyze/blob/experimental/docs/students.md)
+in this repo. The student README contains some descriptions and tips that are
+helpful for those just starting to learn about the CLI, containers, AutoML
+tools, and also some explanations and tips for running `df-analyze` on SLURM
+High-Performance Computing (HPC) clusters, particularly the [Digitial
+Research Alliance of Canada (formerly Compute Canada)
+clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
+
+
 
 # Installation
 
-Currently, `df-analyze` is distributed as a Python script / scripts. This
-means, unless you are interested in [building and using a
-container](#by-singularity--apptainer-container), that you will need to have
-a compatible Python version installed on your machine.
+Currently, `df-analyze` is distributed as Python scripts dependent on the
+contents of this repository. So, to run `df-analyze`, you will generally have
+to clone this repository, and either install a compatible virtual
+environment or build a container to make use of `df-anaylze`.
+I.e. you must choose between a (hopefully platform-agnostic) [local
+install](#local-install-by-shell-script) versus a [container
+build](#building-the-singularity-container) for a Linux-based system,
 
 
 
-## By Poetry
+## Local Install by Shell Script
 
-This project uses Poetry to manage dependencies, so if you want to reproduce
-the results you should [install Poetry](https://python-poetry.org/docs/).
-The project currently requires python 3.9 or python 3.10 to be installed.
-After installing Poetry, clone this repo:
+After having cloned the repo, the
+[`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+script can be used to install the dependencies for `df-analyze`. You will
+need to first install [`pyenv`](https://github.com/pyenv/pyenv) (or
+[`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) in order
+for the install script to work, but then the script will compile Python
+3.12.5 and create a virtual environment with the necessary dependencies when
+you run
 
-```shell
-git clone https://github.com/stfxecutables/df-analyze.git
-cd df-analyze
+```sh
+bash local_instal.sh
 ```
 
-Then you can install dependencies and activate the venv with:
+Then, you can activate the installed virtual environment by running
 
-```shell
-poetry config virtualenvs.in-project true
-poetry install --no-root  # setup virtual environment in project
-poetry shell  # activate venv
+```sh
+source .venv/bin/activate
 ```
 
-You will see a lot of warnings spam of the form:
+in your shell (or by running `.venv/scripts/activate` on Windows -  see also
+[here](https://virtualenv.pypa.io/en/legacy/userguide.html#activate-script)
+if you run into permission issues when doing this). You should be able to see
+if the install working by running:
 
-```txt
-Resolving dependencies... (47.1s)Source (pytorch): Authorization error
+```sh
+python df-analyze.py --help
+
 ```
 
-These can be ignored and is due to a hack to get PyTorch to install on
-different operating systems.
+This install procedure *should* work on MacOS (including Apple Silicon, e.g.
+MX series macs), and on most major and up-to-date Linux distributions, and on
+Windows in the Windows Subsystem for Linux (WSL). However, Windows users
+wishing to avoid using the WSL should adapt the [install
+script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+for their needs.
 
-While not strictly necessary, the setting the virtual environments to be
-in-project can prevent some permission issues or issues with Poetry choosing
-a bad default location on some machines and/or Compute Canada.
 
+<!-- ## Quickstart With `pip`
 
-### Installing a Compatible Python Version
+To install, run:
 
-If you don't have an updated python version, you might want to look into
-[`pyenv`](https://github.com/pyenv/pyenv), which makes it very easy to install
-and switch between multiple python versions. For example, if you install
-`pyenv`, then you can install a version of python compatible with `df-analyze`
-by simply running
-
-```shell
-pyenv install 3.10.12
+```sh
+pip install df-analyze
 ```
 
-Then, running the poetry install commands above *should* automatically find
-this Python version.
+This should "just work", though this may not install the latest version. Then,
+to see the available options, just run:
 
-
-## By `pip` (in case of Poetry issues)
-
-If there is an issue with the poetry install process, as a fallback, you can
-try creating a new virtual environment and installing the versions listed in
-the `requirements.txt` file:
-
-```shell
-python3 -m venv .venv                      # create a virtual environment
-source .venv/bin/activate                  # activate environment
-python -m pip install -r requirements.txt  # install requirements
+```sh
+df-analyze --help
 ```
 
-Note the above assumes that the `python3` command is a Python 3.9 or 3.10
-version, which you could check by running `python3 --version` beforehand.
-Also, the `requirements.txt` file does not specify versions (!!), so expect
-things to break with this approach...
+to see usage and available options. -->
+
+
 
 ## By Singularity / Apptainer Container
 
-Alternately, [build the Singularity
-container](#building-the-singularity-container) and use this for running the
+Alternately, [build the Singularity / Apptainer
+container](#building-the-singularity-container) and use this for running any
+code that uses `df-analyze`. This should work on any Linux system (including
+HPC systems / clusters like Compute Canada / DRAC).
+
+
+## Windows Support
+
+At the moment, there is no real capacity to test `df-analyze` on Windows
+machines. Nowadays, the Windows Subsystem for Linux (WSL) generally works
+very well, so the [local install scripts](#local-install-by-shell-script)
+*should* just work there, as I have tried to avoid most platform-specific
 code.
 
+And, for better or worse, there is essentially zero real serious machine- or
+deep-learning development happening on or for WSL-free Windows anyway. The
+Windows OS is simply not even a contender in the machine- and deep-learning
+worlds—Windows OS is now mostly gaming + Microsoft Office.
+
+This is of course unfair to owners of Windows machines looking to get into
+ML/DL,, but the reality is, anyone serious either dual-boots, uses a VM, or
+otherwise ejects from Windows for core functionality in order to do serious
+computing. , because this is the only thing that works
 
 # Usage
 
@@ -303,6 +340,16 @@ results are saved to a separate subfolder (with a unique hash reflecting the
 unique combinations of options passed to `df-analyze`). This ensures data
 should be overwritten only if the exact same arguments are passed twice (e.g.
 perhaps if manually cleaning your data and re-running).
+
+
+## Embedding Functionality
+
+### Supported Dataset Formats
+
+#### Image Data
+
+#### Text Data
+
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
