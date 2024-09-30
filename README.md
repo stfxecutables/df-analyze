@@ -6,7 +6,9 @@
 - [Overview](#overview)
   - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
+  - [Local Install by Shell Script](#local-install-by-shell-script)
   - [Quickstart With `pip`](#quickstart-with-pip)
+  - [Windows Support](#windows-support)
     - [Installing Latest / Development Releases](#installing-latest--development-releases)
     - [Installing Editable (`pip install -e`)](#installing-editable-pip-install--e)
   - [\[WIP\] With Rye](#wip-with-rye)
@@ -82,7 +84,7 @@ and less than about 50 to 100 features). `df-analyze` attempts to automate:
 
 and saves all key tables and outputs from this process.
 
-**UPDATE - September 30 2024** Now, `df-analyze` supports [zero-shot
+**\*\*UPDATE - September 30 2024\*\*** Now, `df-analyze` supports [zero-shot
 embedding](#embedding-functionality) of image and text data via the
 `df-embed.py` script. This allows the conversion of [correctly
 formatted](#supported-dataset-formats) image and text datasets into tabular
@@ -125,21 +127,31 @@ clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
 # Installation
 
-Currently, `df-analyze` is distributed as a Python script / scripts. This
-means, unless you are interested in [building and using a
-container](#by-singularity--apptainer-container), that you will need to have
-a compatible Python version installed on your machine.
+Currently, `df-analyze` is distributed as Python scripts dependent on the
+contents of this repository. So, to run `df-analyze`, you will generally have
+to clone this repository, and either install a compatible virtual
+environment or build a container to make use of `df-anaylze`.
+I.e. you must choose between a (hopefully platform-agnostic) [local
+install](#local-install-by-shell-script) versus a [container
+build](#building-the-singularity-container) for a Linux-based system,
 
-At the moment, `df-analyze` is also under active development. I have no real
-capacity to test on Windows machines, and while I have tried to avoid
-platform-specific code, errors are likely to appear here.
 
-`df-analyze` is also currently in the process of transitioning to
-[Rye](https://rye-up.com/) for distribution. Rye itself is under active
-development, so bugs may arise here as Rye updates. If you do run into a
-problem, feel free to file an issue or make a
-[Discussions](https://github.com/stfxecutables/df-analyze/discussions) post.
 
+## Local Install by Shell Script
+
+The
+[`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+script can be used to install the supported Python version (through
+[`pyenv`](https://github.com/pyenv/pyenv) or
+[`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) and
+dependencies. This *should* work on MacOS (Apple Silicon, e.g. MX Mac) and
+most major Linux distributions, and on Windows in the Windows Subsystem for
+Linux (WSL). However, Windows users wishing to avoid using the WSL should
+adapt the [install
+script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+for their needs.
+
+To attempt to setup
 
 ## Quickstart With `pip`
 
@@ -157,6 +169,25 @@ df-analyze --help
 ```
 
 to see usage and available options.
+
+
+## Windows Support
+
+At the moment, there is no real capacity to test `df-analyze` on Windows
+machines. Nowadays, the Windows Subsystem for Linux (WSL) generally works
+very well, so the [local install scripts](#local-install-by-shell-script)
+*should* just work there, as I have tried to avoid most platform-specific
+code.
+
+And, for better or worse, there is essentially zero real serious machine- or
+deep-learning development happening on or for WSL-free Windows anyway. The
+Windows OS is simply not even a contender in the machine- and deep-learning
+worlds—Windows OS is now mostly gaming + Microsoft Office.
+
+This is of course unfair to owners of Windows machines looking to get into
+ML/DL,, but the reality is, anyone serious either dual-boots, uses a VM, or
+otherwise ejects from Windows for core functionality in order to do serious
+computing. , because this is the only thing that works
 
 ### Installing Latest / Development Releases
 
