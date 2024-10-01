@@ -391,7 +391,23 @@ class PreparedData:
             )
 
         if self.is_classification and np.bincount(y).min() < N_TARG_LEVEL_MIN:
-            raise ValueError(f"Target '{y.name}' has undersampled levels")
+            unqs, cnts = np.unique(y.to_numpy(), return_counts=True)
+            df = DataFrame(
+                index=pd.Index(data=unqs, name="Target Level"),
+                columns=["Count"],
+                data=cnts,
+            )
+            info = df.to_markdown(tablefmt="simple")
+            raise ValueError(
+                f"Target '{y.name}' has undersampled levels. This means that one or "
+                f"more of the target levels (classes) has less than {N_TARG_LEVEL_MIN} "
+                "samples, either before or after splitting into a holdout set. This is "
+                "simply far too few samples for meaningful generalization or stable "
+                "performance estimates, and means your data is far too small to use for "
+                "automated machine learning via df-analyze.\n\n"
+                "Observed target level counts:\n\n"
+                f"{info}"
+            )
 
         # Handle some BS due to stupid Pandas index behaviour
         X.reset_index(drop=True, inplace=True)
