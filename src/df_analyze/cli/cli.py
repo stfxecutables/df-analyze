@@ -31,6 +31,8 @@ from warnings import warn
 import jsonpickle
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
+
 from df_analyze._constants import (
     FULL_RESULTS,
     N_WRAPPER_DEFAULT,
@@ -65,6 +67,7 @@ from df_analyze.cli.text import (
     EXPLODE_HELP,
     FEAT_SELECT_HELP,
     FILTER_METHOD_HELP,
+    GROUP_HELP_STR,
     HTUNE_TRIALS_HELP,
     MODE_HELP_STR,
     N_FEAT_CAT_FILTER_HELP,
@@ -109,7 +112,6 @@ from df_analyze.enumerables import (
     WrapperSelectionModel,
 )
 from df_analyze.loading import load_spreadsheet
-from pandas import DataFrame
 
 if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
@@ -156,6 +158,7 @@ class ProgramOptions(Debug):
         self,
         datapath: Optional[Path],
         target: str,
+        grouper: Optional[str],
         categoricals: list[str],
         ordinals: list[str],
         drops: list[str],
@@ -203,6 +206,7 @@ class ProgramOptions(Debug):
         # other
         self.datapath: Optional[Path] = self.validate_datapath(datapath)
         self.target: str = target
+        self.grouper: Optional[str] = grouper
         self.categoricals: list[str] = categoricals
         self.ordinals: list[str] = ordinals
         self.drops: list[str] = drops
@@ -326,6 +330,7 @@ class ProgramOptions(Debug):
         return ProgramOptions(
             datapath=datapath,
             target="target",
+            grouper=None,
             categoricals=ds.categoricals if ds is not None else [],
             ordinals=[],
             drops=[],
@@ -557,6 +562,14 @@ def make_parser() -> ArgumentParser:
         type=str,
         default="target",
         help=TARGET_HELP_STR,
+    )
+    parser.add_argument(
+        "--grouper",
+        action="store",
+        nargs="+",  # allow spaces: https://stackoverflow.com/a/26990349,
+        type=str,
+        default=None,
+        help=GROUP_HELP_STR,
     )
     parser.add_argument(
         "--categoricals",
@@ -901,6 +914,8 @@ def get_parser_dict() -> ArgsDict:
         "--spreadsheet": (RandKind.Path, None),
         "--separator": (RandKind.Custom, None),
         "--target": (RandKind.Target, None),
+        # TODO do this properly for --grouper
+        "--grouper": (RandKind.Custom, None),
         "--categoricals": (RandKind.Columns, None),
         "--ordinals": (RandKind.Columns, None),
         "--drops": (RandKind.Columns, None),
@@ -1017,6 +1032,8 @@ def random_cli_args(
                 )
         elif (kind is RandKind.Custom) and (argstr == "--separator"):
             continue
+        elif (kind is RandKind.Custom) and (argstr == "--grouper"):
+            continue  # TODO: actually implement something here
         elif (kind is RandKind.Custom) and (argstr == "--redundant-threshold"):
             # just pick something that could work (though not well) for all metrics
             score = uniform(0, 0.1)
@@ -1124,6 +1141,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
+        grouper=" ".join(cli_args.grouper),  # https://stackoverflow.com/a/26990349,
         categoricals=sorted(cats),
         ordinals=sorted(ords),
         drops=cli_args.drops,

@@ -15,6 +15,7 @@ import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.model_selection import ParameterGrid
 
+from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.lgbm import LightGBMRegressor
 
 FILES = sorted(Path(__file__).resolve().parent.glob("*.txt"))
@@ -38,7 +39,8 @@ def extrapolate() -> None:
         y = df["minutes"]
         X = df.drop(columns=["dsname", "minutes", "N"])
         model = LightGBMRegressor()
-        model.htune_optuna(X, y, n_trials=200)
+        metric = RegressorScorer.default()
+        model.htune_optuna(X, y, None, metric, n_trials=200)
         preds = model.tuned_predict(X)
         mae = np.mean(np.abs(preds - y))
         extrapolate = Series(data=model.tuned_predict(X_test), name="minutes")

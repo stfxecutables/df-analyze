@@ -106,6 +106,7 @@ def main() -> None:
     categoricals = options.categoricals
     ordinals = options.ordinals
     drops = options.drops
+    grouper = options.grouper
     # joblib_cache = options.program_dirs.joblib_cache
     # if joblib_cache is not None:
     #     memory = Memory(location=joblib_cache)
@@ -118,11 +119,11 @@ def main() -> None:
     ordinals = renames.rename_columns(ordinals)
     drops = renames.rename_columns(drops)
 
-    df, inspection = inspect_data(df, target, categoricals, ordinals, drops, _warn=True)
+    df, inspection = inspect_data(df, target, grouper, categoricals, ordinals, drops, _warn=True)
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 
-    prepared = prepare_data(df, target, inspection, is_cls)
+    prepared = prepare_data(df, target, grouper, inspection, is_cls)
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
     prep_train, prep_test = prepared.split()

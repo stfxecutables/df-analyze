@@ -276,6 +276,7 @@ def drop_target_nans(
 def handle_continuous_nans(
     df: DataFrame,
     target: str,
+    grouper: Optional[str],
     results: InspectionResults,
     nans: NanHandling,
     add_indicators: bool = True,
@@ -299,7 +300,11 @@ def handle_continuous_nans(
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
     X_cat = df[cats].copy(deep=True)
     y = df[target]
+    g = None if grouper is None else df[grouper]
     df = df.drop(columns=target)
+    if g is not None:
+        df = df.drop(columns=grouper)
+
     X = df.drop(columns=results.drop_cols(), errors="ignore")
     X = X.drop(columns=cats, errors="ignore")  # now only cats and ords
 
@@ -348,10 +353,16 @@ def handle_continuous_nans(
         raise NotImplementedError(f"Unhandled enum case: {nans}")
 
     if add_indicators:
-        X = pd.concat([X_nan, X_cont, X_cat, y], axis=1)  # type: ignore
+        if g is None:
+            X = pd.concat([X_nan, X_cont, X_cat, y], axis=1)  # type: ignore
+        else:
+            X = pd.concat([X_nan, X_cont, X_cat, g, y], axis=1)  # type: ignore
         return X, X_cont, int(X_nan.shape[1])  # type: ignore
 
-    X = pd.concat([X_cont, X_cat, y], axis=1)
+    if g is None:
+        X = pd.concat([X_cont, X_cat, y], axis=1)
+    else:
+        X = pd.concat([X_cont, X_cat, g, y], axis=1)
     return X, X_cont, 0
 
 
@@ -470,6 +481,7 @@ def drop_unusable(
 
 def deflate_categoricals(
     df: DataFrame,
+    grouper: Optional[str],
     results: InspectionResults,
     _warn: bool = True,
 ) -> DataFrame:
@@ -477,6 +489,9 @@ def deflate_categoricals(
 
     infos = results.inflation
     infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
+    cols = [info.col for info in infos]
+    if (grouper is not None) and (grouper in cols):
+        raise RuntimeError(f"Found grouping column `{grouper}` in inspection info")
 
     for info in tqdm(
         infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 50
@@ -519,6 +534,7 @@ def deflate_categoricals(
 def encode_categoricals(
     df: DataFrame,
     target: str,
+    grouper: Optional[str],
     results: InspectionResults,
     warn_explosion: bool = True,
 ) -> tuple[DataFrame, DataFrame]:
@@ -535,10 +551,10 @@ def encode_categoricals(
 
     y = df[target]
     df = df.drop(columns=target)
-    df = convert_categoricals(df, target)
+    df = convert_categoricals(df, target, grouper=grouper)
     df = unify_nans(df)
     df = drop_unusable(df, results, _warn=False)
-    df = deflate_categoricals(df, results, _warn=warn_explosion)
+    df = deflate_categoricals(df, grouper, results, _warn=warn_explosion)
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
     X_cat = df.loc[:, cats].copy(deep=True)
     to_convert = cats
@@ -561,10 +577,21 @@ def encode_categoricals(
         # i.e. by using pd.get_dummies(..., dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
         new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)
+
         if new.columns.has_duplicates:
             dupes = new.columns[new.columns.duplicated()]
             raise ValueError(f"pd.get_dummies created duplicates: {dupes}")
-        new = convert_categoricals(new, target=target)
+
+        # TODO: the lines above: pd.get_dummies(... dummy_na=True, drop_first=True)
+        # IS BUGGED, and introduces an indicator column even when no NaN values
+        # are present! So we now need to manually drop any constant columns with
+        # with _nan in the title... I filed an issue:
+        #
+        # https://github.com/pandas-dev/pandas/issues/59968
+        #
+        # but likely this will be claimed as intended design.
+
+        new = convert_categoricals(new, target=target, grouper=grouper)
         new = new.astype(float)
     except (TypeError, ValueError) as e:
         raise RuntimeError(

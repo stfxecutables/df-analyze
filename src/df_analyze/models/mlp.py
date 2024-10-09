@@ -37,7 +37,6 @@ from optuna import Study, Trial
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
 from sklearn.model_selection import KFold, StratifiedKFold
-
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
@@ -61,6 +60,7 @@ from tqdm import tqdm
 from df_analyze._constants import SEED
 from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.splitting import OmniKFold
 
 """
 See:
@@ -367,18 +367,31 @@ class MLPEstimator(DfAnalyzeModel):
         return final_args
 
     def optuna_objective(
-        self, X_train: DataFrame, y_train: Series, metric: Scorer, n_folds: int = 3
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        g_train: Optional[Series],
+        metric: Scorer,
+        n_folds: int = 3,
     ) -> Callable[[Trial], float]:
         X, y = self._to_torch(X_train, y_train)
 
         def objective(trial: Trial) -> float:
-            kf = StratifiedKFold if self.is_classifier else KFold
-            _cv = kf(n_splits=5, shuffle=True, random_state=SEED)
+            kf = OmniKFold(
+                n_splits=n_folds,
+                is_classification=self.is_classifier,
+                grouped=g_train is not None,
+                labels=None,
+                warn_on_fallback=False,
+                df_analyze_phase="Tuning internal splits",
+            )
             opt_args = self.optuna_args(trial)
             model_args = self._to_model_args(opt_args, X_train)
             full_args = {**self.fixed_args, **self.default_args, **model_args}
             scores = []
-            for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
+            for step, (idx_train, idx_test) in enumerate(
+                kf.split(X_train, y_train, g_train)[0]
+            ):
                 X_tr, y_tr = X[idx_train], y[idx_train]
                 X_test, y_test = X[idx_test], y[idx_test]
                 estimator = self.model_cls(**full_args)
@@ -421,6 +434,7 @@ class MLPEstimator(DfAnalyzeModel):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
@@ -459,6 +473,7 @@ class MLPEstimator(DfAnalyzeModel):
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
+            g_train=g_train,
             metric=metric,
             n_trials=n_trials,
             verbosity=verbosity,

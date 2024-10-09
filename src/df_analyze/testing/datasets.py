@@ -16,6 +16,10 @@ import jsonpickle
 import numpy as np
 import pandas as pd
 import pytest
+from pandas import DataFrame, Series
+from sklearn.model_selection import train_test_split as tt_split
+from sklearn.preprocessing import KBinsDiscretizer
+
 from df_analyze._constants import TESTDATA
 from df_analyze.analysis.univariate.associate import AssocResults, target_associations
 from df_analyze.analysis.univariate.predict.predict import (
@@ -36,9 +40,6 @@ from df_analyze.preprocessing.inspection.inspection import (
     inspect_data,
 )
 from df_analyze.preprocessing.prepare import PreparedData, prepare_data
-from pandas import DataFrame, Series
-from sklearn.model_selection import train_test_split as tt_split
-from sklearn.preprocessing import KBinsDiscretizer
 
 CLASSIFICATIONS = TESTDATA / "classification"
 REGRESSIONS = TESTDATA / "regression"
@@ -93,7 +94,14 @@ class TestDataset:
         df = self.load()
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
-            df, results = inspect_data(df, "target", self.categoricals, [], _warn=False)
+            df, results = inspect_data(
+                df=df,
+                target="target",
+                grouper=None,
+                categoricals=self.categoricals,
+                ordinals=[],
+                _warn=False,
+            )
         if force:
             enc = str(jsonpickle.encode(results, keys=True))
             self.inspect_cachefile.write_text(enc)
@@ -122,7 +130,14 @@ class TestDataset:
 
         df = self.load()
         inspect = self.inspect(load_cached=not force)
-        prep = prepare_data(df, "target", inspect, self.is_classification)
+        grouper = None
+        prep = prepare_data(
+            df=df,
+            target="target",
+            grouper=grouper,
+            results=inspect,
+            is_classification=self.is_classification,
+        )
 
         if force:
             # enc = str(jsonpickle.encode(prep))
@@ -182,11 +197,16 @@ class TestDataset:
             results = self.inspect(load_cached=True)
             df = drop_unusable(df, results)
             df, X_cont, nan_ind = handle_continuous_nans(
-                df, target="target", results=results, nans=NanHandling.Median
+                df,
+                target="target",
+                grouper=None,
+                results=results,
+                nans=NanHandling.Median,
             )
             df = encode_categoricals(
                 df,
                 target="target",
+                grouper=None,
                 results=results,
             )[0]
             df = normalize(df, "target")
@@ -443,9 +463,10 @@ slow_ds = composed(
 )
 
 if __name__ == "__main__":
-    from df_analyze._constants import TEMPLATES
     from sklearn.model_selection import cross_val_score
     from sklearn.svm import SVC
+
+    from df_analyze._constants import TEMPLATES
 
     out = TEMPLATES / "binary_classification.csv"
     X, _, y, _ = fake_data("classify", N=300, C=25)

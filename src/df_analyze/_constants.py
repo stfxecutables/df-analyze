@@ -130,6 +130,95 @@ So far we use only 5-fold, so to guarantee one sample of each level in an
 internal fold, we need floor(N/25) > 1 ==> N > 25.
 """
 
+N_TARG_LEVEL_MIN_INTERNAL = N_TARG_LEVEL_MIN // 2
+"""
+Minimum required number of samples for level of a categorical target variable
+to be considered useful in internal 5-fold analyses.
+
+Notes
+-----
+Consider a binary classification problem with 20 samples per target level,
+i.e. src._constants.N_TARG_LEVEL_MIN condition (above in source code) is
+satisfied. After setting aside a holdout set of 50%, we have 10 samples per
+target level.
+
+With 5-fold, this means each train/test split has 8 train samples, and 2 test
+samples per target level, or, in total we train on 16 samples, test on 4
+samples, in the binary classification case. It is extremely dubious whether
+this procedure is statistically valid at all, since even under very broad
+assumptions in a priori power analysis, you generally are going to need 50-60
+samples (per cell or group) in order to have even a basic level of trust in
+even very simple and constrained linear modeling contexts, e.g. classical
+ANOVA and the like [1]:
+
+It is difficult to translate power analysis to the k-fold validation
+paradigm. However, since even highly-constrained linear models do not really
+produce reliable estimates at below about 50 samples WHEN USING ALL SAMPLES,
+it seems quite unlikely that 5 small samples averaged togther are going to
+overcome this basic problem with noisy performance estimates.
+
+There is a long history of debate (especially in psycholgical methods
+following the replication crisis in around 2015) about whether it is better
+to do e.g. one large study of N*k samples, or k small studies of N samples.
+Intuitively, if this kind of thing matters, either you have a heterogeneity
+problem, or you really just don't have enough data or your experiment is
+poorly designed, because, regardless of the math, deciding between these two
+cases should not result in huge differences. That is, if *in the simple case
+of a single study* power analysis tells use we need a minimum sample size of
+50 to detect anything of significance, then we should not have much
+confidence in some hokey method that is able to magically claim getting
+better power / significance by some funky splitting that makes use of 5
+10-sample partitions, or e.g. 5 k-fold partitions of 40/10 non-overlapping
+train-test splits. You still have only 50 samples, and you know that is not
+generally trustworthy in the cleanest case. It is the usual dictum of: if you
+need very specific statistics / assumptions to find your effect, you
+*probably* don't have much of a generalizable effect.
+
+By this reasoning, it is probably enough to use the single-study a prior power
+analysis case as a general guideline for what, roughly, is an acceptable
+bare minimum sample size even in fairly favorable conditions.
+
+While I would put this at more like 50 samples per cell / group, and the old
+heuristic of 20 is most certaintly widely regarded as deeply inadequate, we
+can be lenient and pretend like 20 is somehow okay.
+
+Since this is what we use for N_TARG_LEVEL_MIN, and since a default
+df-analyze holdout is about 50% (under the assumption it will generally be
+used on small data), we set the minimum number of sampes per target level to
+be half the base requirement, i.e. 10 (even though this is really still
+unacceptably low, most likely).
+
+[1] Lakens, D. (2022). Sample Size Justification. Collabra: Psychology, 8(1),
+33267.doi:10.1525/collabra.33267 https://doi.org/10.1525/collabra.33267
+https://online.ucpress.edu/collabra/article/8/1/33267/120491/Sample-Size-Justification
+
+
+"""
+
+N_TARG_LEVEL_MIN_TRAIN_INTERNAL = 8
+"""
+As per code documentation above, we have required 10 samples per target level
+in internal folds. However, test folds are of course smaller than train folds,
+and for a binary classification problem, the limit of 10 means folds have
+8/2 train/test samples per target level, or 4 test samples total in each of the
+5 folds.
+
+To be consistent with the reasoning for N_TARG_LEVEL_MIN_INTERNAL, we set this
+value to 8, but this should really be higher.
+"""
+
+N_TARG_LEVEL_MIN_TEST_INTERNAL = 2
+"""
+As per code documentation above, we have required 10 samples per target level
+in internal folds. However, test folds are of course smaller than train folds,
+and for a binary classification problem, the limit of 10 means folds have
+8/2 train/test samples per target level, or 4 test samples total in each of the
+5 folds.
+
+To be consistent with the reasoning for N_TARG_LEVEL_MIN_INTERNAL, we set this
+value to 2, but this should really be higher.
+"""
+
 UNIVARIATE_PRED_MAX_N_SAMPLES = 1500
 """Maximum number of samples to use in univariate predictive analyses"""
 

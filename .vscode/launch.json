@@ -55,6 +55,39 @@
         "--feat-select wrap filter embed"
       ],
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Mouse Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--df=mouse_proteins_trisomy_stimulated.parquet",
+        "--grouper=MouseID",
+        "--target=Treatment",
+        "--outdir=./mouse_result",
+        "--mode=classify",
+        "--classifiers knn lgbm rf lr sgd dummy",
+        "--feat-select filter embed wrap",
+        "--redundant-wrapper-selection",
+        "--embed-select lgbm linear",
+        "--wrapper-select=step-up",
+        "--wrapper-model=linear",
+        "--norm=robust",
+        "--nan=median",
+        "--filter-method assoc pred",
+        "--filter-assoc-cont-classify=mut_info",
+        "--filter-assoc-cat-classify=mut_info",
+        "--filter-assoc-cont-regress=mut_info",
+        "--filter-assoc-cat-regress=mut_info",
+        "--filter-pred-regress=mae",
+        "--filter-pred-classify=acc",
+        "--htune-trials=50",
+        "--htune-cls-metric=acc",
+        "--htune-reg-metric=mae",
+        "--test-val-size=0.5",
+      ],
+      "console": "integratedTerminal"
     }
   ]
 }

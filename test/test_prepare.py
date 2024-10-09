@@ -32,12 +32,17 @@ def do_prepare(dataset: tuple[str, TestDataset]) -> None:
         X = prepared.X
         y = prepared.y
         check_X_y(X, y, y_numeric=True)
+
+        assert prepared.X_cont is not None
+        assert prepared.X_cat is not None
+
         if not prepared.X_cont.empty:
             check_X_y(prepared.X_cont, y, y_numeric=True)
         assert prepared.X_cont.shape[0] == prepared.X_cat.shape[0] == len(y)
-        lens = np.array([len(X), len(y), len(prepared.X_cat), len(prepared.X_cont)])
+        lens = np.array([len(X), len(y), len(prepared.X_cat), len(prepared.X_cont)])  # type: ignore
         assert np.all(lens == lens[0]), "Lengths of returned cardinality splits differ"
 
+        assert prepared.inspection is not None, "Missing inspection data on PreparedData"
         cats = prepared.inspection.cats
         conts = prepared.inspection.conts
         if len(cats.cols.intersection(conts.cols)) > 0:
@@ -121,12 +126,20 @@ if __name__ == "__main__":
 
         try:
             prepared = ds.prepared(load_cached=False)
+            if prepared.inspection is None:
+                raise ValueError("Missing inspection data on PreparedData")
+
             cats = prepared.inspection.cats
             conts = prepared.inspection.conts
             if len(cats.cols.intersection(conts.cols)) > 0:
                 raise RuntimeError("Inspection categorical and continuous overlap")
 
             X_cont, X_cat = prepared.X_cont, prepared.X_cat
+            if X_cont is None:
+                raise ValueError("Missing X_cont!")
+            if X_cat is None:
+                raise ValueError("Missing X_cat!")
+
             cats = set(X_cat.columns.to_list())
             conts = set(X_cont.columns.to_list())
             if len(cats.intersection(conts)) > 0:

@@ -80,6 +80,7 @@ def embed_select_features(
     options: ProgramOptions,
 ) -> list[EmbedSelected]:
     y = prep_train.y
+    g = prep_train.groups
     X_train = prep_train.X
     is_cls = options.is_classification
 
@@ -106,6 +107,7 @@ def embed_select_features(
             model.htune_optuna(
                 X_train=X_train,
                 y_train=y,
+                g_train=g,
                 metric=metric,
                 n_trials=100,
                 n_jobs=-1,
@@ -116,9 +118,7 @@ def embed_select_features(
                 if embed_model is EmbedSelectionModel.Linear
                 else model.tuned_model.feature_importances_  # type: ignore
             )
-            fscores = {
-                feature: score for feature, score in zip(X_train.columns, scores)
-            }
+            fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
 
             selector = SelectFromModel(
                 model.tuned_model,

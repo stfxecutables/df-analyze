@@ -69,7 +69,14 @@ def do_random_spreadsheet(dataset: tuple[str, TestDataset]) -> None:
             ordinals = renames.rename_columns(ordinals)
             drops = renames.rename_columns(drops)
 
-            inspect_data(df, target, categoricals, ordinals, _warn=True)
+            inspect_data(
+                df=df,
+                target=target,
+                grouper=None,
+                categoricals=categoricals,
+                ordinals=ordinals,
+                _warn=True,
+            )
 
 
 @fast_ds

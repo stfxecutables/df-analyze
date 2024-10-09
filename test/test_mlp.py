@@ -146,6 +146,7 @@ def do_mlp_classifier_tune(dataset: tuple[str, TestDataset]) -> None:
         model.htune_optuna(
             X_train=X_tr,
             y_train=y_tr,
+            g_train=None,
             metric=metric,  # type: ignore
             n_trials=4,
             n_jobs=1,
@@ -189,6 +190,7 @@ def do_mlp_regressor_tune(dataset: tuple[str, TestDataset]) -> None:
         model.htune_optuna(
             X_train=X_tr,
             y_train=y_tr,
+            g_train=None,
             metric=metric,  # type: ignore
             n_trials=4,
             n_jobs=1,
@@ -225,9 +227,7 @@ def test_mlp_tune_parallel(
     metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()  # type: ignore
     if len(X_tr) > MAX_N:
         strat = y_tr if ds.is_classification else None
-        X_tr, _, y_tr, _ = train_test_split(
-            X_tr, y_tr, train_size=MAX_N, stratify=strat
-        )
+        X_tr, _, y_tr, _ = train_test_split(X_tr, y_tr, train_size=MAX_N, stratify=strat)
 
     try:
         model = MLPEstimator(
@@ -237,6 +237,7 @@ def test_mlp_tune_parallel(
             model.htune_optuna(
                 X_train=X_tr,
                 y_train=y_tr,
+                g_train=None,
                 metric=metric,  # type: ignore
                 n_trials=10,
                 n_jobs=-1,

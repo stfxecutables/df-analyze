@@ -93,6 +93,14 @@ classification.
 
 """
 
+GROUP_HELP_STR = """
+The (string) name of the grouping variable (if one is present) which will be
+used to ensure samples within the same group do not end up in both train and
+test splits. I.e. the name of the feature that will be passed into scikit-learn
+GroupStratifiedKFold.
+
+"""
+
 CATEGORICAL_HELP_STR = """
 A string or list of strings, e.g.
 

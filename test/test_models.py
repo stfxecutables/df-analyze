@@ -8,9 +8,9 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import logging
-import traceback
 import os
 import sys
+import traceback
 from copy import deepcopy
 from pathlib import Path
 from typing import Literal, Optional, Union
@@ -25,6 +25,7 @@ from sklearn.preprocessing import KBinsDiscretizer
 
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer, Scorer
 from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.models.dummy import DummyClassifier, DummyRegressor
 from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import (
     LightGBMClassifier,
@@ -38,7 +39,6 @@ from df_analyze.models.linear import (
     SGDClassifier,
     SGDRegressor,
 )
-from df_analyze.models.dummy import DummyClassifier, DummyRegressor
 from df_analyze.models.svm import SVMClassifier, SVMRegressor
 
 
@@ -110,7 +110,6 @@ def check_basics(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) ->
             raise e
 
 
-
 def check_optuna_tune_metric(
     model: DfAnalyzeModel,
     mode: Literal["classify", "regress"],
@@ -124,6 +123,7 @@ def check_optuna_tune_metric(
         study = model.htune_optuna(
             X_train=X_tr,
             y_train=y_tr,
+            g_train=None,
             metric=metric,  # type: ignore
             # shitty Optuna implementation seems to dispatch as many jobs as cores,
             # even if you specify less trials, and but then also have some kind of

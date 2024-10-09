@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import sys
+import traceback
 from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
@@ -32,11 +33,6 @@ if TYPE_CHECKING:
 import numpy as np
 import optuna
 import pandas as pd
-from df_analyze._constants import SEED
-from df_analyze.enumerables import (
-    Scorer,
-    WrapperSelection,
-)
 from numpy import ndarray
 from optuna import Study, Trial, create_study
 from optuna.logging import _get_library_root_logger
@@ -47,7 +43,19 @@ from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import (
+    GroupKFold,
+    KFold,
+    StratifiedGroupKFold,
+    StratifiedKFold,
+)
+
+from df_analyze._constants import SEED
+from df_analyze.enumerables import (
+    Scorer,
+    WrapperSelection,
+)
+from df_analyze.splitting import OmniKFold
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -127,6 +135,7 @@ class DfAnalyzeModel(ABC):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         metric: Scorer,
         n_folds: int = 5,
     ) -> Callable[[Trial], float]:
@@ -134,12 +143,45 @@ class DfAnalyzeModel(ABC):
         y = np.asarray(y_train)
 
         def objective(trial: Trial) -> float:
-            kf = StratifiedKFold if self.is_classifier else KFold
-            _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
+            # if self.is_classifier:
+            #     kf = StratifiedKFold if g_train is None else StratifiedGroupKFold
+            # else:
+            #     kf = KFold if g_train is None else GroupKFold
+            kf = OmniKFold(
+                n_splits=n_folds,
+                is_classification=self.is_classifier,
+                grouped=g_train is not None,
+                labels=None,
+                warn_on_fallback=False,
+                df_analyze_phase="Tuning internal splits",
+            )
+            splits, group_fail = kf.split(
+                X_train=X_train, y_train=y_train, g_train=g_train
+            )
+
+            # if g_train is None:
+            #     _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)  # type: ignore
+            # else:
+            #     _cv = kf(n_splits=n_folds)
             opt_args = self.optuna_args(trial)
             full_args = {**self.fixed_args, **self.default_args, **opt_args}
             scores = []
-            for step, (idx_train, idx_test) in enumerate(_cv.split(X_train, y_train)):
+            # try:
+            #     splits = [split for split in enumerate(_cv.split(X_train, y_train))]
+            # except Exception as e:
+            #     traceback.print_exc()
+            #     print(
+            #         f"Got error {e} when attempting to split data. Most likely this means "
+            #         "a grouping variable (`--grouper`) was passed into the df-analyze CLI, "
+            #         "but that you have insufficient data for each group and target level "
+            #         "to ensure that all target levels are present in all train-test splits. "
+            #         "Falling back to regular stratified splitting. "
+            #     )
+            #     kf = StratifiedKFold if self.is_classifier else KFold
+            #     _cv = kf(n_splits=n_folds, shuffle=True, random_state=SEED)
+            #     splits = [split for split in enumerate(_cv.split(X_train, y_train))]
+
+            for step, (idx_train, idx_test) in enumerate(splits):
                 X_tr, y_tr = X[idx_train], y[idx_train]
                 X_test, y_test = X[idx_test], y[idx_test]
                 model_cls, clean_args = self.model_cls_args(full_args)
@@ -164,6 +206,7 @@ class DfAnalyzeModel(ABC):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
@@ -182,7 +225,12 @@ class DfAnalyzeModel(ABC):
             pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
         )
         optuna.logging.set_verbosity(verbosity)
-        objective = self.optuna_objective(X_train=X_train, y_train=y_train, metric=metric)
+        objective = self.optuna_objective(
+            X_train=X_train,
+            y_train=y_train,
+            g_train=g_train,
+            metric=metric,
+        )
         cbs = [EarlyStopping(patience=15, min_trials=50)]
         study.optimize(
             objective,
@@ -227,8 +275,10 @@ class DfAnalyzeModel(ABC):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         X_test: DataFrame,
         y_test: Series,
+        g_test: Optional[Series],
     ) -> tuple[DataFrame, Series, Series, Optional[ndarray], Optional[ndarray]]:
         from df_analyze.hypertune import (
             ClassifierScorer,
@@ -265,13 +315,17 @@ class DfAnalyzeModel(ABC):
             holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test)
             train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train)
 
-        if self.is_classifier:
-            ss = StratifiedKFold(n_splits=5)
-        else:
-            ss = KFold(n_splits=5)
+        kf = OmniKFold(
+            n_splits=5,
+            is_classification=self.is_classifier,
+            grouped=g_train is not None,
+            labels=None,
+            warn_on_fallback=True,
+            df_analyze_phase="Final k-fold on holdout set",
+        )
 
         scores = []
-        for idx_train, idx_test in ss.split(y_test, y_test):  # type: ignore
+        for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
             df_train = X_test.loc[idx_train]
             df_test = X_test.loc[idx_test]
             targ_train = y_test.loc[idx_train]
@@ -317,7 +371,12 @@ class DfAnalyzeModel(ABC):
         return self.tuned_model.score(X, y)
 
     def cv_score(
-        self, X: DataFrame, y: Series, metric: Scorer, test: bool = False
+        self,
+        X: DataFrame,
+        y: Series,
+        groups: Optional[Series],
+        metric: Scorer,
+        test: bool = False,
     ) -> float:
         # NOTE: VERY IMPORTANT: This must remain single-threaded! As it is
         # used in stepwise selection in the parallel loop
@@ -330,14 +389,19 @@ class DfAnalyzeModel(ABC):
                 score = 1 - score
             return score
 
-        if self.is_classifier:
-            ss = StratifiedKFold(n_splits=5)
-        else:
-            ss = KFold(n_splits=5)
+        kf = OmniKFold(
+            n_splits=5,
+            is_classification=self.is_classifier,
+            grouped=groups is not None,
+            labels=None,
+            warn_on_fallback=False,
+            df_analyze_phase="Tuning CV Score",
+        )
 
+        g = groups.copy() if groups is not None else None
         scores = []
 
-        for idx_train, idx_test in ss.split(y.copy(), y.copy()):  # type: ignore
+        for idx_train, idx_test in kf.split(y.to_frame(), y.copy(), g)[0]:
             X_train = X.loc[idx_train].copy()
             X_test = X.loc[idx_test].copy()
             y_train = y.loc[idx_train].copy()

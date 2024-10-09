@@ -70,6 +70,7 @@ def do_main(minimal: bool) -> None:
     categoricals = options.categoricals
     ordinals = options.ordinals
     drops = options.drops
+    grouper = options.grouper
 
     df = options.load_df()
     df, renames = sanitize_names(df, target)
@@ -79,11 +80,25 @@ def do_main(minimal: bool) -> None:
     ordinals = renames.rename_columns(ordinals)
     drops = renames.rename_columns(drops)
 
-    df, inspection = inspect_data(df, target, categoricals, ordinals, drops, _warn=True)
+    df, inspection = inspect_data(
+        df=df,
+        target=target,
+        grouper=grouper,
+        categoricals=categoricals,
+        ordinals=ordinals,
+        drops=drops,
+        _warn=True,
+    )
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 
-    prepared = prepare_data(df, target, inspection, is_cls)
+    prepared = prepare_data(
+        df=df,
+        target=target,
+        grouper=grouper,
+        results=inspection,
+        is_classification=is_cls,
+    )
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
     prep_train, prep_test = prepared.split()

@@ -49,6 +49,7 @@ def check_optuna_tune(
     study: Study = model.htune_optuna(
         X_train=X_tr,
         y_train=y_tr,
+        g_train=None,
         metric=metric,  # type: ignore
         n_trials=8,
         n_jobs=4,

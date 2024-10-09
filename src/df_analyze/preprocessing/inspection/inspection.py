@@ -6,11 +6,12 @@ from shutil import get_terminal_size
 from typing import TYPE_CHECKING, Optional, Union, overload
 
 import numpy as np
-from df_analyze._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 from joblib import Memory, Parallel, delayed
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from tqdm import tqdm
+
+from df_analyze._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 
 if TYPE_CHECKING:
     from df_analyze.cli.cli import ProgramOptions
@@ -547,14 +548,19 @@ def convert_categorical(series: Series) -> Series:
     return series
 
 
-def convert_categoricals(df: DataFrame, target: str) -> DataFrame:
+def convert_categoricals(df: DataFrame, target: str, grouper: Optional[str]) -> DataFrame:
     # convert screwy categorical columns which can have all sorts of
     # annoying behaviours when incorrectly labeled as such
     df = df.copy()
     for col in df.columns:
         if str(col) == target:
             continue
+        if (grouper is not None) and str(col) == grouper:
+            continue
         df[col] = convert_categorical(df[col])
+    if grouper is not None:
+        df[grouper] = df[grouper].astype("category").cat.codes
+
     return df
 
 
@@ -574,6 +580,7 @@ def unify_nans(df: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
 def inspect_data(
     df: DataFrame,
     target: str,
+    grouper: Optional[str] = None,
     categoricals: Optional[list[str]] = None,
     ordinals: Optional[list[str]] = None,
     drops: Optional[list[str]] = None,
@@ -583,8 +590,12 @@ def inspect_data(
     categoricals = categoricals or []
     ordinals = ordinals or []
     y = df[target]
+    g = df[grouper] if (grouper is not None) else None
 
     df = df.drop(columns=target, errors="ignore")
+    if g is not None:
+        df = df.drop(columns=grouper, errors="ignore")
+
     if drops is not None:
         drops = sorted(set(drops))
         df = df.drop(columns=drops, errors="ignore")
@@ -677,6 +688,7 @@ def inspect_data(
     # fmt: on
 
     df[target] = y
+    df[grouper] = g
     return df, InspectionResults(
         conts=InspectionInfo(ColumnType.Continuous, final_conts),
         ords=InspectionInfo(ColumnType.Ordinal, final_ords),
@@ -702,6 +714,7 @@ def inspect_data_cached(
         return inspect_data(
             df=options.load_df(),
             target=options.target,
+            grouper=None,
             categoricals=options.categoricals,
             ordinals=options.ordinals,
             _warn=True,

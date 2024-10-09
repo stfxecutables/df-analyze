@@ -54,7 +54,7 @@ def do_inspect(dataset: tuple[str, TestDataset]) -> None:
     cats = ds.categoricals
 
     try:
-        inspect_data(df, "target", cats)
+        inspect_data(df=df, target="target", grouper=None, categoricals=cats)
     except TypeError as e:
         if dsname == "community_crime" and (
             "Cannot automatically determine the cardinality" in str(e)
@@ -138,7 +138,7 @@ def do_detect_floats(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     cats = ds.categoricals
     conts = ds.continuous
-    results = inspect_data(df, "target", cats)
+    results = inspect_data(df=df, target="target", grouper=None, categoricals=cats)
     float_cols = [*results.conts.infos.keys()]
     if sorted(float_cols) != sorted(conts):
         raise ValueError(f"Columns detected as continuous not as expected for {dsname}")
@@ -157,7 +157,7 @@ def do_detect_ids(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     cats = ds.categoricals
     try:
-        results = inspect_data(df, "target", cats)
+        results = inspect_data(df=df, target="target", grouper=None, categoricals=cats)
         assert "communityname" in results.ids.infos
     except Exception as e:
         raise ValueError("Identifier 'communityname' was not detected") from e
@@ -167,7 +167,7 @@ def do_inspect_target(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     df = ds.load()
     try:
-        inspect_target(df, "target", is_classification=ds.is_classification)
+        inspect_target(df=df, target="target", is_classification=ds.is_classification)
     except ValueError as e:
         message = str(e)
         if "constant after dropping NaNs" not in message:
@@ -377,7 +377,9 @@ if __name__ == "__main__":
         print(f"Checking {dsname}", file=stderr)
         try:
             start = perf_counter()
-            results = inspect_data(df, "target", ds.categoricals)
+            results = inspect_data(
+                df=df, target="target", grouper=None, categoricals=ds.categoricals
+            )
             duration = perf_counter() - start
             times.append((dsname, duration))
         except TypeError as e:

@@ -11,6 +11,9 @@ from math import ceil
 from time import perf_counter
 
 import numpy as np
+from pandas import DataFrame, Series
+from tqdm import tqdm
+
 from df_analyze._constants import DEFAULT_N_STEPWISE_SELECT
 from df_analyze.cli.cli import ProgramOptions
 from df_analyze.enumerables import Scorer, WrapperSelectionModel
@@ -19,8 +22,6 @@ from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from df_analyze.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from df_analyze.preprocessing.prepare import PreparedData
-from pandas import DataFrame, Series
-from tqdm import tqdm
 
 
 @dataclass
@@ -79,6 +80,7 @@ def get_dfanalyze_score(
     model_cls: Type[DfAnalyzeModel],
     X: DataFrame,
     y: Series,
+    g: Optional[Series],
     metric: Scorer,
     selected: set[str],
     candidate: str,
@@ -90,8 +92,10 @@ def get_dfanalyze_score(
     includes = sorted(includes)
     X_new = X.loc[:, includes] if is_forward else X.drop(columns=includes)
     X_new = X_new.copy()
+    g = None if g is None else g.copy()
     model = model_cls()
-    return model.cv_score(X_new, y.copy(), test=test, metric=metric)
+
+    return model.cv_score(X_new, y.copy(), g, test=test, metric=metric)
 
 
 def n_feat_int(prepared: PreparedData, n_features: Union[int, float, None]) -> int:
@@ -207,6 +211,7 @@ class StepwiseSelector:
                 model_cls=model_cls,
                 X=self.prepared.X,
                 y=self.prepared.y,
+                g=self.prepared.groups,
                 metric=metric,
                 selected=self.selected,
                 candidate=candidate,
@@ -267,6 +272,7 @@ class StepwiseSelector:
                 model_cls=model_cls,
                 X=self.prepared.X,
                 y=self.prepared.y,
+                g=self.prepared.groups,
                 metric=metric,
                 selected=self.selected,
                 candidate=candidate,

@@ -12,6 +12,7 @@ echo "==========================================================================
     -m 'not regen' -m 'cached' -x \
     test/test_inspection.py \
     test/test_prepare.py \
+    test/test_splitting.py \
     test/test_associate.py \
     test/test_name_sanitize.py \
     test/test_cleaning.py

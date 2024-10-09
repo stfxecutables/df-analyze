@@ -26,18 +26,6 @@ from warnings import warn
 import numpy as np
 import optuna
 import pandas as pd
-from df_analyze._constants import SEED, VAL_SIZE
-from df_analyze._types import Classifier, CVMethod, EstimationMode, Estimator
-from df_analyze.cli.cli import ProgramOptions
-from df_analyze.legacy.src.objectives import (
-    bagging_classifier_objective,
-    dtree_classifier_objective,
-    mlp_classifier_objective,
-    rf_classifier_objective,
-    svm_classifier_objective,
-)
-from df_analyze.models.dummy import DummyClassifier, DummyRegressor
-from df_analyze.testing.datasets import TestDataset
 from numpy import ndarray
 from pandas import DataFrame, Index, Series
 from sklearn.metrics import (
@@ -54,9 +42,23 @@ from sklearn.model_selection import (
     train_test_split,
 )
 
+from df_analyze._constants import SEED, VAL_SIZE
+from df_analyze._types import Classifier, CVMethod, EstimationMode, Estimator
+from df_analyze.cli.cli import ProgramOptions
+from df_analyze.legacy.src.objectives import (
+    bagging_classifier_objective,
+    dtree_classifier_objective,
+    mlp_classifier_objective,
+    rf_classifier_objective,
+    svm_classifier_objective,
+)
+from df_analyze.models.dummy import DummyClassifier, DummyRegressor
+from df_analyze.testing.datasets import TestDataset
+
 if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
 import jsonpickle
+
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.mlp import MLPEstimator
 from df_analyze.preprocessing.prepare import PreparedData
@@ -454,6 +456,7 @@ def evaluate_tuned(
                 study = model.htune_optuna(
                     X_train=X_train,
                     y_train=prep_train.y,
+                    g_train=prep_train.groups,
                     n_trials=options.htune_trials,
                     metric=metric,  # type: ignore
                     n_jobs=-1,
@@ -462,8 +465,10 @@ def evaluate_tuned(
                 df, preds_train, preds_test, probs_train, probs_test = model.htune_eval(
                     X_train=X_train,
                     y_train=prep_train.y,
+                    g_train=prep_train.groups,
                     X_test=X_test,
                     y_test=prep_test.y,
+                    g_test=prep_test.groups,
                 )
                 is_embed = "embed" in selection
                 embed_model = embed_models[selection] if is_embed else None

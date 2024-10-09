@@ -29,6 +29,7 @@ class DummyEstimator(DfAnalyzeModel):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
@@ -39,7 +40,7 @@ class DummyEstimator(DfAnalyzeModel):
         waste time and compute.
         """
         return super().htune_optuna(
-            X_train, y_train, metric, n_trials, n_jobs=4, verbosity=verbosity
+            X_train, y_train, g_train, metric, n_trials, n_jobs=4, verbosity=verbosity
         )
 
 

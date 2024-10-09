@@ -53,6 +53,7 @@ class KNNEstimator(DfAnalyzeModel):
         self,
         X_train: DataFrame,
         y_train: Series,
+        g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
         n_jobs: int = -1,
@@ -67,6 +68,7 @@ class KNNEstimator(DfAnalyzeModel):
         return super().htune_optuna(
             X_train,
             y_train,
+            g_train,
             metric=metric,
             n_trials=n_hp,
             n_jobs=n_jobs,

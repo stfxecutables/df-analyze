@@ -56,7 +56,9 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
     cat_nan_idx = X_cats.isna().to_numpy()
 
     for nans in [NanHandling.Mean, NanHandling.Median]:
-        dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[0]
+        dfc = handle_continuous_nans(
+            df, target="target", grouper=None, results=results, nans=nans
+        )[0]
         clean = dfc.drop(columns=["target", *cats])
         assert clean.isna().sum().sum() == 0, f"NaNs remaning in data {dsname}"
 
@@ -67,9 +69,9 @@ def test_na_handling(dataset: tuple[str, TestDataset]) -> None:
 
     for nans in [NanHandling.Drop]:
         try:
-            dfc = handle_continuous_nans(df, target="target", results=results, nans=nans)[
-                0
-            ]
+            dfc = handle_continuous_nans(
+                df, target="target", grouper=None, results=results, nans=nans
+            )[0]
             clean = dfc.drop(columns=["target", *cats])
             assert clean.isna().sum().sum() == 0, f"NaNs remaining in data {dsname}"
         except RuntimeError as e:
@@ -127,6 +129,7 @@ def test_multivariate_interpolate(
         dfc = handle_continuous_nans(
             df,
             target="target",
+            grouper=None,
             results=results,
             nans=NanHandling.Impute,
         )[0]
@@ -145,7 +148,7 @@ def do_encode(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     results = ds.inspect(load_cached=True)
     try:
-        enc = encode_categoricals(df, target="target", results=results)[0]
+        enc = encode_categoricals(df, target="target", grouper=None, results=results)[0]
     except TypeError as e:
         if dsname == "community_crime" and (
             "Cannot automatically determine the cardinality" in str(e)
@@ -191,6 +194,6 @@ if __name__ == "__main__":
         print("#" * w, file=stderr)
         print(f"Checking {dsname}", file=stderr)
         results = ds.inspect(load_cached=True)
-        encode_categoricals(df, "target", results)
+        encode_categoricals(df=df, target="target", grouper=None, results=results)
         print("#" * w, file=stderr)
         # input("Continue?")
