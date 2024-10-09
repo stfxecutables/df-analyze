@@ -208,8 +208,8 @@ class OmniKFold:
 
         # Can proceed, technically, but will get errors for later AUROC and
         # other metrics...
-        # if len(t_cnts) == 1:
-        #     return True
+        if len(t_cnts) == 1:
+            return True
 
         tr_cnts_n_min = tr_cnts.min()
         if tr_cnts_n_min < N_TARG_LEVEL_MIN_TRAIN_INTERNAL:
