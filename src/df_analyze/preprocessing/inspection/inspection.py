@@ -689,6 +689,8 @@ def inspect_data(
 
     df[target] = y
     df[grouper] = g
+    df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
+
     return df, InspectionResults(
         conts=InspectionInfo(ColumnType.Continuous, final_conts),
         ords=InspectionInfo(ColumnType.Ordinal, final_ords),

@@ -224,6 +224,17 @@ def get_vision_embeddings(
     df_embed = DataFrame(data=embeddings.numpy(), columns=cols, index=y.index)
     df = pd.concat([df_embed, y], axis=1)
     df.rename(columns={y.name: "target"}, inplace=True)
+
+    # Avoid the following nonsense:
+    #
+    # TypeError: Feature names are only supported if all input features have
+    # string names, but your input has ['NoneType', 'str'] as feature name /
+    # column name types. If you want feature names to be stored and
+    # validated, you must convert them all to strings, by using X.columns =
+    # X.columns.astype(str) for example. Otherwise you can remove feature /
+    # column names from your input data, or convert them all to a non-string
+    # data type.
+    df.columns = df.columns.astype(str)
     return df
 
 

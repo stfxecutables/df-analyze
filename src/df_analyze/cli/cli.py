@@ -1138,10 +1138,13 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     classifiers = tuple(sorted(classifiers))
     regressors = tuple(sorted(regressors))
 
+    # https://stackoverflow.com/a/26990349,
+    grouper = " ".join(cli_args.grouper) if cli_args.grouper is not None else None
+
     return ProgramOptions(
         datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
         target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
-        grouper=" ".join(cli_args.grouper),  # https://stackoverflow.com/a/26990349,
+        grouper=grouper,
         categoricals=sorted(cats),
         ordinals=sorted(ords),
         drops=cli_args.drops,

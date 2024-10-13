@@ -100,6 +100,8 @@ def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, 
     newnames = [new for old, new in renames]
     df.columns = newnames
     df[target] = y
+    df.columns = df.columns.astype(str)
+    df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
     return df, renames
 
 
@@ -155,6 +157,8 @@ def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
             renames[original] = f"feat_{renamed}"
 
     df = df.rename(columns=renames)
+    df.columns = df.columns.astype(str)  # double assurance needed, apparently
+    df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
     df, renames = dedup_names(df, target=target)
     info = RenameInfo(renames)
     return df, info
@@ -654,7 +658,7 @@ def encode_categoricals(
         small_message = ""
 
     # handle data explosion due to one-hot encoding
-    if (n_enc_total / n_orig) > 10 and warn_explosion:
+    if n_orig > 0 and ((n_enc_total / n_orig) > 10) and warn_explosion:
         messy_inform(
             "Encoding the categoricals of your data has increased the number "
             "of effective features in your data by an order of magnitude, and "
