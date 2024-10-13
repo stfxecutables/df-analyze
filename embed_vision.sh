@@ -6,25 +6,19 @@ echo "$ROOT"
 cd "$ROOT" || exit 1
 ROOT="$(realpath "$ROOT")"
 
-DATA="$ROOT/data/testing/embedding/NLP/classification"
-OUT="$ROOT/data/testing/embedded/NLP/classification"
+DATA="$ROOT/data/testing/embedding/vision/classification"
+OUT="$ROOT/data/testing/embedded/vision/classification"
 mkdir -p "$OUT"
-OUT="$(realpath "$ROOT/data/testing/embedded/NLP/classification")"
+OUT="$(realpath "$ROOT/data/testing/embedded/vision/classification")"
 
 
 DATAS=(
-  "$(realpath "$DATA/tweet_topic_single/all_2020.parquet")"
-  "$(realpath "$DATA/tweet_topic_single/all_2021.parquet")"
-  "$(realpath "$DATA/rotten_tomatoes/all.parquet")"
-  "$(realpath "$DATA/toxic-chat/data/0124/toxic-chat_annotation_all.parquet")"
-  "$(realpath "$DATA/toxic-chat/data/1123/toxic-chat_annotation_all.parquet")"
+  "$DATA/Anime-dataset/all.parquet"
+  "$DATA/fast_food_image_classification/all.parquet"
 )
 OUTS=(
-  "$OUT/tweet_topic_single/all_2020.parquet"
-  "$OUT/tweet_topic_single/all_2021.parquet"
-  "$OUT/rotten_tomatoes/all.parquet"
-  "$OUT/toxic-chat/data/0124/toxic-chat_annotation_all.parquet"
-  "$OUT/toxic-chat/data/1123/toxic-chat_annotation_all.parquet"
+  "$OUT/Anime-dataset/all.parquet"
+  "$OUT/fast_food_image_classification/all.parquet"
 )
 
 embed () {
@@ -43,9 +37,6 @@ if [[ -z "${CC_CLUSTER}" ]]; then  # local
     BATCHES=(
       2
       2
-      2
-      2
-      2
     )
 else
     # shellcheck disable=SC2016
@@ -55,10 +46,7 @@ else
     export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
     BATCHES=(
       8
-      8
-      8
-      40
-      40
+      16
     )
 fi
 
@@ -68,7 +56,7 @@ for i in "${!DATAS[@]}"; do
     if [ ! -f "$OUT" ]; then
         mkdir -p "$OUTDIR"
         echo "Processing ${DATAS[$i]}..."
-        embed --data "${DATAS[$i]}" --modality nlp --out "$OUT" --batch-size "${BATCHES[$i]}"
+        embed --data "${DATAS[$i]}" --modality vision --out "$OUT" --batch-size "${BATCHES[$i]}"
     fi
 done
 
