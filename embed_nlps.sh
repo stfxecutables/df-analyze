@@ -63,8 +63,11 @@ else
 fi
 
 for i in "${!DATAS[@]}"; do
-    mkdir -p "$(dirname "${OUTS[$i]}")"
-    embed --data "${DATAS[$i]}" --modality nlp --out "${OUTS[$i]}" --batch-size "${BATCHES[$i]}"
-    exit 0
+    OUTDIR="$(dirname "${OUTS[$i]}")"
+    OUT="${OUTS[$i]}"
+    if [ ! -f "$OUT" ]; then
+        mkdir -p "$OUTDIR"
+        embed --data "${DATAS[$i]}" --modality nlp --out "$OUT" --batch-size "${BATCHES[$i]}"
+    fi
 done
 
