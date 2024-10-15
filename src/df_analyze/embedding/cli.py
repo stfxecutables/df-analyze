@@ -141,6 +141,12 @@ zero-shot embeddings.
 
   which will raise an AssertionError if a row has an incorrect type.
 
+  In order to keep compute times reasonable, it is best for text samples
+  to be at most a paragraph or two. I.e. the underlying model is not really
+  intended for efficient or effective document embedding. However, this
+  ultimately depends on the text language and it is hard to make general
+  recommendations here.
+
 """
 
 OUT_HELP = """

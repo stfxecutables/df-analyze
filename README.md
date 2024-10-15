@@ -358,6 +358,15 @@ The CLI help can be accessed locally by running
 python df-embed.py --help
 ```
 
+Note that before any embedding is possible, you will need to download the
+underlying [embedding models](#about-the-embedding-models) **once**. This can be done
+with either of the commands:
+
+```bash
+python df-embed.py --download --modality nlp
+python df-embed.py --download --modality vision
+```
+
 
 ### About the Embedding Models
 
@@ -369,7 +378,9 @@ image data, and the large variant of the multilingual
 models. More specifically, the models are
 [`intfloat/multilingual-e5-large`](https://huggingface.co/intfloat/multilingual-e5-large)
 and
-[`google/siglip-so400m-patch14-384`](https://huggingface.co/google/siglip-so400m-patch14-384).
+[`google/siglip-so400m-patch14-384`](https://huggingface.co/google/siglip-so400m-patch14-384),
+which produce embedding vectors of size 1024 for each input text, and 1152
+for each input image, respectively.
 
 SigLip is a significant improvement on
 [CLIP](https://huggingface.co/docs/transformers/model_doc/clip), especially
@@ -473,6 +484,12 @@ assert df.text.apply(lambda s: isinstance(s, str)).all()
 ```
 
 which will raise an AssertionError if a row has an incorrect type.
+
+In order to keep compute times reasonable, it is best for text samples
+to be at most a paragraph or two. I.e. the underlying model is not really
+intended for efficient or effective document embedding. However, this
+ultimately depends on the text language and it is hard to make general
+recommendations here.
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
