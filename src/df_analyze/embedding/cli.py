@@ -62,14 +62,14 @@ zero-shot embeddings.
 
 # IMAGE DATA
 
-  For image classification data (`--modality vision`), the file must be a
-  two-column table with the columns named "image" and "label". The order of
-  the columns is not important, but the "label" column must contain integers
-  in {0, 1, ..., c - 1}, where `c` is the number of class labels for your
-  data. The data type is not really important, however, if the table is
-  loaded into a Pandas DataFrame `df`, then running `df["label"].astype(np.int64)`
-  (assuming you have imported NumPy as `np`, as is convention) should not
-  alter the meaning of the data.
+  For image classification data (`python df-embed.py --modality vision`), the
+  file must be a two-column table with the columns named "image" and "label".
+  The order of the columns is not important, but the "label" column must
+  contain integers in {0, 1, ..., c - 1}, where `c` is the number of class
+  labels for your data. The data type is not really important, however, if
+  the table is loaded into a Pandas DataFrame `df`, then running
+  `df["label"].astype(np.int64)` (assuming you have imported NumPy as `np`,
+  as is convention) should not alter the meaning of the data.
 
   For image regression data (very rare), the file must be a two-column table
   with the columns named "image" and "target". The order of the columns is
@@ -82,19 +82,46 @@ zero-shot embeddings.
   `Image.open`. Internally, all we do, again assuming that the data is loaded
   into a Pandas DataFrame `df`, is run:
 
+      ```python
+      from io import BytesIO
+      from PIL import Image
+
       df["image"].apply(lambda raw: Image.open(BytesIO(raw)).convert("RGB"))
+      ```
+
+  to convert images to the necessary format. This means that if you load your
+  images using PIL `Image.open`, and you have a list of image paths (and a way
+  to infer the target from that path, e.g. `get_target(path: Path)`, then you
+  can convert your images to bytes through the use of `io` `BytesIO` objects,
+  and build your parquet file with just a few lines of Python:
+
+      ```python
+      converted: list[bytes] = []
+      targets = []
+
+      for path in my_image_paths:
+          img = Image.open(path)
+          buf = BytesIO()
+          img.save(buf, format="JPEG")
+          byts = bug.getvalue()
+          converted.append(byts)
+          targets.append(get_target(path))
+
+      df = DataFrame({"image": converted, "target": targets})
+      df.to_parquet("images.parquet")
+      ```
 
 
 # NLP Text Data
 
-  For text classification data (`--modality nlp`), the file must be a
-  two-column table with the columns named "text" and "label". The order of
-  the columns is not important, but the "label" column must contain integers
-  in {0, 1, ..., c - 1}, where `c` is the number of class labels for your
-  data. The data type is not really important, however, if the table is
-  loaded into a Pandas DataFrame `df`, then running `df["label"].astype(np.int64)`
-  (assuming you have imported NumPy as `np`, as is convention) should not
-  alter the meaning of the data.
+  For text classification data (`python df-embed.py --modality nlp`), the
+  file must be a two-column table with the columns named "text" and "label".
+  The order of the columns is not important, but the "label" column must
+  contain integers in {0, 1, ..., c - 1}, where `c` is the number of class
+  labels for your data. The data type is not really important, however, if
+  the table is loaded into a Pandas DataFrame `df`, then running
+  `df["label"].astype(np.int64)` (assuming you have imported NumPy as `np`,
+  as is convention) should not alter the meaning of the data.
 
   For text regression data (e.g. sentiment analysis, rating prediction), the
   file must be a two-column table with the columns named "text" and
@@ -108,7 +135,9 @@ zero-shot embeddings.
   your text data into a Pandas DataFrame `df`, then you can check that the
   data has the correct type by running:
 
+      ```python
       assert df.text.apply(lambda s: isinstance(s, str)).all()
+      ```
 
   which will raise an AssertionError if a row has an incorrect type.
 

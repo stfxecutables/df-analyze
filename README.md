@@ -15,6 +15,8 @@
     - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
       - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
   - [Embedding Functionality](#embedding-functionality)
+    - [Quickstart](#quickstart)
+    - [About the Embedding Models](#about-the-embedding-models)
     - [Supported Dataset Formats](#supported-dataset-formats)
       - [Image Data](#image-data)
       - [Text Data](#text-data)
@@ -345,12 +347,132 @@ perhaps if manually cleaning your data and re-running).
 
 ## Embedding Functionality
 
+`df-analyze` now supports the pre-processing of **image** and **text
+classification** datasets through the `df-embed.py` python script.
+
+### Quickstart
+
+The CLI help can be accessed locally by running
+
+```bash
+python df-embed.py --help
+```
+
+
+### About the Embedding Models
+
+Internally, `df-analyze` uses two open-source HuggingFace zero-shot
+classification models:
+[SigLIP](https://huggingface.co/docs/transformers/en/model_doc/siglip) for
+image data, and the large variant of the multilingual
+[E5](https://huggingface.co/intfloat/multilingual-e5-large) text embedding
+models. More specifically, the models are
+[`intfloat/multilingual-e5-large`](https://huggingface.co/intfloat/multilingual-e5-large)
+and
+[`google/siglip-so400m-patch14-384`](https://huggingface.co/google/siglip-so400m-patch14-384).
+
+SigLip is a significant improvement on
+[CLIP](https://huggingface.co/docs/transformers/model_doc/clip), especially
+for zero-shot classification (the main task in `df-analyze`). E5 uses an
+[XLM-RoBERTa
+backbone](https://huggingface.co/docs/transformers/en/model_doc/xlm-roberta),
+but is trained with a focus on producing quality zero-shot embeddings.
+
+
+
 ### Supported Dataset Formats
+
+Currently, `df-analyze` supports only small to medium-sized datasets
+(generally, under 200 features and under 200 000 or so samples), and strongly
+aims to keep compute times under 24 hours (on a typical node on the [Niagara
+cluster](https://docs.alliancecan.ca/wiki/Niagara)) for key operations
+(embedding, predictive analysis). This means **any dataset to be embedded should
+also generally be under abut 200 000 samples**.
+
+For embedding, `df-embed.py` makes use of CPU implementations only, and, to
+not complicate data loading, currently requires a dataset to fit in memory,
+loaded from a single, correctly-formatted `.parquet` file.
 
 #### Image Data
 
+For image classification data (`python df-embed.py --modality vision`), the
+file must be a two-column table with the columns named "image" and "label".
+The order of the columns is not important, but the "label" column must
+contain integers in {0, 1, ..., c - 1}, where `c` is the number of class
+labels for your data. The data type is not really important, however, if
+the table is loaded into a Pandas DataFrame `df`, then running
+`df["label"].astype(np.int64)` (assuming you have imported NumPy as `np`,
+as is convention) should not alter the meaning of the data.
+
+For image regression data (very rare), the file must be a two-column table
+with the columns named "image" and "target". The order of the columns is
+not important, but the "target" column must contain floating point values.
+The floating point data type is not really important, however, if the table
+is loaded into a Pandas DataFrame `df`, then running
+`df["label"].astype(float)` should not raise any exceptions.
+
+The "image" column must be of `bytes` dtype, and must be readable by PIL
+`Image.open`. Internally, all we do, again assuming that the data is loaded
+into a Pandas DataFrame `df`, is run:
+
+```python
+from io import BytesIO
+from PIL import Image
+
+df["image"].apply(lambda raw: Image.open(BytesIO(raw)).convert("RGB"))
+```
+
+to convert images to the necessary format. This means that if you load your
+images using PIL `Image.open`, and you have a list of image paths (and a way
+to infer the target from that path, e.g. `get_target(path: Path)`, then you
+can convert your images to bytes through the use of `io` `BytesIO` objects,
+and build your parquet file with just a few lines of Python:
+
+```python
+img: Image  # PIL Image
+converted = []
+targets = []
+
+for path in my_image_paths:
+    img = Image.open(path)
+    buf = BytesIO()
+    img.save(buf, format="JPEG")
+    byts = bug.getvalue()
+    converted.append(byts)
+    targets.append(get_target(path))
+
+df = DataFrame({"image": converted, "target": targets})
+df.to_parquet("images.parquet")
+```
+
 #### Text Data
 
+For text classification data (`python df-embed.py --modality nlp`), the
+file must be a two-column table with the columns named "text" and "label".
+The order of the columns is not important, but the "label" column must
+contain integers in {0, 1, ..., c - 1}, where `c` is the number of class
+labels for your data. The data type is not really important, however, if
+the table is loaded into a Pandas DataFrame `df`, then running
+`df["label"].astype(np.int64)` (assuming you have imported NumPy as `np`,
+as is convention) should not alter the meaning of the data.
+
+For text regression data (e.g. sentiment analysis, rating prediction), the
+file must be a two-column table with the columns named "text" and
+"target". The order of the columns is not important, but the "target"
+column must contain floating point values. The floating point data type is
+not really important, however, if the table is loaded into a Pandas
+DataFrame `df`, then running `df["label"].astype(float)` should not raise
+any exceptions.
+
+The "text" column will have "object" ("O") dtype. Assuming you have loaded
+your text data into a Pandas DataFrame `df`, then you can check that the
+data has the correct type by running:
+
+```python
+assert df.text.apply(lambda s: isinstance(s, str)).all()
+```
+
+which will raise an AssertionError if a row has an incorrect type.
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
