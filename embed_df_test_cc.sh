@@ -65,3 +65,16 @@ df-analyze \
     --htune-trials 50 \
     --test-val-size 0.4 || exit 1
 
+
+# # Expected results:
+#
+# tweet_topic_single: https://arxiv.org/pdf/2209.09824
+# 86.4 - 86.8% accuracy
+#
+# rotten_tomatoes (https://paperswithcode.com/sota/text-classification-on-mr)
+# 90-93%
+#
+# toxic-chat (https://arxiv.org/abs/2310.17389)
+# Precision: 68.6 - 76.4%
+#    Recall: 58.7 - 69.2%
+#        F1: 54.4 - 83.5%
