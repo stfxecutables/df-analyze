@@ -4,7 +4,9 @@ from __future__ import annotations
 import sys  # isort: skip
 from pathlib import Path  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent  # isort: skip
+SRC = ROOT / "src"  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
+sys.path.append(str(SRC))  # isort: skip
 # fmt: on
 
 import sys
@@ -227,5 +229,53 @@ def test_cluster_sanity_nlp(capsys: CaptureFixture) -> None:
         cluster_nlp_sanity_check(n_samples=128)
 
 
+def embed_nlp_datasets() -> None:
+    """
+    NLP
+    ...
+                          ds  n_samp  batch  total_s     est_h
+     tweet_topic_single_2020    3586      8   10.332  0.040202
+     tweet_topic_single_2021    3398      8   11.773  0.043408
+    financial-classification    5057      8    8.510  0.046696
+             rotten_tomatoes   10662      8    9.551  0.110496
+             toxic-chat_0124   10165     40   31.481  0.347227
+             toxic-chat_1123   10165     40   35.919  0.396177
+    multiclass-sent-analysis   41643     40   11.138  0.503277
+    """
+    dsnames = [
+        "tweet_topic_single_2020",
+        "tweet_topic_single_2021",
+        "rotten_tomatoes",
+        "toxic-chat_0124",
+        "toxic-chat_1123",
+    ]
+    dses = [ds for ds in NLPTestingDataset.get_all() if ds.name in dsnames]
+    for ds in dses:
+        print(ds.datafiles["all"])
+
+
+def embed_vision_datasets() -> None:
+    """
+    Vision
+    ......
+                                   n_samp  batch  total_s     est_h
+    Brain-Tumor-Classification        394      8   35.988  0.030771
+    garbage_detection                 640     16   34.828  0.048372
+    Visual_Emotional_Analysis         800     16   34.573  0.060023
+    data-food-classification         1400     16   36.419  0.110648
+    Anime-dataset                    1882      8   38.831  0.158594
+    fast_food_image_classification   3000     16   35.165  0.228939
+    GenAI-Bench-1600                 9600      8   37.869  0.788938
+
+    """
+
+    dsnames = ["fast_food_image_classification", "Anime-dataset"]
+    dses = [ds for ds in VisionTestingDataset.get_all_cls() if ds.name in dsnames]
+    for ds in dses:
+        print(ds.root)
+
+
 if __name__ == "__main__":
-    download_models(force=True)
+    # download_models(force=True)
+    # embed_nlp_datasets()
+    embed_vision_datasets()

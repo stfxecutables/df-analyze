@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Optional, Union, cast, overload
 
 import pandas as pd
-from pandas import Series
 import torch
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from torch import Tensor
 from tqdm import tqdm
 from transformers.feature_extraction_utils import BatchFeature
@@ -46,6 +45,7 @@ def get_model(
         return load_siglip_offline()
     else:
         raise ValueError(f"Unrecognized modality: {modality}")
+
 
 def get_nlp_tokenizations(
     ds: NLPDataset,
@@ -97,7 +97,8 @@ def get_nlp_tokenizations(
                     "token_ids": Series(dtype="object"),
                     "mask": Series(dtype="object"),
                     "text": Series(dtype="str"),
-                 }, index=[i]
+                },
+                index=[i],
             )
             df.loc[i, "token_ids"] = bd["input_ids"].ravel().numpy()
             df.loc[i, "mask"] = bd["attention_mask"].ravel().numpy()
@@ -105,6 +106,7 @@ def get_nlp_tokenizations(
             all_tokenizations.append(df)
 
     return pd.concat(all_tokenizations, axis=0)
+
 
 def get_nlp_embeddings(
     ds: NLPDataset,
@@ -191,7 +193,12 @@ def get_vision_embeddings(
     all_embeddings = []
     with torch.no_grad():
         img_batches = [*batched(all_imgs, batch_size)]
-        for img in img_batches:
+        for img in tqdm(
+            img_batches,
+            total=len(img_batches),
+            desc="Embedding images",
+            disable=len(img_batches) < 20,
+        ):
             processed: BatchFeature = processor(
                 text=None,  # type: ignore
                 images=img,
@@ -217,6 +224,17 @@ def get_vision_embeddings(
     df_embed = DataFrame(data=embeddings.numpy(), columns=cols, index=y.index)
     df = pd.concat([df_embed, y], axis=1)
     df.rename(columns={y.name: "target"}, inplace=True)
+
+    # Avoid the following nonsense:
+    #
+    # TypeError: Feature names are only supported if all input features have
+    # string names, but your input has ['NoneType', 'str'] as feature name /
+    # column name types. If you want feature names to be stored and
+    # validated, you must convert them all to strings, by using X.columns =
+    # X.columns.astype(str) for example. Otherwise you can remove feature /
+    # column names from your input data, or convert them all to a non-string
+    # data type.
+    df.columns = df.columns.astype(str)
     return df
 
 
