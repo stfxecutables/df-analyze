@@ -22,6 +22,7 @@
       - [Text Data](#text-data)
   - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
     - [Building the Singularity Container](#building-the-singularity-container)
+    - [Using the Singularity Container](#using-the-singularity-container)
 - [Analysis Pipeline](#analysis-pipeline)
     - [Feature Type and Cardinality Inference](#feature-type-and-cardinality-inference)
     - [Data Preparation](#data-preparation)
@@ -367,6 +368,22 @@ python df-embed.py --download --modality nlp
 python df-embed.py --download --modality vision
 ```
 
+**NOTE**: Because these models are only using CPUs for inference, the
+**memory requirements may be too high for you to efficiently embed a dataset
+on your local machine**. While the embedding code will work and is tested on
+modern e.g. M-series MacBooks (Air or Pro), this may make use of swap memory,
+which could be unacceptably slow for your dataset(s), depending on your
+machine.
+
+However, on a Linux-based cluster (e.g. CentOS or RedHat, on Compute Canada),
+then inference on CPU on a node with 128GB RAM is quite efficient (datasets
+of 200k to 300k samples should still embed in a few hours, and smaller
+datasets in just a few minutes). But in order to do this, you will need to
+[build the container](#building-the-singularity-container) and then make use
+of the `run_python_with_home.sh` script included in this repo, and paying
+attention to the advice to use `readlink` or `realpath` for all references to
+files.
+
 
 ### About the Embedding Models
 
@@ -493,15 +510,11 @@ recommendations here.
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
-If the singularity container `df_analyze.sif` is available in the project
-root, then it can be used to run arbitrary python scripts with the [helper
-script](https://github.com/stfxecutables/df-analyze/blob/master/run_python_with_home.sh)
-inlcluded in the repo. E.g.
-
-```bash
-cd df-analyze
-./run_python_with_home.sh test/test_main.py
-```
+It is *EXTREMELY* important that you only clone `df-analyze` into `$SCRATCH`, and
+do all processing there. You have a very limited amount of space and absolute
+number of files in your `$HOME` directory, and your login node will become
+nearly unusable if you clone `df-analyze` there, or build the container in
+`$HOME`. So just immediately `cd` to `SCRATCH` before doing any of the below.
 
 ### Building the Singularity Container
 
@@ -509,10 +522,45 @@ This should be built on a cluster that enables the `--fakeroot` option or on a
 Linux machine where you have `sudo` privileges, and the same architecture as
 the cluster (likely, x86_64).
 
+First, clone the repository to `$SCRATCH`:
+
 ```bash
-cd df-analyze/containers
+cd $SCRATCH
+git clone https://github.com/stfxecutables/df-analyze.git
+cd df-analyze
+```
+
+```bash
+cd $SCRATCH/df-analyze/containers
 ./build_container_cc.sh
 ```
+
+### Using the Singularity Container
+
+If the singularity container `df_analyze.sif` is available in the project
+root, then it can be used to run arbitrary python scripts with the [helper
+script](https://github.com/stfxecutables/df-analyze/blob/master/run_python_with_home.sh)
+inlcluded in the repo. E.g.
+
+```bash
+cd $SCRATCH/df-analyze
+./run_python_with_home.sh test/test_main.py
+```
+
+**HOWEVER** this will frequently cause errors about files not being found.
+This has to do with aliasing and the complex file systems on Compute Canada
+and how these interact with path-mounting in Apptainer, but the solution is
+to **ALWAYS WRAP PATHS WITH THE `realpath` COMMAND**. E.g.
+
+```bash
+./run_python_with_home.sh df-embed.py \
+    --modality vision \
+    --data "$(realpath my_images.parquet)" \
+    --out "$(realpath embedded.parquet)"
+```
+
+this should be done if running a command in a login-node, or if making a job
+script to submit to the SLURM scheduler.
 
 # Analysis Pipeline
 
