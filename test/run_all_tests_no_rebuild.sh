@@ -32,7 +32,7 @@ echo "==========================================================================
     test/test_splitting.py \
     test/test_associate.py \
     test/test_name_sanitize.py \
-    test/test_cleaning.py
+    test/test_cleaning.py || { echo "Basic functionality failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing basic CLI functionality"
@@ -40,7 +40,7 @@ echo "==========================================================================
 "$PYTEST" \
     test/test_cli_parsing.py \
     test/test_cli_random.py \
-    -x
+    -x || { echo "CLI testing failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing test dataset IO and basics"
@@ -50,32 +50,32 @@ echo "==========================================================================
     test/test_datasets.py \
     test/test_models.py \
     test/test_tuning_score.py \
-    -x
+    -x  # don't do the exit here, with parallel maybe issues?
 
 echo "================================================================================="
 echo "Testing result saving (slow)"
 echo "================================================================================="
-"$PYTEST" -n auto test/test_saving.py -x
+"$PYTEST" -n auto test/test_saving.py -x || { echo "Saving failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing prediction"
 echo "================================================================================="
-"$PYTEST" test/test_predict.py -m 'fast' -x
+"$PYTEST" test/test_predict.py -m 'fast' -x || { echo "Prediction testing failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing selection. This is very slow, and if the first 5-10 pass, the rest "
 echo "likely will, so feel free to Ctrl+C or Ctrl+Z at this point..."
 echo "================================================================================="
-"$PYTEST" test/test_selection.py -m 'fast' -x
+"$PYTEST" test/test_selection.py -m 'fast' -x || { echo "Selection testing failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing embeddding functionality."
 echo "================================================================================="
-"$PYTHON" df-embed.py --modality nlp --download  || (echo "Failed to download NLP model" && exit 1)
-"$PYTHON" df-embed.py --modality vision --download || (echo "Failed to download vision model" && exit 1)
+"$PYTHON" df-embed.py --modality nlp --download  || { echo "Failed to download NLP model";  exit 1; }
+"$PYTHON" df-embed.py --modality vision --download || { echo "Failed to download vision model"; exit 1; }
 # The faster tests also test the same things the slow ones do, so no need to
 # run them here. They can always be run manually to investigate issues.
-"$PYTEST" test/test_embedding.py -m 'fast'
+"$PYTEST" test/test_embedding.py -m 'fast' || { echo "Failed to perform embedding."; exit 1; }
 
 
 # # Done
