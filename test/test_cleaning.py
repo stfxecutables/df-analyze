@@ -158,6 +158,11 @@ def do_encode(dataset: tuple[str, TestDataset]) -> None:
     except Exception as e:
         raise ValueError(f"Could not encode categoricals for data: {dsname}") from e
     assert no_cats(enc, target="target"), f"Found categoricals remaining for {dsname}"
+    enc = enc.drop(columns="target", errors="ignore")
+    has_const = enc.apply(lambda col: len(np.unique(col.apply(str))) == 1).any()
+    if has_const:
+        consts = enc.columns[enc.apply(lambda col: len(np.unique(col.apply(str))) == 1)]
+        raise ValueError(f"Encoding created constant columns: {consts}")
 
 
 @fast_ds

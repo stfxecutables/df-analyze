@@ -302,6 +302,7 @@ def handle_continuous_nans(
     # drop rows where target is NaN: meaningless
     # NaNs in categoricals are handled as another dummy indicator
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
+    cats = sorted(set(cats).intersection(df.columns.to_list()))
     X_cat = df[cats].copy(deep=True)
     y = df[target]
     g = None if grouper is None else df[grouper]
@@ -480,6 +481,11 @@ def drop_unusable(
     df = drop_cols(df, "identifiers", results.ids, _warn=_warn)
     df = drop_cols(df, "datetime data", results.times, _warn=_warn)
     df = drop_cols(df, "constant", results.consts, _warn=_warn)
+    const_drops = df[
+        df.columns[df.map(str).apply(lambda col: len(np.unique(col)) <= 1)]
+    ].columns.to_list()
+    if len(const_drops) > 0:
+        df = df.drop(columns=const_drops, errors="ignore")
     return df
 
 
@@ -493,7 +499,8 @@ def deflate_categoricals(
 
     infos = results.inflation
     infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
-    cols = [info.col for info in infos]
+    existing_cols = set(df.columns.tolist())
+    cols = [info.col for info in infos if info.col in existing_cols]
     if (grouper is not None) and (grouper in cols):
         raise RuntimeError(f"Found grouping column `{grouper}` in inspection info")
 
@@ -501,6 +508,8 @@ def deflate_categoricals(
         infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 50
     ):
         col = info.col
+        if col not in cols:
+            continue
         nan = df[col].isna()
         df[col] = df[col].astype(str)
         idx = df[col].isin(info.to_deflate) | nan
@@ -559,7 +568,9 @@ def encode_categoricals(
     df = unify_nans(df)
     df = drop_unusable(df, results, _warn=False)
     df = deflate_categoricals(df, grouper, results, _warn=warn_explosion)
+    df = drop_unusable(df, results, _warn=False)  # get rid of NaNs from deflation
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
+    cats = sorted(set(cats).intersection(df.columns.to_list()))
     X_cat = df.loc[:, cats].copy(deep=True)
     to_convert = cats
 
@@ -579,8 +590,22 @@ def encode_categoricals(
         # (3) {0, 1} + {0, 1} NaN indicator
         #
         # i.e. by using pd.get_dummies(..., dummy_na=True, drop_first=True)
-        new = pd.get_dummies(new, columns=bins, dummy_na=True, drop_first=True)
-        new = pd.get_dummies(new, columns=multis, dummy_na=True, drop_first=False)
+        nan_cols = set(new.columns[new.isna().any()].to_list())
+        bin_nans = sorted(nan_cols.intersection(bins))
+        bin_no_nans = sorted(set(bins).difference(bin_nans))
+        multi_nans = sorted(nan_cols.intersection(multis))
+        multi_no_nans = sorted(set(multis).difference(multi_nans))
+
+        new = pd.get_dummies(new, columns=bin_nans, dummy_na=True, drop_first=True)
+        new = pd.get_dummies(new, columns=multi_nans, dummy_na=True, drop_first=False)
+
+        new = pd.get_dummies(new, columns=bin_no_nans, dummy_na=False, drop_first=True)
+        new = pd.get_dummies(new, columns=multi_no_nans, dummy_na=False, drop_first=False)
+
+        has_const = new.apply(lambda col: len(np.unique(col.apply(str))) == 1).any()
+        if has_const:
+            new_consts = new.columns[new.apply(lambda col: len(np.unique(col)) == 1)]
+            raise ValueError(f"pd.get_dummies created constant columns: {new_consts}")
 
         if new.columns.has_duplicates:
             dupes = new.columns[new.columns.duplicated()]
