@@ -108,7 +108,7 @@ python -m pip install --upgrade pip setuptools wheel --no-cache-dir
 Then run the following command:
 
 ```powershell
-python -m pip install cli-test-helpers joblib jsonpickle lightgbm llvmlite matplotlib numba numpy openpyxl optuna pandas pyarrow pytest "pytest-xdist[psutil]" python-dateutil scikit-image scikit-learn scipy seaborn statsmodels tabulate torch torchaudio torchvision tqdm typing_extensions skorch "transformers[torch]" accelerate "datasets[vision]" protobuf sentencepiece
+python -m pip install cli-test-helpers joblib jsonpickle lightgbm llvmlite matplotlib numba numpy openpyxl optuna pandas pyarrow pytest "pytest-xdist[psutil]" python-dateutil scikit-image scikit-learn scipy seaborn statsmodels tabulate torch torchaudio torchvision tqdm typing_extensions skorch "transformers[torch]" accelerate "datasets[vision]" protobuf sentencepiece "pytorch_tabular"
 ```
 
 All necessary dependencies should now be installed. You can verify that the installation

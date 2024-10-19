@@ -95,6 +95,7 @@ python -m pip install \
     "datasets[vision]" \
     protobuf \
     sentencepiece \
+    'pytorch_tabular' \
     || echo "Failed to install some python libs"
 
 # python -m pytest test/test_embedding.py::test_vision_padding || echo "Basic embedding test failed!"
