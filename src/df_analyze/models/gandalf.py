@@ -13,6 +13,7 @@ import matplotlib as mpl
 
 mpl.rcParams["axes.formatter.useoffset"] = False
 
+import multiprocessing
 import os
 import platform
 import sys
@@ -1056,7 +1057,9 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(model=self.model, dataloaders=loader)
+        all_logits = self.trainer.predict(
+            model=self.model, dataloaders=loader, ckpt_path="best"
+        )
         logits = torch.concatenate(all_logits, dim=0)
         if self.is_classifier:
             probs = torch.softmax(logits, dim=1).numpy()
@@ -1068,7 +1071,7 @@ class GandalfEstimator(DfAnalyzeModel):
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
         all_logits = self.tuned_trainer.predict(
-            model=self.tuned_model, dataloaders=loader
+            model=self.tuned_model, dataloaders=loader, ckpt_path="best"
         )
         logits = torch.concatenate(all_logits, dim=0)
         if self.is_classifier:
@@ -1082,7 +1085,9 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(model=self.model, dataloaders=loader)
+        all_logits = self.trainer.predict(
+            model=self.model, dataloaders=loader, ckpt_path="best"
+        )
         logits = torch.concatenate(all_logits, dim=0)
         probs = torch.softmax(logits, dim=1).numpy()
         return probs
@@ -1093,7 +1098,9 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.tuned_trainer is None:
             raise RuntimeError("Model has not been tuned yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.tuned_trainer.predict(model=self.model, dataloaders=loader)
+        all_logits = self.tuned_trainer.predict(
+            model=self.model, dataloaders=loader, ckpt_path="best"
+        )
         logits = torch.concatenate(all_logits, dim=0)
         probs = torch.softmax(logits, dim=1).numpy()
         return probs
@@ -1162,8 +1169,9 @@ class GandalfEstimator(DfAnalyzeModel):
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
         # completely arbitrary...
-        n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
-        # n_jobs = 1 if os.environ.get("CC_CLUSTER") is None else 1
+        n_cpu = multiprocessing.cpu_count()
+        n_jobs = n_cpu // 2
+        # n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
