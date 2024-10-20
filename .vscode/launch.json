@@ -88,6 +88,30 @@
         "--test-val-size=0.5",
       ],
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Thyroid Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "df-analyze.py",
+      "args": [
+        "--df=Thyroid_diff.csv",
+        "--target=Recurred",
+        "--outdir=./gandalf_test_results",
+        "--mode=classify",
+        "--classifiers gandalf dummy",
+        "--feat-select filter",
+        "--redundant-wrapper-selection",
+        "--wrapper-select=step-up",
+        "--wrapper-model=linear",
+        "--norm=robust",
+        "--nan=median",
+        "--htune-trials=50",
+        "--htune-cls-metric=acc",
+        "--htune-reg-metric=mae",
+        "--test-val-size=0.5",
+      ],
+      "console": "integratedTerminal"
     }
   ]
 }

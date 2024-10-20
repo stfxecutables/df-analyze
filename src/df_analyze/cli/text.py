@@ -159,11 +159,45 @@ CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
 Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeClassifier]))}].
 
+  knn         scikit-learn KNeighborsClassifier.
+
+  lgbm        LightGBM boosted decision tree classifier.
+
+  rf          LightGBM random forest classifier.
+
+  sgd         scikit-learn SGDClassifier.
+
+  mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
+
+  svm         scikit-learn support vector classifer.
+
+  gandalf     Gated Adaptive Network for Deep Automated Learning of
+              Features for Tabular Data: https://arxiv.org/abs/2207.08548
+
+  dummy       scikit-learn DummyClassifier.
+
 """
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
 Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeRegressor]))}].
+
+  knn         scikit-learn KNeighborsRegressor.
+
+  lgbm        LightGBM boosted decision tree regressor.
+
+  rf          LightGBM random forest regressor.
+
+  sgd         scikit-learn SGDRegressor.
+
+  mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
+
+  svm         scikit-learn support vector regressor.
+
+  gandalf     Gated Adaptive Network for Deep Automated Learning of
+              Features for Tabular Data: https://arxiv.org/abs/2207.08548
+
+  dummy       scikit-learn DummyRegressor.
 
 """
 
@@ -173,15 +207,15 @@ The feature selection method(s) to use. Available options are:
   filter      Select features based on their univariate relationships to the
               target variables.
 
-  embed:      Select features using a model with implicit feature selection,
+  embed       Select features using a model with implicit feature selection,
               e.g. an L1-regularized model or decision tree. For avaialable
               models, see `--embed-select`.
 
-  wrap:       Select features by recursive model evaluation, currently either
+  wrap        Select features by recursive model evaluation, currently either
               step-up (forward) feature selection, or step-down (backward)
               feature elimination.
 
-  none:       Do not perform any selection.
+  none        Do not perform any selection.
 
 NOTE: Multiple selection options can be compared by passing each option, e.g.
 

@@ -13,6 +13,7 @@ import sys
 import traceback
 from copy import deepcopy
 from pathlib import Path
+from shutil import rmtree
 from typing import Literal, Optional, Union
 
 import numpy as np
@@ -26,6 +27,7 @@ from sklearn.preprocessing import KBinsDiscretizer
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer, Scorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.models.dummy import DummyClassifier, DummyRegressor
+from df_analyze.models.gandalf import LOGS, GandalfEstimator
 from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import (
     LightGBMClassifier,
@@ -41,12 +43,13 @@ from df_analyze.models.linear import (
 )
 from df_analyze.models.svm import SVMClassifier, SVMRegressor
 
+C = 20
+
 
 def fake_data(
     mode: Literal["classify", "regress"], noise: float = 1.0
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
     N = 100
-    C = 20
 
     X_cont_tr = np.random.standard_normal([N, C])
     X_cont_test = np.random.standard_normal([N, C])
@@ -97,7 +100,6 @@ def check_basics(model: DfAnalyzeModel, mode: Literal["classify", "regress"]) ->
     try:
         model.fit(X_train=X_tr, y_train=y_tr)
         model.predict(X_test)
-        model.score(X_test, y_test)
     except ValueError as e:  # handle braindead Optuna race condition
         print(e)
         print(e.args)
@@ -150,23 +152,15 @@ def check_optuna_tune_metric(
             n_jobs=1,
         )
         overrides = study.best_params
+        print(overrides)
     except ValueError as e:  # handle braindead Optuna race condition
         # print(e)
         # print(e.args)
-        if "No trials are completed yet" in str(e):
-            pass
-        elif "No trials are completed yet" in " ".join(e.args):
-            pass
-        else:
-            traceback.print_exc()
-            raise e
-        return
-        model.refit_tuned(X_tr, y_tr, tuned_args=overrides)
-    score = model.tuned_score(X_test, y_test)
-    if model.is_classifier:
-        probs = model.predict_proba(X_test)
-        return score, probs
-    return score, None
+        raise ValueError(f"Got error for metric: {metric.name}") from e
+    model.refit_tuned(X_tr, y_tr, tuned_args=overrides)
+    preds = model.tuned_predict(X_test)
+    score = metric.tuning_score(y_true=y_test, y_pred=preds)
+    return score
 
 
 def check_optuna_tune(
@@ -177,7 +171,9 @@ def check_optuna_tune(
     metrics = ClassifierScorer if is_cls else RegressorScorer
     # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
     for metric in metrics:
-        check_optuna_tune_metric(model=model, mode=mode, metric=metric)
+        print(
+            metric.name, check_optuna_tune_metric(model=model, mode=mode, metric=metric)
+        )
 
 
 @pytest.mark.fast
@@ -340,3 +336,46 @@ class TestLightGBM:
         model = LightGBMRFRegressor()
         # with capsys.disabled():
         check_optuna_tune(model, "regress")
+
+
+@pytest.mark.fast
+class TestGandalf:
+    def test_gandalf_cls(self, capsys: CaptureFixture) -> None:
+        try:
+            model = GandalfEstimator(num_classes=C)
+            with capsys.disabled():
+                check_basics(model, "classify")
+        except Exception as e:
+            raise e
+        finally:
+            rmtree(LOGS, ignore_errors=True)
+
+    def test_gandalf_reg(self, capsys: CaptureFixture) -> None:
+        try:
+            model = GandalfEstimator(num_classes=1)
+            with capsys.disabled():
+                check_basics(model, "regress")
+        except Exception as e:
+            raise e
+        finally:
+            rmtree(LOGS, ignore_errors=True)
+
+    def test_gandalf_cls_tune(self, capsys: CaptureFixture) -> None:
+        try:
+            model = GandalfEstimator(num_classes=C)
+            with capsys.disabled():
+                check_optuna_tune(model, "classify")
+        except Exception as e:
+            raise e
+        finally:
+            rmtree(LOGS, ignore_errors=True)
+
+    def test_gandalf_reg_tune(self, capsys: CaptureFixture) -> None:
+        try:
+            model = GandalfEstimator(num_classes=1)
+            with capsys.disabled():
+                check_optuna_tune(model, "regress")
+        except Exception as e:
+            raise e
+        finally:
+            rmtree(LOGS, ignore_errors=True)

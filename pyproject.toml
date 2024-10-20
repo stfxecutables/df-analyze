@@ -109,6 +109,7 @@ filterwarnings = [
   'ignore:AUROC cannot be used for tuning as it requires probabilities:UserWarning',
   'ignore:Maximum number of iteration reached before convergence',
   'ignore:The max_iter was reached',
+  'ignore:.*does not have many workers.*',
   'ignore:Without pruning, Optuna:UserWarning',
 ]
 markers = [
