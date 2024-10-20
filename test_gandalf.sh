@@ -1,2 +1,16 @@
 #!/bin/bash
-python -X faulthandler df-analyze.py --df Thyroid_diff.csv --target Recurred --mode classify --classifiers gandalf dummy --feat-select none --redundant-wrapper-selection --embed-select none --wrapper-select none --wrapper-model linear --norm robust --nan drop median --filter-method assoc pred --filter-assoc-cont-classify mut_info --filter-assoc-cat-classify mut_info --filter-assoc-cont-regress mut_info --filter-assoc-cat-regress mut_info --filter-pred-regress mae --filter-pred-classify acc --htune-trials 50 --htune-cls-metric acc --htune-reg-metric mae --test-val-size 0.4 --outdir ./gandalf_test_results
+python -X faulthandler df-analyze.py \
+  --df Thyroid_diff.csv \
+  --target Recurred \
+  --outdir ./gandalf_test_results \
+  --mode classify \
+  --classifiers gandalf lgbm dummy \
+  --feat-select none \
+  --embed-select none \
+  --wrapper-select none \
+  --norm robust \
+  --nan drop median \
+  --htune-trials 50 \
+  --htune-cls-metric acc \
+  --htune-reg-metric mae \
+  --test-val-size 0.4
