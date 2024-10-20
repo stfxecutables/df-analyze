@@ -821,7 +821,7 @@ class GandalfEstimator(DfAnalyzeModel):
             logger=logger,
             plugins=[DisabledSLURMEnvironment(auto_requeue=False)],
             max_epochs=50,
-            min_epochs=20,
+            min_epochs=10,
             log_every_n_steps=log_freq,
             callbacks=cbs,
             enable_progress_bar=False,
