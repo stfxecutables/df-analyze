@@ -700,179 +700,6 @@ class GandalfContLightningModel(LightningModule):
         return loss, preds
 
 
-def gandalf_validate(
-    dsname: str,
-    prepared: PreparedData,
-    batch: int,
-    virtual_batch: int = 32,
-    bnorm_cont: bool = True,
-    lr: float = 3e-4,
-    wd: float = 1e-4,
-    epochs: int = 10,
-    anneal: bool = False,
-    depth: int = 8,
-    init_sparsity: float = 0.3,
-    embed: bool = True,
-    embed_dim: int = 16,
-    embed_drop: float = 0.3,
-    gflu_drop: float = 0.0,
-) -> DataFrame:
-    X_cont, X_cat, y = prepared.X_cont, prepared.X_cat, prepared.y
-    is_cls = prepared.is_classification
-    if X_cat is None:
-        return DataFrame()
-    X_cont = DataFrame() if X_cont is None else X_cont
-
-    if embed:
-        data = TabularData(
-            X_cont=X_cont,
-            X_cat=X_cat,
-            y=y,
-            is_classification=prepared.is_classification,
-        )
-    else:
-        data = TabularData(
-            X_cont=prepared.X,
-            X_cat=None,
-            y=y,
-            is_classification=prepared.is_classification,
-        )
-    n_tr = ceil(0.7 * len(data))
-    n_val = len(data) - n_tr
-    # if we don't set a generator we get a segfault...
-    gen = torch.Generator().manual_seed(69)
-    train, test = random_split(data, lengths=(n_tr, n_val), generator=gen)
-    n_tr = ceil(0.8 * len(train))
-    n_val = len(train) - n_tr
-    train, val = random_split(train, lengths=(n_tr, n_val), generator=gen)
-    train_loader = DataLoader(
-        train,
-        batch_size=batch,
-        shuffle=True,
-        drop_last=True,
-        persistent_workers=True,
-        num_workers=1,
-    )
-    val_loader = DataLoader(
-        val,
-        batch_size=batch,
-        shuffle=False,
-        drop_last=False,
-        persistent_workers=True,
-        num_workers=1,
-    )
-    test_loader = DataLoader(
-        test,
-        batch_size=batch,
-        shuffle=False,
-        drop_last=False,
-        persistent_workers=True,
-        num_workers=1,
-    )
-    model = GandalfContCatLightningModel(
-        dataset=data,
-        lr=lr,
-        wd=wd,
-        epochs=epochs,
-        anneal=anneal,
-        depth=depth,
-        embed=embed,
-        embed_dim=embed_dim,
-        embed_dropout=embed_drop,
-        gflu_dropout=gflu_drop,
-        gflu_feature_init_sparsity=init_sparsity,
-        batch_norm_continuous_input=bnorm_cont,
-        virtual_batch=virtual_batch,
-    )
-    logger = TensorBoardLogger(save_dir=LOGS, default_hp_metric=False)
-    stop = "val/acc" if is_cls else "val/mae"
-    delta = 0.002 if is_cls else 0.002
-    mode = "max" if is_cls else "min"
-    ckpt_metric = "val/loss"
-    cbs = [
-        ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
-        LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
-    ]
-    trainer = Trainer(
-        accelerator="auto",
-        logger=logger,
-        plugins=[DisabledSLURMEnvironment(auto_requeue=False)],
-        max_epochs=epochs,
-        log_every_n_steps=4,
-        callbacks=cbs,
-    )
-    trainer.fit(model, train_loader, val_loader)
-
-    metrics = trainer.callback_metrics
-    index = ["train", "val"]
-    cols = CLS_COLS if prepared.is_classification else REG_COLS
-    df = DataFrame(
-        index=index, columns=cols, data=np.full([len(index), len(cols)], np.nan)
-    )
-    for metricname, value in metrics.items():  # training metrics
-        phase, metric = metricname.split("/")
-        if (phase == "train") and (metric in df.columns):
-            df.loc[phase, metric] = value.item()
-
-    trainer.validate(model, test_loader, ckpt_path=cbs[0].best_model_path)
-    metrics = trainer.callback_metrics
-    for metricname, value in metrics.items():
-        phase, metric = metricname.split("/")
-        if phase == "train":
-            continue
-        if metric in df.columns:
-            df.loc[phase, metric] = value.item()
-    return df
-
-
-def tune_gandalf(dsname: str, prepared: PreparedData, n_trials: int = 10) -> DataFrame:
-    grids = [Namespace(**args) for args in list(ParameterGrid(TUNING_SPACE))]
-    shuffle(grids)
-    is_cls = prepared.is_classification
-
-    best_metrics = None
-    best_score = None
-    for args in grids[:n_trials]:
-        gandalf_metrics = gandalf_validate(
-            dsname=dsname,
-            prepared=prepared,
-            lr=args.lr,
-            wd=args.wd,
-            epochs=EPOCHS,
-            anneal=args.anneal,
-            batch=BATCH,
-            virtual_batch=args.vbatch,
-            bnorm_cont=args.bnorm_cont,
-            embed=args.embed,
-            embed_dim=args.embed_dim,
-            embed_drop=args.drop,
-            gflu_drop=args.gdrop,
-            depth=args.depth,
-            init_sparsity=args.sparsity,
-        )
-        metric = "f1" if is_cls else "mae"
-        score = float(gandalf_metrics.loc["val", metric])  # type: ignore
-        if best_metrics is None:
-            best_metrics = gandalf_metrics
-            best_score = score
-            continue
-
-        assert best_score is not None
-        if is_cls:
-            if score > best_score:
-                best_score = score
-                best_metrics = gandalf_metrics
-        else:
-            if score < best_score:
-                best_score = score
-                best_metrics = gandalf_metrics
-
-        print(f"Best performance so far for {dsname}:")
-        print(best_metrics)
-    assert best_metrics is not None
-    return best_metrics
-
-
 class GandalfEstimator(DfAnalyzeModel):
     shortname = "gandalf"
     longname = "GANDALF - Gated Adaptive Network"
@@ -890,9 +717,9 @@ class GandalfEstimator(DfAnalyzeModel):
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
             lr=trial.suggest_float("lr", 1e-5, 5e-1, log=True),
-            wd=trial.suggest_float("wd", 1e-8, 1e-4, log=True),
+            wd=trial.suggest_float("wd", 1e-8, 1e-3, log=True),
             anneal=trial.suggest_categorical("anneal", [True]),
-            depth=trial.suggest_categorical("depth", [8, 12, 16, 20, 24, 32]),
+            depth=trial.suggest_categorical("depth", [4, 8, 12, 16, 20, 24, 32]),
             gflu_dropout=trial.suggest_float("gflu_dropout", 0.0, 0.1, log=False),
             init_sparsity=trial.suggest_float("init_sparsity", 0.05, 0.95, log=False),
             bnorm_cont=trial.suggest_categorical("bnorm_cont", [True]),
@@ -943,6 +770,8 @@ class GandalfEstimator(DfAnalyzeModel):
 
         # if we don't set a generator we get a segfault...
         train_batch = min(BATCH, len(train))
+        if train_batch > (len(train) // 2):
+            train_batch = 32  # prevent overfitting small datasets
         val_batch = min(BATCH, len(val))
         train_loader = DataLoader(
             train,
