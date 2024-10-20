@@ -720,8 +720,8 @@ class GandalfEstimator(DfAnalyzeModel):
             wd=trial.suggest_float("wd", 1e-8, 1e-3, log=True),
             anneal=trial.suggest_categorical("anneal", [True]),
             depth=trial.suggest_categorical("depth", [4, 8, 12, 16, 20, 24, 32]),
-            gflu_dropout=trial.suggest_float("gflu_dropout", 0.0, 0.1, log=False),
-            init_sparsity=trial.suggest_float("init_sparsity", 0.05, 0.95, log=False),
+            gflu_dropout=trial.suggest_float("gflu_dropout", 0.01, 0.1, log=False),
+            init_sparsity=trial.suggest_float("init_sparsity", 0.1, 0.9, log=False),
             bnorm_cont=trial.suggest_categorical("bnorm_cont", [True]),
             virtual_batch=trial.suggest_categorical("virtual_batch", [8, 16, 32, 64]),
         )
