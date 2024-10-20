@@ -640,7 +640,8 @@ class GandalfContLightningModel(LightningModule):
             virtual_batch_size=self.virtual_batch,
         )
         self.loss = (
-            CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
+            # CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
+            CrossEntropyLoss() if self.is_cls else MSELoss()
         )
         self.metric = (
             Accuracy(task="multiclass", num_classes=self.n_cls)
@@ -826,7 +827,7 @@ class GandalfEstimator(DfAnalyzeModel):
             callbacks=cbs,
             enable_progress_bar=False,
             enable_model_summary=False,
-            detect_anomaly=True,
+            detect_anomaly=False,
         )
         return trainer
 
