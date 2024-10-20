@@ -977,7 +977,7 @@ class GandalfEstimator(DfAnalyzeModel):
         mode = "max" if is_cls else "min"
         ckpt_metric = "val/loss"
         cbs = [
-            ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
+            # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
             ModelCheckpoint(monitor=stop, every_n_epochs=1),
             LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
         ]
