@@ -640,8 +640,10 @@ class GandalfContLightningModel(LightningModule):
             virtual_batch_size=self.virtual_batch,
         )
         self.loss = (
-            CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
-            # CrossEntropyLoss() if self.is_cls else MSELoss()
+            # Line below is causing anomalies on Niagara, we have to use
+            # unweighted version:
+            # CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
+            CrossEntropyLoss() if self.is_cls else MSELoss()
         )
         self.metric = (
             Accuracy(task="multiclass", num_classes=self.n_cls)
