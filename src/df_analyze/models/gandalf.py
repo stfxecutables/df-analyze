@@ -129,6 +129,8 @@ TUNING_SPACE = dict(
 # fmt: on
 
 warnings.filterwarnings("ignore", ".*does not have many workers.*")
+warnings.filterwarnings("ignore", ".*GPU available but not used.*")
+warnings.filterwarnings("ignore", ".*You are using `torch.load`.*")
 
 # https://github.com/Lightning-AI/pytorch-lightning/issues/6389#issuecomment-1997042135
 SLURMEnvironment.detect = lambda: False
@@ -973,7 +975,7 @@ class GandalfEstimator(DfAnalyzeModel):
         mode = "max" if is_cls else "min"
         ckpt_metric = "val/loss"
         cbs = [
-            ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
+            # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
             ModelCheckpoint(monitor=stop, every_n_epochs=1),
             LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
         ]
@@ -1156,7 +1158,8 @@ class GandalfEstimator(DfAnalyzeModel):
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
-        # too much Lightning nonsense for parallel jobs...
+        # completely arbitrary...
+        n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
@@ -1164,7 +1167,7 @@ class GandalfEstimator(DfAnalyzeModel):
             metric=metric,
             n_trials=n_trials,
             verbosity=verbosity,
-            n_jobs=1,
+            n_jobs=n_jobs,
         )
 
 
