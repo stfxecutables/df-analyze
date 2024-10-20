@@ -10,6 +10,7 @@ sys.path.append(str(SRC))  # isort: skip
 # fmt: on
 
 
+import logging
 import sys
 import traceback
 from copy import deepcopy
@@ -34,6 +35,19 @@ from df_analyze.selection.models import model_select_features
 RESULTS_DIR = Path(__file__).parent / "results"
 
 T = TypeVar("T")
+
+# https://github.com/Lightning-AI/pytorch-lightning/issues/3431#issuecomment-2130390858
+logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
+logger.setLevel(logging.ERROR)
+logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
+
+
+class IgnorePLFilter(logging.Filter):
+    def filter(self, record):
+        return "available:" not in record.getMessage()
+
+
+logger.addFilter(IgnorePLFilter())
 
 
 def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
@@ -119,7 +133,9 @@ def main() -> None:
     ordinals = renames.rename_columns(ordinals)
     drops = renames.rename_columns(drops)
 
-    df, inspection = inspect_data(df, target, grouper, categoricals, ordinals, drops, _warn=True)
+    df, inspection = inspect_data(
+        df, target, grouper, categoricals, ordinals, drops, _warn=True
+    )
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 

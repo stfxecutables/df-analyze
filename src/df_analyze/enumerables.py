@@ -152,10 +152,12 @@ class DfAnalyzeClassifier(RandEnum, Enum):
     SGD = "sgd"
     MLP = "mlp"
     SVM = "svm"
+    GANDALF = "gandalf"
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
         from df_analyze.models.dummy import DummyClassifier
+        from df_analyze.models.gandalf import GandalfEstimator
         from df_analyze.models.knn import KNNClassifier
         from df_analyze.models.lgbm import (
             LightGBMClassifier,
@@ -173,6 +175,7 @@ class DfAnalyzeClassifier(RandEnum, Enum):
             DfAnalyzeClassifier.SGD: SGDClassifier,
             DfAnalyzeClassifier.MLP: MLPEstimator,
             DfAnalyzeClassifier.SVM: SVMClassifier,
+            DfAnalyzeClassifier.GANDALF: GandalfEstimator,
             DfAnalyzeClassifier.Dummy: DummyClassifier,
         }[self]
 
@@ -195,10 +198,12 @@ class DfAnalyzeRegressor(RandEnum, Enum):
     SGD = "sgd"
     MLP = "mlp"
     SVM = "svm"
+    GANDALF = "gandalf"
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
         from df_analyze.models.dummy import DummyRegressor
+        from df_analyze.models.gandalf import GandalfEstimator
         from df_analyze.models.knn import KNNRegressor
         from df_analyze.models.lgbm import (
             LightGBMRegressor,
@@ -216,6 +221,7 @@ class DfAnalyzeRegressor(RandEnum, Enum):
             DfAnalyzeRegressor.SGD: SGDRegressor,
             DfAnalyzeRegressor.MLP: MLPEstimator,
             DfAnalyzeRegressor.SVM: SVMRegressor,
+            DfAnalyzeRegressor.GANDALF: GandalfEstimator,
             DfAnalyzeRegressor.Dummy: DummyRegressor,
         }[self]
 

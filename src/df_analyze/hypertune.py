@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 import jsonpickle
 
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer
+from df_analyze.models.gandalf import GandalfEstimator
 from df_analyze.models.mlp import MLPEstimator
 from df_analyze.preprocessing.prepare import PreparedData
 from df_analyze.scoring import (
@@ -447,6 +448,8 @@ def evaluate_tuned(
                 )
 
             if model_cls is MLPEstimator:
+                model = model_cls(num_classes=prepared.num_classes)  # type: ignore
+            elif model_cls is GandalfEstimator:
                 model = model_cls(num_classes=prepared.num_classes)  # type: ignore
             else:
                 model = model_cls()
