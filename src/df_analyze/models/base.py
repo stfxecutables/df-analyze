@@ -354,16 +354,6 @@ class DfAnalyzeModel(ABC):
         df = df.reset_index()
         return df, preds_train, preds_test, probs_train, probs_test
 
-    def score(self, X: DataFrame, y: Series) -> float:
-        if self.model is None:
-            raise RuntimeError("Need to call `model.fit()` before calling `.score()`")
-        return self.model.score(X, y)
-
-    def tuned_score(self, X: DataFrame, y: Series) -> float:
-        if self.tuned_model is None:
-            raise RuntimeError("Need to tune model before calling `.tuned_score()`")
-        return self.tuned_model.score(X, y)
-
     def tuned_scores(self, X: DataFrame, y: Series) -> Series:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")

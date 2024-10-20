@@ -340,18 +340,6 @@ class MLPEstimator(DfAnalyzeModel):
         Xt = self._to_torch(X)
         return self.tuned_model.predict_proba(Xt)
 
-    def score(self, X: DataFrame, y: Series) -> float:
-        Xt, yt = self._to_torch(X, y)
-        if self.model is None:
-            raise RuntimeError("Need to call `model.fit()` before calling `.score()`")
-        return float(self.model.score(Xt, yt))  # type: ignore
-
-    def tuned_score(self, X: DataFrame, y: Series) -> float:
-        Xt, yt = self._to_torch(X, y)
-        if self.tuned_model is None:
-            raise RuntimeError("Need to tune model before calling `.tuned_score()`")
-        return self.tuned_model.score(Xt, yt)
-
     def _to_model_args(
         self, optuna_args: dict[str, Any], X_train: DataFrame
     ) -> dict[str, Any]:
