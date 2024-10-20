@@ -640,8 +640,8 @@ class GandalfContLightningModel(LightningModule):
             virtual_batch_size=self.virtual_batch,
         )
         self.loss = (
-            # CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
-            CrossEntropyLoss() if self.is_cls else MSELoss()
+            CrossEntropyLoss(weight=self.cls_weights) if self.is_cls else MSELoss()
+            # CrossEntropyLoss() if self.is_cls else MSELoss()
         )
         self.metric = (
             Accuracy(task="multiclass", num_classes=self.n_cls)
@@ -958,38 +958,48 @@ class GandalfEstimator(DfAnalyzeModel):
         def objective(trial: Trial) -> float:
             # these MUST be created in the objective, or we get a bug with
             # the iter() loop "generator already executing"
-            train, val = self._train_val_loaders(
-                X_train=X_train, y_train=y_train, g_train=g_train
-            )
-            opt_args = self.optuna_args(trial)
-            model_args = self._to_model_args(opt_args, X_train)
-            full_args = {**self.fixed_args, **self.default_args, **model_args}
-            full_args["dataset"] = data
-            n_train = len(train.dataset)
-            if full_args["virtual_batch"] > n_train:
-                full_args["virtual_batch"] = 16
-            model = self.model_cls(**full_args)
-            trainer = self._get_trainer(train=train, val=val, trial=trial)
-            Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)  # type: ignore
-            trainer.fit(model=model, train_dataloaders=train, val_dataloaders=val)
-            pred = self._pred_loader(val.dataset.X, g=None)  # type: ignore
-            all_preds = trainer.predict(model=model, dataloaders=pred, ckpt_path="best")
-            preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
-            if self.is_classifier:
-                y_true = val.dataset.y
-                y_pred = preds.argmax(axis=1)
-                y_prob = preds
-                score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
-                return score[metric.value]  # type: ignore
-                # and (metric is not ClassifierScorer.AUROC):
-                # if metric is not ClassifierScorer.AUROC:
-                #     preds = preds.argmax(axis=1)
-                # else:
-                #     if self.n_cls == 2:
-                #         preds = preds[:, 1]
+            try:
+                train, val = self._train_val_loaders(
+                    X_train=X_train, y_train=y_train, g_train=g_train
+                )
+                opt_args = self.optuna_args(trial)
+                model_args = self._to_model_args(opt_args, X_train)
+                full_args = {**self.fixed_args, **self.default_args, **model_args}
+                full_args["dataset"] = data
+                n_train = len(train.dataset)
+                if full_args["virtual_batch"] > n_train:
+                    full_args["virtual_batch"] = 16
+                model = self.model_cls(**full_args)
+                trainer = self._get_trainer(train=train, val=val, trial=trial)
+                Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)  # type: ignore
+                trainer.fit(model=model, train_dataloaders=train, val_dataloaders=val)
+                pred = self._pred_loader(val.dataset.X, g=None)  # type: ignore
+                all_preds = trainer.predict(
+                    model=model, dataloaders=pred, ckpt_path="best"
+                )
+                preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
+                if self.is_classifier:
+                    y_true = val.dataset.y
+                    y_pred = preds.argmax(axis=1)
+                    y_prob = preds
+                    score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
+                    return score[metric.value]  # type: ignore
+                    # and (metric is not ClassifierScorer.AUROC):
+                    # if metric is not ClassifierScorer.AUROC:
+                    #     preds = preds.argmax(axis=1)
+                    # else:
+                    #     if self.n_cls == 2:
+                    #         preds = preds[:, 1]
 
-            score = metric.tuning_score(y_true=val.dataset.y.numpy(), y_pred=preds)
-            return score
+                score = metric.tuning_score(y_true=val.dataset.y.numpy(), y_pred=preds)
+                return score
+            except Exception as e:
+                traceback.print_exc()
+                print(f"Got error: {e}")
+                if metric.higher_is_better():
+                    return float(-np.inf)
+                else:
+                    return float(np.inf)
 
         return objective
 
