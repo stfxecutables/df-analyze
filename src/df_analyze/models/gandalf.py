@@ -970,6 +970,7 @@ class GandalfEstimator(DfAnalyzeModel):
         is_cls = self.is_classifier
         logs = LOGS if trial is None else LOGS / str(trial.number)
         logs.mkdir(exist_ok=True, parents=True)
+        (logs / "lightning_logs").mkdir(exist_ok=True, parents=True)
         logger = TensorBoardLogger(save_dir=logs, default_hp_metric=False)
         stop = "val/metric"
         delta = 0.002
@@ -986,7 +987,7 @@ class GandalfEstimator(DfAnalyzeModel):
         log_freq = min(log_freq_train, log_freq_val)
         trainer = Trainer(
             accelerator="cpu",
-            devices=1,
+            devices="auto",
             logger=logger,
             plugins=[DisabledSLURMEnvironment(auto_requeue=False)],
             max_epochs=50,
@@ -1161,8 +1162,8 @@ class GandalfEstimator(DfAnalyzeModel):
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
         # completely arbitrary...
-        # n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
-        n_jobs = 1 if os.environ.get("CC_CLUSTER") is None else 1
+        n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
+        # n_jobs = 1 if os.environ.get("CC_CLUSTER") is None else 1
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,
