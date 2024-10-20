@@ -962,6 +962,9 @@ class GandalfEstimator(DfAnalyzeModel):
             model_args = self._to_model_args(opt_args, X_train)
             full_args = {**self.fixed_args, **self.default_args, **model_args}
             full_args["dataset"] = data
+            n_train = len(train.dataset)
+            if full_args["virtual_batch"] > n_train:
+                full_args["virtual_batch"] = 16
             model = self.model_cls(**full_args)
             trainer = self._get_trainer(train=train, val=val, trial=trial)
             Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)  # type: ignore
