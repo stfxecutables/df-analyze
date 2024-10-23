@@ -12,6 +12,7 @@ sys.path.append(str(ROOT))  # isort: skip
 File for defining all options passed to `df-analyze.py`.
 """
 import os
+import sys
 import traceback
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
 from copy import deepcopy
@@ -34,6 +35,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from df_analyze._constants import (
+    VERSION,
     FULL_RESULTS,
     N_WRAPPER_DEFAULT,
     P_FILTER_CAT_DEFAULT,
@@ -204,6 +206,8 @@ class ProgramOptions(Debug):
     ) -> None:
         # memoization-related
         # other
+        self.version = VERSION
+        self.cli_args = " ".join(sys.argv)
         self.datapath: Optional[Path] = self.validate_datapath(datapath)
         self.target: str = target
         self.grouper: Optional[str] = grouper
@@ -445,10 +449,14 @@ class ProgramOptions(Debug):
         )
 
     def to_json(self) -> None:
-        path = self.program_dirs.options
-        if path is None:
-            return
-        path.write_text(str(jsonpickle.encode(self)))
+        try:
+            path = self.program_dirs.options
+            if path is None:
+                return
+            path.write_text(str(jsonpickle.encode(self, unpicklable=False, indent=4)))
+        except Exception as e:
+            print(f"Got error saving options: {e}")
+            traceback.print_exc()
 
     @staticmethod
     def from_json(root: Path) -> ProgramOptions:
