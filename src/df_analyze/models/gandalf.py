@@ -980,9 +980,9 @@ class GandalfEstimator(DfAnalyzeModel):
                     model=model, dataloaders=pred, ckpt_path="best"
                 )
                 preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
+                y_true = Series(data=val.dataset.y.numpy())
                 if self.is_classifier:
-                    y_true = val.dataset.y
-                    y_pred = preds.argmax(axis=1)
+                    y_pred = Series(data=preds.argmax(axis=1))
                     y_prob = preds
                     score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
                     return score[metric.value]  # type: ignore
@@ -993,7 +993,7 @@ class GandalfEstimator(DfAnalyzeModel):
                     #     if self.n_cls == 2:
                     #         preds = preds[:, 1]
 
-                score = metric.tuning_score(y_true=val.dataset.y.numpy(), y_pred=preds)
+                score = metric.tuning_score(y_true=y_true, y_pred=preds)
                 return score
             except Exception as e:
                 traceback.print_exc()

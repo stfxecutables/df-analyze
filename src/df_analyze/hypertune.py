@@ -325,8 +325,12 @@ class EvaluationResults:
             "results": self.results,
             "is_classification": self.is_classification,
         }
-        enc = str(jsonpickle.encode(remain))
-        (root / "eval_htune_results.json").write_text(enc)
+        try:
+            enc = str(jsonpickle.encode(remain, unpicklable=False))
+            (root / "eval_htune_results.json").write_text(enc)
+        except TypeError:
+            enc = str(jsonpickle.encode(remain, unpicklable=False, fail_safe=str))
+            (root / "eval_htune_results.json").write_text(enc)
 
     @classmethod
     def load(cls, root: Path) -> EvaluationResults:
