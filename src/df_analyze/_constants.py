@@ -1,5 +1,7 @@
 from pathlib import Path
 
+VERSION = "3.2.1"
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 DATADIR = ROOT / "data"
 TESTDATA = DATADIR / "testing"

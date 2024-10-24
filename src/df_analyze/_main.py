@@ -109,6 +109,7 @@ def main() -> None:
     # get arguments
     # run analyses based on args
     options = get_options()
+    options.to_json()
     # if options.verbosity.value > 0:
     #     log_options(options)
 

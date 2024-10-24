@@ -10,7 +10,7 @@ python -X faulthandler df-analyze.py \
   --wrapper-select none \
   --norm robust \
   --nan drop median \
-  --htune-trials 50 \
-  --htune-cls-metric acc \
+  --htune-trials 8 \
+  --htune-cls-metric auroc \
   --htune-reg-metric mae \
   --test-val-size 0.4
