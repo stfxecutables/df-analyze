@@ -465,7 +465,7 @@ for path in my_image_paths:
     img = Image.open(path)
     buf = BytesIO()
     img.save(buf, format="JPEG")
-    byts = bug.getvalue()
+    byts = buf.getvalue()
     converted.append(byts)
     targets.append(get_target(path))
 
