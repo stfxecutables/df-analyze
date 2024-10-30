@@ -5,6 +5,21 @@ Include: apt
 
 %setup
     echo "Not doing anything in %setup right now"
+    mkdir -vp $APPTAINER_ROOTFS/project
+    mkdir -vp $APPTAINER_ROOTFS/scratch
+    mkdir -vp $APPTAINER_ROOTFS/$SCRATCH/.apptainer/tmp  # necessary on Niagara
+    mkdir -vp $APPTAINER_ROOTFS/$SCRATCH/.singularity/tmp  # necessary on Niagara
+    # below are necessary on Beluga.... likely some admin messed up the
+    # global apptainer.conf file, because we shouldn't have to be manually
+    # hacking in these things just to get a successful build...
+    mkdir -vp $APPTAINER_ROOTFS/lustre01/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre02/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre03/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre04/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre01/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre02/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre03/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre04/scratch
 
 %files
     # build_files/wheels/pip /root/.cache/pip
