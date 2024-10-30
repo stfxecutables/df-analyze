@@ -735,6 +735,11 @@ number of features due to one-hot encoding of categoricals.
 
 """
 
+VERSION_HELP = """
+If this flag is present, just print the df-analyze version and exit.
+
+"""
+
 DESC = f"""
 {DF_HELP_STR}
 {TARGET_HELP_STR}

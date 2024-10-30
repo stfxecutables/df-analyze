@@ -42,6 +42,7 @@ from df_analyze._constants import (
     P_FILTER_CONT_DEFAULT,
     P_FILTER_TOTAL_DEFAULT,
     SENTINEL,
+    VERSION,
 )
 from df_analyze.analysis.univariate.associate import (
     CatClsStats,
@@ -95,6 +96,7 @@ from df_analyze.cli.text import (
     USAGE_EXAMPLES,
     USAGE_STRING,
     VERBOSITY_HELP,
+    VERSION_HELP,
     WRAP_SELECT_HELP,
     WRAP_SELECT_MODEL_HELP,
 )
@@ -504,6 +506,11 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
         if args is None
         else cli_parser.parse_known_args(args.split())[0]
     )
+
+    if cli_args.version:
+        print(f"df-analyze {VERSION}")
+        exit(0)
+
     if cli_args.spreadsheet is None and cli_args.df is None:
         raise ValueError(
             "Must specify one of either `--spreadsheet [file]` or `--df [file]`."
@@ -885,6 +892,11 @@ def make_parser() -> ArgumentParser:
         action="store_true",
         help=EXPLODE_HELP,
     )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help=VERSION_HELP,
+    )
     return parser
 
 
@@ -1102,6 +1114,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     # parser = ArgumentParser(description=DESC)
     parser = make_parser()
     cli_args = parse_and_merge_args(parser, args)
+
     mode = str(cli_args.mode).lower()
     is_cls = True if "class" in mode else False
 
