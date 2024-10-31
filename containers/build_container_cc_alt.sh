@@ -42,7 +42,7 @@ export SCRATCH="$SCRATCH"
 apptainer --debug build --bind "$SCRATCH" --fakeroot --force debian_app.sif build_debian.def || { echo "Container build failed. If reporting a container build issue, please attach the 'build.txt' file created in this directory"; exit 1; }
 
 echo "Copying container to project root..."
-cp debian_app.sif ../df_analyze.sif
+cp debian_app.sif ../df_analyze.sif || { echo "Error copying built container 'debian_app.sif' to df-analyze project root"; exit 1; }
 
 echo "=================================================================="
 echo "Container built successfully. Built container located at:"
