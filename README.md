@@ -536,12 +536,12 @@ cd $SCRATCH/df-analyze/containers
 ```
 
 This will spam a lot of text to the terminal, but what you want to see at
-the end is a message:
+the end is a message very similar to:
 
 ```txt
 ==================================================================
 Container built successfully. Built container located at:
-/scratch/path/to/df-analyze/df_analyze.sif
+/scratch/df-analyze/df_analyze.sif
 ==================================================================
 ```
 
@@ -550,6 +550,26 @@ If you don't see this, or if somehow you see this message but there is no
 will be located in `df-analyze/containers/build.txt`. This `build.txt` file
 should be included with any bug reports or if encountering any issues when
 building the container.
+
+You can perform a final additional sanity test of the container build by then
+running the commands:
+
+```bash
+cd $SCRATCH/df-analyze
+./run_python_with_home.sh $(realpath df-analyze.py) --version 2> /dev/null
+```
+
+
+You should see some output like:
+
+```txt
+Running script from: /scratch/[...]/df-analyze
+Using Python 3.12.5
+df-analyze 3.2.2
+```
+
+but with of course the final version number depending on which release you have
+installed.
 
 ### Using the Singularity Container
 
