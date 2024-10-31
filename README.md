@@ -535,6 +535,42 @@ cd $SCRATCH/df-analyze/containers
 ./build_container_cc.sh
 ```
 
+This will spam a lot of text to the terminal, but what you want to see at
+the end is a message very similar to:
+
+```txt
+==================================================================
+Container built successfully. Built container located at:
+/scratch/df-analyze/df_analyze.sif
+==================================================================
+```
+
+If you don't see this, or if somehow you see this message but there is no
+`df_analyze.sif` in the project root, then the complete container build log
+will be located in `df-analyze/containers/build.txt`. This `build.txt` file
+should be included with any bug reports or if encountering any issues when
+building the container.
+
+You can perform a final additional sanity test of the container build by then
+running the commands:
+
+```bash
+cd $SCRATCH/df-analyze/containers
+./check_install.sh
+```
+
+
+You should see some output like:
+
+```txt
+Running script from: /scratch/[...]/df-analyze
+Using Python 3.12.5
+df-analyze 3.2.2
+```
+
+but with of course the final version number depending on which release you have
+installed. Otherwise, there will be an error message and other information.
+
 ### Using the Singularity Container
 
 If the singularity container `df_analyze.sif` is available in the project
