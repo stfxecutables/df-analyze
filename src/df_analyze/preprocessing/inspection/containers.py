@@ -138,9 +138,7 @@ class InspectionInfo:
         return {col: infer for col, infer in self.infos.items() if infer.is_certain()}
 
     def uncertains(self) -> dict[str, Inference]:
-        return {
-            col: infer for col, infer in self.infos.items() if not infer.is_certain()
-        }
+        return {col: infer for col, infer in self.infos.items() if not infer.is_certain()}
 
     def certain_lines(self, pad: Optional[int] = None) -> list[str]:
         return self.lines_from_infos(self.certains(), pad)
@@ -173,10 +171,7 @@ class InspectionInfo:
 
     def to_df(self) -> DataFrame:
         df = DataFrame(
-            [
-                [col, infer.kind.value, infer.reason]
-                for col, infer in self.infos.items()
-            ],
+            [[col, infer.kind.value, infer.reason] for col, infer in self.infos.items()],
             columns=["feature_name", "inferred", "reason"],
         )
         return df
@@ -299,10 +294,37 @@ class InspectionResults:
         w = pad or max(len(info.col) for info in infos) + 2
         header = "Deflated categorical variables (before --> after):"
         lines = [
-            f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}"
-            for info in infos
+            f"{info.col:<{w}} {info.n_total: >3} --> {info.n_keep:< 2}" for info in infos
         ]
         return [header, *lines, "\n"]
+
+    def inflation_level_lines(self, pad: Optional[int] = None) -> list[str]:
+        try:
+            infos = self.inflation
+            infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
+            if len(infos) <= 0:
+                return []
+            w = pad or max(len(info.col) for info in infos) + 2
+            header = "Deflated levels"
+            header = f"{header}\n{'-' * len(header)}\n"
+            header_info = (
+                "I.e. below lists each categorical feature having levels with "
+                f"less than {N_CAT_LEVEL_MIN} total samples. The listed level "
+                "values underneath each feature name are replaced with the value "
+                "'DEFLATED' (or 'DEFLATED_OTHER', if somehow 'DEFLATED' is already "
+                "a level value). Remaining level values are present in feature "
+                "selection and other feature-related reports (e.g. "
+                "`association_selection_report.md`)."
+            )
+            header = f"{header}{header_info}\n"
+            lines = []
+            for info in infos:
+                lines.append(f"{info.col}\n{'.' * w}\n{info.to_deflate}\n")
+
+            return [header, *lines, "\n"]
+        except Exception as e:
+            print(f"Got error generating level deflations info: {e}")
+            return []
 
     def drop_cols(self) -> list[str]:
         cols = []
@@ -412,9 +434,7 @@ class InspectionResults:
 
         bin_section = self.section("Binary Features", bin_lines)
         cat_section = self.section("Categorical Features", cat_lines)
-        numeric_header = (
-            self.med_header("Numeric Features") if len(numerics) > 0 else ""
-        )
+        numeric_header = self.med_header("Numeric Features") if len(numerics) > 0 else ""
         ord_section = self.subsection("Ordinals", ord_lines)
         cont_section = self.subsection("Continuous", cont_lines)
 
@@ -427,6 +447,9 @@ class InspectionResults:
         )
         inflate_desc = f"{INFLATION_HEADER}\n\n" if len(inflate_lines) > 0 else ""
 
+        inflate_level_lines = self.inflation_level_lines()
+        inflate_level_info = "\n".join(inflate_level_lines)
+
         report = (
             f"{destruct_header}"
             f"{remove_header}"
@@ -437,6 +460,7 @@ class InspectionResults:
             f"{inflate_header}"
             f"{inflate_desc}"
             f"{inflate_info}"
+            f"{inflate_level_info}"
             f"{numeric_header}"
             f"{ord_section}{cont_section}"
             # f"{deflations}"

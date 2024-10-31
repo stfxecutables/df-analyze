@@ -16,8 +16,10 @@ import pytest
 from _pytest.capture import CaptureFixture
 from pandas import DataFrame
 
+from df_analyze._constants import N_CAT_LEVEL_MIN
 from df_analyze.enumerables import NanHandling
 from df_analyze.preprocessing.cleaning import (
+    deflate_categoricals,
     encode_categoricals,
     handle_continuous_nans,
 )
@@ -165,6 +167,40 @@ def do_encode(dataset: tuple[str, TestDataset]) -> None:
         raise ValueError(f"Encoding created constant columns: {consts}")
 
 
+def do_deflate(dataset: tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    df = ds.load()
+    results = ds.inspect(load_cached=True)
+    try:
+        deflated = deflate_categoricals(
+            df.drop(columns="target", errors="ignore"),
+            grouper=None,
+            results=results,
+            _warn=False,
+        )
+        cols = [info.col for info in results.inflation]
+        deflate_cols = sorted(set(deflated.columns).intersection(cols))
+        deflate_names = ["DEFLATED", "DEFLATED_OTHER"]
+        for col in deflate_cols:
+            series = deflated[col].dropna()
+            ix_deflated = series.isin(deflate_names)
+            series = series[~ix_deflated]
+            unqs, cnts = np.unique(series, return_counts=True)
+            if len(cnts) <= 0:
+                continue
+            ix = np.argmin(cnts)
+            unq = unqs[ix]
+            if np.min(cnts) < N_CAT_LEVEL_MIN:
+                raise ValueError(
+                    f"Column `{col}` appears to been deflated incorrectly: "
+                    f"value `{unq}` has less than {N_CAT_LEVEL_MIN} samples. "
+                )
+        report = results.short_report()
+        print(report)
+    except Exception as e:
+        raise ValueError(f"Got error deflating dataset: {dsname}") from e
+
+
 @fast_ds
 @pytest.mark.cached
 def test_encoding_fast(dataset: tuple[str, TestDataset]) -> None:
@@ -175,6 +211,20 @@ def test_encoding_fast(dataset: tuple[str, TestDataset]) -> None:
 @pytest.mark.cached
 def test_encoding_med(dataset: tuple[str, TestDataset]) -> None:
     do_encode(dataset)
+
+
+@fast_ds
+@pytest.mark.cached
+def test_deflate_fast(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+    # with capsys.disabled():
+    do_deflate(dataset)
+
+
+@med_ds
+@pytest.mark.cached
+def test_deflate_med(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
+    # with capsys.disabled():
+    do_deflate(dataset)
 
 
 # @slow_ds
