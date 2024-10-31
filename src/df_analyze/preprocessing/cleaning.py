@@ -518,7 +518,10 @@ def deflate_categoricals(
         nan = df[col].isna()  # remember, we have done NaN unification already
         df[col] = df[col].astype(str)  # same as comment above, this is safe
         df.loc[nan, col] = np.nan
-        rename = "DEFLATED_OTHER" if "DEFLATED" in df[col].unique() else "DEFLATED"
+        names = df[col].unique()
+        rename = "DEFLATED_OTHER" if "DEFLATED" in names else "DEFLATED"
+        if "DEFLATED_OTHER" in names:  # getting a bit crazy here...
+            rename = "DEFLATED_OTHER_DFANALYZE"
         ix_deflate = df[col].isin(info.to_deflate)
         df.loc[ix_deflate, col] = rename
 

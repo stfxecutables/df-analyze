@@ -180,7 +180,7 @@ def do_deflate(dataset: tuple[str, TestDataset]) -> None:
         )
         cols = [info.col for info in results.inflation]
         deflate_cols = sorted(set(deflated.columns).intersection(cols))
-        deflate_names = ["DEFLATED", "DEFLATED_OTHER"]
+        deflate_names = ["DEFLATED", "DEFLATED_OTHER", "DEFLATED_OTHER_DFANALYZE"]
         for col in deflate_cols:
             series = deflated[col].dropna()
             ix_deflated = series.isin(deflate_names)
