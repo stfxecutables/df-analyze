@@ -14,7 +14,12 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
-from df_analyze._constants import MAX_PERF_N_FEATURES, N_TARG_LEVEL_MIN, NAN_STRINGS
+from df_analyze._constants import (
+    MAX_PERF_N_FEATURES,
+    N_CAT_LEVEL_MIN,
+    N_TARG_LEVEL_MIN,
+    NAN_STRINGS,
+)
 from df_analyze.enumerables import NanHandling
 from df_analyze.loading import load_spreadsheet
 from df_analyze.preprocessing.inspection.inspection import (
@@ -497,10 +502,12 @@ def deflate_categoricals(
 ) -> DataFrame:
     df = df.copy()
 
-    infos = results.inflation
-    infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
     existing_cols = set(df.columns.tolist())
-    cols = [info.col for info in infos if info.col in existing_cols]
+    infos = results.inflation
+    infos = [info for info in infos if info.col in existing_cols]
+    infos = sorted(infos, key=lambda info: info.n_total, reverse=True)
+    cols = [info.col for info in infos]
+
     if (grouper is not None) and (grouper in cols):
         raise RuntimeError(f"Found grouping column `{grouper}` in inspection info")
 
@@ -508,12 +515,15 @@ def deflate_categoricals(
         infos, desc="Deflating categoricals", total=len(infos), disable=len(infos) < 50
     ):
         col = info.col
-        if col not in cols:
-            continue
-        nan = df[col].isna()
-        df[col] = df[col].astype(str)
-        idx = df[col].isin(info.to_deflate) | nan
-        df.loc[idx, col] = np.nan
+        nan = df[col].isna()  # remember, we have done NaN unification already
+        df[col] = df[col].astype(str)  # same as comment above, this is safe
+        df.loc[nan, col] = np.nan
+        names = df[col].unique()
+        rename = "DEFLATED_OTHER" if "DEFLATED" in names else "DEFLATED"
+        if "DEFLATED_OTHER" in names:  # getting a bit crazy here...
+            rename = "DEFLATED_OTHER_DFANALYZE"
+        ix_deflate = df[col].isin(info.to_deflate)
+        df.loc[ix_deflate, col] = rename
 
     if len(infos) > 0:
         w = max(len(info.col) for info in infos) + 2
@@ -532,11 +542,16 @@ def deflate_categoricals(
             "or analyses. Roughly, this means each fold needs to see at least "
             "10-20 samples of each level (depending on how strongly / cleanly "
             "the level relates to other features - ultimately this is just a "
-            "heuristic). Assuming k-fold is used for validation, then this means "
-            "about k*10 samples per categorical level would a reasonable default "
-            "minimum requirement one might use for culling categorical levels. "
-            "Under the typical assumption of k=5, this means we require useful / "
-            "reliable categorical levels to have 50 samples each.\n\n"
+            "heuristic). Internal 5-fold validations on the training set will "
+            "have approximately half the amount of samples (0.6 training split * "
+            "0.8 k-fold training split) as the original full data. Thus, if there "
+            f"are less than about {N_CAT_LEVEL_MIN} samples per class level in the "
+            "original data, then training splits are expected to have about 10 "
+            "samples per level, on average (but in fact, anywhere from 0-20, "
+            "since stratification is on the target only). Thus, we bin all class "
+            f"levels with less than {N_CAT_LEVEL_MIN} samples into a DEFLATED "
+            "category (or 'DEFLATED_OTHER' if 'DEFLATED' is already present "
+            "as a label for a class level).\n\n"
             "Deflated categorical variables (before --> after):\n"
             f"{message}"
         )
