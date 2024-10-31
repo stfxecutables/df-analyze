@@ -555,8 +555,8 @@ You can perform a final additional sanity test of the container build by then
 running the commands:
 
 ```bash
-cd $SCRATCH/df-analyze
-./run_python_with_home.sh $(realpath df-analyze.py) --version 2> /dev/null
+cd $SCRATCH/df-analyze/containers
+./check_install.sh
 ```
 
 
@@ -569,7 +569,7 @@ df-analyze 3.2.2
 ```
 
 but with of course the final version number depending on which release you have
-installed.
+installed. Otherwise, there will be an error message and other information.
 
 ### Using the Singularity Container
 
