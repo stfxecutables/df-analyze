@@ -565,7 +565,7 @@ You should see some output like:
 ```txt
 Running script from: /scratch/[...]/df-analyze
 Using Python 3.12.5
-df-analyze 3.2.2
+df-analyze 3.2.3
 ```
 
 but with of course the final version number depending on which release you have
