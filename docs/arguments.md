@@ -17,7 +17,7 @@ specify manually are:
     --mode (required)
     --outdir
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --spreadsheet SPREADSHEET
 
@@ -55,21 +55,36 @@ optional arguments:
                         The (string) name of the target variable for either regression or
                         classification.
 
+  --grouper GROUPER [GROUPER ...]
+
+                        The (string) name of the grouping variable (if one is present) which will be
+                        used to ensure samples within the same group do not end up in both train and
+                        test splits. I.e. the name of the feature that will be passed into scikit-learn
+                        GroupStratifiedKFold.
+
   --categoricals CATEGORICALS
 
                         A string or list of strings, e.g.
 
-                            --categoricals sex gender ancestry education
+                            --categoricals sex,gender,ancestry,education
 
                         that specifies which features will be treated as categorical regardless of the
                         number of levels or format of the data. If during data cleaning categorical
                         variables are detected that are NOT specified by the user, a warning will be
                         raised.
 
+                        Commas currently must be used to separate feature names: spaces will be
+                        considered to be part of the feature name, i.e. if you pass:
+
+                            --categoricals sex,gender, ancestry,education
+
+                        this will parse as the features "sex", "gender", " ancestry" (note space!),
+                        and "education".
+
   --ordinals ORDINALS
                         A string or list of strings, e.g.
 
-                            --ordinals star_rating number_of_purchases times_signed_in
+                            --ordinals star_rating,number_of_purchases,times_signed_in
 
                         that specifies which features will be treated as ordinal regardless of the
                         number of levels or format of the data. If during data cleaning ordinal
@@ -77,14 +92,18 @@ optional arguments:
                         raised. If the values of the specified variables cannot be interpreted as
                         integers, then df-analyze will exit with an error.
 
+                        See documentation for `--categoricals` re: the use of commas to list features.
+
   --drops DROPS
                         A string or list of strings, e.g.
 
-                            --drops subject_id location_id useless_feature1 useless_feat2
+                            --drops subject_id,location_id,useless_feature1,useless_feat2
 
                         that specifies which features will be removed from the data and not considered
                         for any inspection, description or univariate analysis, and which will not be
                         included in any feature selection, model tuning, or final predictive models.
+
+                        See documentation for `--categoricals` re: the use of commas to list features.
 
   --mode {classify,regress}
 
@@ -93,12 +112,46 @@ optional arguments:
   --classifiers  [ ...]
 
                         The list of classifiers to use when comparing classification performance.
-                        Can be a list of elements from: [dummy knn lgbm lr mlp rf sgd svm].
+                        Can be a list of elements from: [dummy gandalf knn lgbm lr mlp rf sgd svm].
 
-  --regressors {knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} [{knn,lgbm,rf,elastic,sgd,mlp,svm,dummy} ...]
+                          knn         scikit-learn KNeighborsClassifier.
+
+                          lgbm        LightGBM boosted decision tree classifier.
+
+                          rf          LightGBM random forest classifier.
+
+                          sgd         scikit-learn SGDClassifier.
+
+                          mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
+
+                          svm         scikit-learn support vector classifer.
+
+                          gandalf     Gated Adaptive Network for Deep Automated Learning of
+                                      Features for Tabular Data: https://arxiv.org/abs/2207.08548
+
+                          dummy       scikit-learn DummyClassifier.
+
+  --regressors {knn,lgbm,rf,elastic,sgd,mlp,svm,gandalf,dummy} [{knn,lgbm,rf,elastic,sgd,mlp,svm,gandalf,dummy} ...]
 
                         The list of regressors to use when comparing regression model performance.
-                        Can be a list of elements from: [dummy elastic knn lgbm mlp rf sgd svm].
+                        Can be a list of elements from: [dummy elastic gandalf knn lgbm mlp rf sgd svm].
+
+                          knn         scikit-learn KNeighborsRegressor.
+
+                          lgbm        LightGBM boosted decision tree regressor.
+
+                          rf          LightGBM random forest regressor.
+
+                          sgd         scikit-learn SGDRegressor.
+
+                          mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
+
+                          svm         scikit-learn support vector regressor.
+
+                          gandalf     Gated Adaptive Network for Deep Automated Learning of
+                                      Features for Tabular Data: https://arxiv.org/abs/2207.08548
+
+                          dummy       scikit-learn DummyRegressor.
 
   --feat-select  [ ...]
 
@@ -107,15 +160,15 @@ optional arguments:
                           filter      Select features based on their univariate relationships to the
                                       target variables.
 
-                          embed:      Select features using a model with implicit feature selection,
+                          embed       Select features using a model with implicit feature selection,
                                       e.g. an L1-regularized model or decision tree. For avaialable
                                       models, see `--embed-select`.
 
-                          wrap:       Select features by recursive model evaluation, currently either
+                          wrap        Select features by recursive model evaluation, currently either
                                       step-up (forward) feature selection, or step-down (backward)
                                       feature elimination.
 
-                          none:       Do not perform any selection.
+                          none        Do not perform any selection.
 
                         NOTE: Multiple selection options can be compared by passing each option, e.g.
 
@@ -530,15 +583,18 @@ optional arguments:
                         If this flag is present, silence the warnings about large increases in the
                         number of features due to one-hot encoding of categoricals.
 
+  --version
+                        If this flag is present, just print the df-analyze version and exit.
+
 
 USAGE EXAMPLE (assumes you have run `poetry shell`):
 
     python df-analyze.py \
         --df weather_data.json \
         --target temperature \
-        --categoricals weekday season \
+        --categoricals weekday,season \
         --ordinals rainfall_mm \
-        --drops date sample_id \
+        --drops date,sample_id \
         --mode=regress \
         --regressors=elastic lgbm knn \
         --feat-select wrap embed filter \
