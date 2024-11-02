@@ -580,7 +580,7 @@ inlcluded in the repo. E.g.
 
 ```bash
 cd $SCRATCH/df-analyze
-./run_python_with_home.sh test/test_main.py
+./run_python_with_home.sh "$(realpath my_script.py)"
 ```
 
 **HOWEVER** this will frequently cause errors about files not being found.
