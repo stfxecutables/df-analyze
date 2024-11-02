@@ -16,10 +16,22 @@ Include: apt
     mkdir -vp $APPTAINER_ROOTFS/lustre02/project
     mkdir -vp $APPTAINER_ROOTFS/lustre03/project
     mkdir -vp $APPTAINER_ROOTFS/lustre04/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre05/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre06/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre07/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre08/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre09/project
+    mkdir -vp $APPTAINER_ROOTFS/lustre10/project
     mkdir -vp $APPTAINER_ROOTFS/lustre01/scratch
     mkdir -vp $APPTAINER_ROOTFS/lustre02/scratch
     mkdir -vp $APPTAINER_ROOTFS/lustre03/scratch
     mkdir -vp $APPTAINER_ROOTFS/lustre04/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre05/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre06/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre07/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre08/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre09/scratch
+    mkdir -vp $APPTAINER_ROOTFS/lustre10/scratch
 
 %files
     # build_files/wheels/pip /root/.cache/pip
