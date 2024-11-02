@@ -14,4 +14,5 @@ export APPTAINERENV_PATH="$PATH:$APPTAINERENV_PATH"
 # silence matlplotlib warning on readonly filesystems
 export APPTAINERENV_MPLCONFIGDIR="$ROOT"/.mplconfig
 export APPTAINERENV_OPENBLAS_NUM_THREADS="1"
+module load apptainer || { echo "Could not load apptainer module"; exit 1; }
 apptainer run --home $(readlink -f .) --app python df_analyze.sif $@
