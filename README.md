@@ -31,6 +31,7 @@
     - [Data Splitting](#data-splitting)
     - [Univariate Feature Analyses](#univariate-feature-analyses)
     - [Feature Selection](#feature-selection)
+      - [Redundancy-Aware Feature Selection \*\*\[NEW\]\*\*](#redundancy-aware-feature-selection-new)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
     - [Final Validation](#final-validation)
 - [Program Outputs](#program-outputs)
@@ -771,6 +772,41 @@ leakage.
    - Keep features with largest filter metrics
 - Wrapper (stepwise) selection
 - Filter selection
+
+#### Redundancy-Aware Feature Selection \*\*[NEW]\*\*
+
+Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
+y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
+suitable fixed default hyperparameters $\theta$, and performance criterion
+$\mathcal{L}$, then `df-analyze` greedily attempts to find a feature subset
+$\mathbf{X}^{\star}$ such that
+$\mathcal{L}(f_\theta\big(\mathbf{X}^{\star}), y\_{\text{train}}\big)$ is to be minimized.
+
+That is, given features (columns) $\bm{x}_1, \dots, \bm{x_p}$ from the training
+data, the redundancy-aware aware feature selection algorithm performs forward
+stepwise selection with an additional reduction step where features at step $i$
+are greedily eliminated if their contribution to the performance is less than
+a positive threshold $\tau$ (default 0.005, i.e. difference is invisible after rounding to
+two decimal places).
+
+**Algorithm**
+
+1. Set $\bm{X} = \{\bm{x}_1, \dots, \bm{x}_p\}$,  $\bm{X}^{\star} = \empty$ and $\bm{X}_R = \empty$ to be the *candidate*, *selected*, and *redundant* feature sets, respectively
+1. Compute $\mathcal{L}_k = \mathcal{L}(f_\theta\big(\bm{X}), y\big)$ by k-fold on $(\bm{X}, y)$ for each $k$
+1. Define $\mathcal{L}_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\bm{X}_{i,k}), y\big)$. The $\bm{x}_k$ producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
+1. Set $\bm{X} = \bm{X} / \{\bm{x}_k\}$
+1. Set $\bm{X}^{\star} = \bm{X}^{\star} \cup \{\bm{x}_k\}$
+1. Set $\bm{X}_R = \{ \bm{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} \le \tau \}$
+1. Set $\bm{X} = \bm{X} / \bm{X}_R$ Eliminate from consideration (consider redundant) all features within the performance threshold
+1. Repeat from step 2 until $\bm{X} = \empty$ or maximum iterations reached
+
+===
+
+Redundant selection begins with a pool of all features (initially empty). At
+step $i$ of the selection algorithm, a new pool with one more feature (each
+candidate feature) is considered (forward selection).
+
+
 
 ### Hyperparameter Tuning
 
