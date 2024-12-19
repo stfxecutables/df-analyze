@@ -794,11 +794,12 @@ At each step of stepwise selection, the best candidate feature
 $\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a
 *redundant set* of features,
 $R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$.
-That is, all features in the redundant set produce a performance that is
-considered practically equivalent to the performance produced by adding
-feature $\symbfit{x}^{\star}$. At the next iteration of redundant stepwise
-selection, rather than just eliminating $\symbfit{x}^{\star}$ from consideration,
-instead all features in $\symbfit{R}$ are also greedily eliminated.
+That is, all features $\symbfit{x}$ in the redundant set are such that adding
+$\symbfit{x}$ instead of $\symbfit{x}^{\star}$ to the previous iteration
+feature pool produces performance that is considered equivalent at threshold
+$\tau$. At the next iteration of redundant stepwise selection, rather than
+just eliminating $\symbfit{x}^{\star}$ from consideration, instead all
+features in $\symbfit{R}$ are also greedily eliminated.
 
 
 **Algorithm**
