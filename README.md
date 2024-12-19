@@ -819,10 +819,9 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
    be the performance (loss) of each candidate feature set
 3. Define $\mathcal{L}\_i^{\star} = \min \mathcal{L}_i$. The feature $\symbfit{x}^{\star}$
    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
-4. Set $\symbfit{F}_i = \symbfit{X} / \\{ \symbfit{x}^{\star} \\}$ (remove selected candidate from pool)
-5. Set $\symbfit{X}_i^{\star} = \symbfit{X}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$
-6. Set $\symbfit{X}_R = \big\\{ \symbfit{x}_k | \mathcal{L}_k -
-   \mathcal{L}_i^{\star} | \le \tau \big\\}$
+4. Set $\symbfit{X}_R = \big\\{ \symbfit{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \big\\}$
+5. Set $\symbfit{F}_i = \symbfit{X} / \\{ \symbfit{x}^{\star} \\}$ (remove selected feature from candidate pool)
+6. Set $\symbfit{X}_i^{\star} = \symbfit{X}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
 7. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from
    consideration (consider redundant) all features within the performance
    threshold
