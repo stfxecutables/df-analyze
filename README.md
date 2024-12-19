@@ -816,7 +816,7 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
    be the *candidate feature set*.
 2. Define $\mathcal{L}\_{i} = \\{ \mathcal{L} \big( f( \symbfit{X}_i ), y \big) | \symbfit{x} \in \symbfit{F}_i \\}$ to be the set of candidate losses / performances
-   be the performance (loss) of each candidate feature set
+   of each feature set
 3. Define $\mathcal{L}\_i^{\star} = \min \mathcal{L}_i$. The feature $\symbfit{x}^{\star}$
    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
 4. Set $\symbfit{X}_R = \big\\{ \symbfit{x} : | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \text{ and } \symbfit{x} \in \symbfit{F}_i \big\\}$
