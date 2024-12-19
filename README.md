@@ -800,10 +800,9 @@ two decimal places).
 **Initialization $(i = 0)$**
 
 1. Set:
-   - $\symbfit{X}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$,
-   - $\symbfit{X}_i^{\star} = \emptyset$, and
-   - $\symbfit{X}_i^R = \emptyset$
-  - to be the *candidate*, *selected*, and *redundant* feature sets at iteration $i$, respectively
+   - $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool*,
+   - $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features, and
+   - $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features
 
 **Iteration $(i > 0)$**
 
