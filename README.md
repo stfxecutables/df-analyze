@@ -781,27 +781,25 @@ $\symbfit{X}$
 \symbfit{X} -->
 
 
-Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
-y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
+Given training data
+$\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}}, y\_{\text{train}})$
+and a univariate estimator $f$ ("*selector*") with
 suitable fixed default hyperparameters, redundancy-aware feature selection
 performs forward stepwise selection, removing from consideration all features
 with similar performances at each step. This similarity is controlled by a
-*equivalence threshold* $\tau$.
+*equivalence threshold* $\tau$ (default 0.005, i.e. an invisible difference
+after rounding to two decimal places).
 
-That is, at each step of stepwise selection, the best candidate feature
+At each step of stepwise selection, the best candidate feature
 $\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a
 *redundant set* of features,
 $R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$.
 That is, all features in the redundant set produce a performance that is
 considered practically equivalent to the performance produced by adding
-feature $\symbfit{x}^{\star}$.
+feature $\symbfit{x}^{\star}$. At the next iteration of redundant stepwise
+selection, rather than just eliminating $\symbfit{x}^{\star}$ from consideration,
+instead all features in $\symbfit{R}$ are also greedily eliminated.
 
-That is, given features (columns) $\symbfit{x}_1, \dots, \symbfit{x_p}$ from the training
-data, the redundancy-aware aware feature selection algorithm performs forward
-stepwise selection with an additional reduction step where features at step $i$
-are greedily eliminated if their contribution to the performance is less than
-a positive threshold $\tau$ (default 0.005, i.e. difference is invisible after rounding to
-two decimal places).
 
 **Algorithm**
 
