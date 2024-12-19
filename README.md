@@ -799,7 +799,7 @@ two decimal places).
 
 **Initialization $(i = 0)$**
 
-1. Set $\symbfit{X} = \{\symbfit{x}_1, \dots, \symbfit{x}_p\}$,  $\symbfit{X}^{\star} = \emptyset$ and $\symbfit{X}_R = \emptyset$ to be the *candidate*, *selected*, and *redundant* feature sets, respectively
+1. Set $\symbfit{X} = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$,  $\symbfit{X}^{\star} = \emptyset$ and $\symbfit{X}_R = \emptyset$ to be the *candidate*, *selected*, and *redundant* feature sets, respectively
 
 **Iteration $(i > 0)$**
 
