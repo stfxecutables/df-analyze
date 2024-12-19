@@ -775,6 +775,14 @@ leakage.
 
 #### Redundancy-Aware Feature Selection \*\*[NEW]\*\*
 
+$\bm{X}$
+\bm{X}
+$\boldsymbol{X}$
+\boldsymbol{X}
+$\symbfit{X}$
+\symbfit{X}
+
+
 Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
 y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
 suitable fixed default hyperparameters $\theta$, and performance criterion
