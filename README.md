@@ -798,8 +798,7 @@ two decimal places).
 **Algorithm**
 
 > **Initialization $(i = 0)$**
->
-> Set:
+> ===
 >
 > - $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$,
 > - $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
@@ -811,6 +810,7 @@ two decimal places).
 > such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 >
 > **Iteration $(i > 0)$**
+> ===
 >
 > 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
 >    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
