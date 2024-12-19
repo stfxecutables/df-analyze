@@ -802,7 +802,7 @@ two decimal places).
 1. Define $\mathcal{L}\_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\symbfit{X}_{i,k}), y\big)$. The $\symbfit{x}_k$ producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
 1. Set $\symbfit{X} = \symbfit{X} / \{\symbfit{x}_k\}$
 1. Set $\symbfit{X}^{\star} = \symbfit{X}^{\star} \cup \{\symbfit{x}_k\}$
-1. Set $\symbfit{X}_R = \big\{ \symbfit{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \big\}$
+1. Set $\symbfit{X}_R = \big\\{ \symbfit{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \big\\}$
 1. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from consideration (consider redundant) all features within the performance threshold
 1. Repeat from step 2 until $\symbfit{X} = \emptyset$ or maximum iterations reached
 
