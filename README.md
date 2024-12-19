@@ -797,18 +797,18 @@ two decimal places).
 
 **Algorithm**
 
-> ### **Initialization $(i = 0)$**
+> #### **Initialization $(i = 0)$**
 >
-> - $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$,
-> - $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
-> - $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features at iteration $i$
+> - define $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$,
+> - define $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
+> - define $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features at iteration $i$
 >
 > - For the *selector*, choose supervised estimator (classifier, regressor) $f$
 >   and suitable default constant hyperparameters for $f$, such that $f$ is fit
 >   to predict $y$ from any feature subset $\symbfit{X}$, i.e. we aim to fit $f$
 >   such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 >
-> ### **Iteration $(i > 0)$**
+> #### **Iteration $(i > 0)$**
 >
 > 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
 >    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
