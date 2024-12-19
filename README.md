@@ -807,9 +807,14 @@ Set:
 
 **Iteration $(i > 0)$**
 
+1. For each feature $\symbfit{x}\_k \in \symbfit{F}\_i$, define $\symbfit{X}_{ik} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x}\_k \\}$
+
+   $\mathcal{L}\_k = \mathcal{L}\big(f_\theta(\symbfit{X}), y\big)$ by k-fold
+   on $(\symbfit{X}, y)$ for each $k \in 1, \dots, p$
 1. For each feature $\symbfit{x}\_k \in \symbfit{F}\_i$, compute
    $\mathcal{L}\_k = \mathcal{L}\big(f_\theta(\symbfit{X}), y\big)$ by k-fold
    on $(\symbfit{X}, y)$ for each $k \in 1, \dots, p$
+
 1. Define $\mathcal{L}\_i^{\star} = \min_k
    \mathcal{L}(f_\theta\big(\symbfit{X}_{i,k}), y\big)$. The $\symbfit{x}_k$
    producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
