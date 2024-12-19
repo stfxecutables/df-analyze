@@ -800,14 +800,14 @@ two decimal places).
 **Initialization $(i = 0)$**
 
 1. Set:
-   - $\symbfit{X} = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$,
-   - $\symbfit{X}^{\star} = \emptyset$, and
-   - $\symbfit{X}_R = \emptyset$
-  - to be the *candidate*, *selected*, and *redundant* feature sets, respectively
+   - $\symbfit{X}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$,
+   - $\symbfit{X}_i^{\star} = \emptyset$, and
+   - $\symbfit{X}_i^R = \emptyset$
+  - to be the *candidate*, *selected*, and *redundant* feature sets at iteration $i$, respectively
 
 **Iteration $(i > 0)$**
 
-1. Compute $\mathcal{L}\_k = \mathcal{L}(f_\theta\big(\symbfit{X}), y\big)$ by k-fold on $(\symbfit{X}, y)$ for each $k$
+1. Compute $\mathcal{L}\_k = \mathcal{L}(f_\theta\big(\symbfit{X}), y\big)$ by k-fold on $(\symbfit{X}, y)$ for each $k \in 1, \dots, p$
 2. Define $\mathcal{L}\_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\symbfit{X}_{i,k}), y\big)$. The $\symbfit{x}_k$ producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
 3. Set $\symbfit{X}_k = \symbfit{X} / \{\symbfit{x}_k\}$
 4. Set $\symbfit{X}^{\star} = \symbfit{X}^{\star} \cup \{\symbfit{x}_k\}$
