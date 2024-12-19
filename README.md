@@ -814,7 +814,8 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 
 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
-   be the *candidate feature set*
+   be the *candidate feature set*. Then each candidate feature set produces
+   a loss $\mathcal{L}\_{i} = \mathcal{L} \big( f( \symbfit{X}_i^{\star} ), y \big)$
 1. Define $\mathcal{L}\_{i} = \mathcal{L} \big( f( \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\} ), y \big)$ to
    be the performance (loss) of each candidate feature set
 1. Define $\mathcal{L}\_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\symbfit{X}\_{ik}), y\big)$. The $\symbfit{x}_k$
