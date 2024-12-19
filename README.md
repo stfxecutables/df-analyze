@@ -775,12 +775,10 @@ leakage.
 
 #### Redundancy-Aware Feature Selection \*\*[NEW]\*\*
 
-$\bm{X}$
-\bm{X}
-$\boldsymbol{X}$
+<!-- $\boldsymbol{X}$
 \boldsymbol{X}
 $\symbfit{X}$
-\symbfit{X}
+\symbfit{X} -->
 
 
 Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
@@ -790,7 +788,7 @@ $\mathcal{L}$, then `df-analyze` greedily attempts to find a feature subset
 $\mathbf{X}^{\star}$ such that
 $\mathcal{L}(f_\theta\big(\mathbf{X}^{\star}), y\_{\text{train}}\big)$ is to be minimized.
 
-That is, given features (columns) $\bm{x}_1, \dots, \bm{x_p}$ from the training
+That is, given features (columns) $\symbfit{x}_1, \dots, \symbfit{x_p}$ from the training
 data, the redundancy-aware aware feature selection algorithm performs forward
 stepwise selection with an additional reduction step where features at step $i$
 are greedily eliminated if their contribution to the performance is less than
@@ -799,14 +797,14 @@ two decimal places).
 
 **Algorithm**
 
-1. Set $\bm{X} = \{\bm{x}_1, \dots, \bm{x}_p\}$,  $\bm{X}^{\star} = \empty$ and $\bm{X}_R = \empty$ to be the *candidate*, *selected*, and *redundant* feature sets, respectively
-1. Compute $\mathcal{L}_k = \mathcal{L}(f_\theta\big(\bm{X}), y\big)$ by k-fold on $(\bm{X}, y)$ for each $k$
-1. Define $\mathcal{L}_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\bm{X}_{i,k}), y\big)$. The $\bm{x}_k$ producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
-1. Set $\bm{X} = \bm{X} / \{\bm{x}_k\}$
-1. Set $\bm{X}^{\star} = \bm{X}^{\star} \cup \{\bm{x}_k\}$
-1. Set $\bm{X}_R = \{ \bm{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} \le \tau \}$
-1. Set $\bm{X} = \bm{X} / \bm{X}_R$ Eliminate from consideration (consider redundant) all features within the performance threshold
-1. Repeat from step 2 until $\bm{X} = \empty$ or maximum iterations reached
+1. Set $\symbfit{X} = \{\symbfit{x}_1, \dots, \symbfit{x}_p\}$,  $\symbfit{X}^{\star} = \empty$ and $\symbfit{X}_R = \empty$ to be the *candidate*, *selected*, and *redundant* feature sets, respectively
+1. Compute $\mathcal{L}_k = \mathcal{L}(f_\theta\big(\symbfit{X}), y\big)$ by k-fold on $(\symbfit{X}, y)$ for each $k$
+1. Define $\mathcal{L}_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\symbfit{X}_{i,k}), y\big)$. The $\symbfit{x}_k$ producing $\mathcal{L}_i^{\star}$ is the best new feature to add.
+1. Set $\symbfit{X} = \symbfit{X} / \{\symbfit{x}_k\}$
+1. Set $\symbfit{X}^{\star} = \symbfit{X}^{\star} \cup \{\symbfit{x}_k\}$
+1. Set $\symbfit{X}_R = \{ \symbfit{x}_k | \mathcal{L}_k - \mathcal{L}_i^{\star} \le \tau \}$
+1. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from consideration (consider redundant) all features within the performance threshold
+1. Repeat from step 2 until $\symbfit{X} = \empty$ or maximum iterations reached
 
 ===
 
