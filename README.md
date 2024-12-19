@@ -815,13 +815,12 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
    be the *candidate feature set*.
-1. Define $\mathcal{L}\_{i} = \\{ \mathcal{L} \big( f( \symbfit{X}_i ), y \big) | \symbfit{x} \in \symbfit{F}_i \\}$
-1. Define $\mathcal{L}\_{i} = \mathcal{L} \big( f( \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\} ), y \big)$ to
+1. Define $\mathcal{L}\_{i} = \\{ \mathcal{L} \big( f( \symbfit{X}_i ), y \big) | \symbfit{x} \in \symbfit{F}_i \\}$ to be the set of candidate losses / performances
    be the performance (loss) of each candidate feature set
-1. Define $\mathcal{L}\_i^{\star} = \min_k \mathcal{L}(f_\theta\big(\symbfit{X}\_{ik}), y\big)$. The $\symbfit{x}_k$
+1. Define $\mathcal{L}\_i^{\star} = \min \mathcal{L}_i$. The feature $\symbfit{x}^{\star}$
    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
-1. Set $\symbfit{X}_k = \symbfit{X} / \{\symbfit{x}_k\}$
-1. Set $\symbfit{X}^{\star} = \symbfit{X}^{\star} \cup \{\symbfit{x}_k\}$
+1. Set $\symbfit{X}_k = \symbfit{X} / \{\symbfit{x}^{\star}\}$
+1. Set $\symbfit{X}^{\star} = \symbfit{X}^{\star} \cup \{\symbfit{x}^{\star}\}$
 1. Set $\symbfit{X}_R = \big\\{ \symbfit{x}_k | \mathcal{L}_k -
    \mathcal{L}_i^{\star} | \le \tau \big\\}$
 1. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from
