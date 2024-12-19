@@ -807,7 +807,8 @@ Set:
 
 For the *selector*, choose supervised estimator (classifier, regressor) $f$
 and suitable default constant hyperparameters for $f$, such that $f$ is fit
-to predict $y$ from any feature subset $\symbfit{X}$.
+to predict $y$ from any feature subset $\symbfit{X}$, i.e. we aim to fit $f$
+such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 
 **Iteration $(i > 0)$**
 
