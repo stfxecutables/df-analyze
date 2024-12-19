@@ -819,7 +819,7 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
    of each feature set
 3. Define $\mathcal{L}\_i^{\star} = \min \mathcal{L}_i$. The feature $\symbfit{x}^{\star}$
    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
-4. Set $\symbfit{X}_R = \big\\{ \symbfit{x} : | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \text{ and } \symbfit{x} \in \symbfit{F}_i \big\\}$
+4. Set $\symbfit{R} = \big\\{ \symbfit{x} : | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \text{ and } \symbfit{x} \in \symbfit{F}_i \big\\}$ to be the set of features redundant to $\symbfit{x}^{\star}$
 5. Set $\symbfit{F}_i = \symbfit{X} / \\{ \symbfit{x}^{\star} \\}$ (remove selected feature from candidate pool)
 6. Set $\symbfit{X}_i^{\star} = \symbfit{X}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
 7. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from
