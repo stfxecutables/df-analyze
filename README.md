@@ -806,10 +806,9 @@ features in $\symbfit{R}$ are also greedily eliminated.
 
 > #### **Initialization $(i = 0)$**
 >
-> - define $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$,
-> - define $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
+> - define $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$
+> - define $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$
 > - define $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features at iteration $i$
->
 > - For the *selector*, choose supervised estimator (classifier, regressor) $f$
 >   and suitable default constant hyperparameters for $f$, such that $f$ is fit
 >   to predict $y$ from any feature subset $\symbfit{X}$, i.e. we aim to fit $f$
