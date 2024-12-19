@@ -808,6 +808,7 @@ Set:
 **Iteration $(i > 0)$**
 
 1. For each feature $\symbfit{x}\_k \in \symbfit{F}\_i$, define $\symbfit{X}_{ik} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x}\_k \\}$
+1. Define $\mathcal{L}\big( f( \symbfit{X}_{ik} ), y \big)$
 
    $\mathcal{L}\_k = \mathcal{L}\big(f_\theta(\symbfit{X}), y\big)$ by k-fold
    on $(\symbfit{X}, y)$ for each $k \in 1, \dots, p$
