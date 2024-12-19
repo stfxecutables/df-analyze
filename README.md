@@ -823,8 +823,7 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 5. Set $\symbfit{F}_{i+1} = \symbfit{F}_i - \symbfit{R}$ (remove redundant features from candidate pool)
 6. Set $\symbfit{X}\_{i+1}^{\star} = \symbfit{X}_{i}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
 7. Set $\symbfit{X}\_{i+1}^R = \symbfit{X}_i^R \cup \symbfit{R}$ (update redundant pool)
-8. Repeat from step 2 until $\symbfit{X} = \emptyset$ or maximum iterations
-   reached
+8. Continute iterating $i$ until $\symbfit{F}_i = \emptyset$ or maximum $i$ is reached.
 
 ===
 
