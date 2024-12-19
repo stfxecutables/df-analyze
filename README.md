@@ -829,12 +829,6 @@ instead all features in $\symbfit{R}$ are also greedily eliminated.
 > 7. Set $\symbfit{X}\_{i+1}^R = \symbfit{X}_i^R \cup \symbfit{R}$ (update redundant pool)
 > 8. Continue iterating $i$ until $\symbfit{F}_i = \emptyset$ or maximum $i$ is reached. The final selected features are defined by $\symbfit{X}_i^{\star}$.
 
-===
-
-Redundant selection begins with a pool of all features (initially empty). At
-step $i$ of the selection algorithm, a new pool with one more feature (each
-candidate feature) is considered (forward selection).
-
 
 
 ### Hyperparameter Tuning
