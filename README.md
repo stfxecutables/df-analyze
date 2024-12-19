@@ -785,11 +785,16 @@ Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
 y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
 suitable fixed default hyperparameters, redundancy-aware feature selection
 performs forward stepwise selection, removing from consideration all features
-with similar performances at each step.
+with similar performances at each step. This similarity is controlled by a
+*equivalence threshold* $\tau$.
 
 That is, at each step of stepwise selection, the best candidate feature
-$\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a *redundant set* of features,
-$R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$ such that the performance of
+$\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a
+*redundant set* of features,
+$R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$.
+That is, all features in the redundant set produce a performance that is
+considered practically equivalent to the performance produced by adding
+feature $\symbfit{x}^{\star}$.
 
 That is, given features (columns) $\symbfit{x}_1, \dots, \symbfit{x_p}$ from the training
 data, the redundancy-aware aware feature selection algorithm performs forward
