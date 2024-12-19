@@ -784,11 +784,12 @@ $\symbfit{X}$
 Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
 y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
 suitable fixed default hyperparameters, redundancy-aware feature selection
+performs forward stepwise selection, removing from consideration all features
+with similar performances at each step.
 
- and performance criterion
-$\mathcal{L}$, then `df-analyze` greedily attempts to find a feature subset
-$\mathbf{X}^{\star}$ such that
-$\mathcal{L}(f_\theta\big(\mathbf{X}^{\star}), y\_{\text{train}}\big)$ is to be minimized.
+That is, at each step of stepwise selection, the best candidate feature
+$\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a *redundant set* of features,
+$R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$ such that the performance of
 
 That is, given features (columns) $\symbfit{x}_1, \dots, \symbfit{x_p}$ from the training
 data, the redundancy-aware aware feature selection algorithm performs forward
