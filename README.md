@@ -783,7 +783,9 @@ $\symbfit{X}$
 
 Given training data $\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}},
 y\_{\text{train}})$ and a univariate estimator $f$ ("*selector*") with
-suitable fixed default hyperparameters $\theta$, and performance criterion
+suitable fixed default hyperparameters, redundancy-aware feature selection
+
+ and performance criterion
 $\mathcal{L}$, then `df-analyze` greedily attempts to find a feature subset
 $\mathbf{X}^{\star}$ such that
 $\mathcal{L}(f_\theta\big(\mathbf{X}^{\star}), y\_{\text{train}}\big)$ is to be minimized.
@@ -821,7 +823,7 @@ two decimal places).
 > 5. Set $\symbfit{F}_{i+1} = \symbfit{F}_i - \symbfit{R}$ (remove redundant features from candidate pool)
 > 6. Set $\symbfit{X}\_{i+1}^{\star} = \symbfit{X}_{i}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
 > 7. Set $\symbfit{X}\_{i+1}^R = \symbfit{X}_i^R \cup \symbfit{R}$ (update redundant pool)
-> 8. Continute iterating $i$ until $\symbfit{F}_i = \emptyset$ or maximum $i$ is reached.
+> 8. Continue iterating $i$ until $\symbfit{F}_i = \emptyset$ or maximum $i$ is reached. The final selected features are defined by $\symbfit{X}_i^{\star}$.
 
 ===
 
