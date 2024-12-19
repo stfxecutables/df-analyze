@@ -821,7 +821,7 @@ such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
 4. Set $\symbfit{R} = \big\\{ \symbfit{x} : | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \text{ and } \symbfit{x} \in \symbfit{F}_i \big\\}$ to be the set of features redundant to $\symbfit{x}^{\star}$
 5. Set $\symbfit{F}_{i+1} = \symbfit{F}_i - \symbfit{R}$ (remove redundant features from candidate pool)
-6. Set $\symbfit{X}_{i+1}^{\star} = \symbfit{X}_{i}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
+6. Set $\symbfit{X}\_{i+1}^{\star} = \symbfit{X}_{i}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
 7. Set $\symbfit{X} = \symbfit{X} / \symbfit{X}_R$ Eliminate from
    consideration (consider redundant) all features within the performance
    threshold
