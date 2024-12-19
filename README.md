@@ -797,8 +797,7 @@ two decimal places).
 
 **Algorithm**
 
-> **Initialization $(i = 0)$**
-> ===
+> ### **Initialization $(i = 0)$**
 >
 > - $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$,
 > - $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
@@ -809,8 +808,7 @@ two decimal places).
 > to predict $y$ from any feature subset $\symbfit{X}$, i.e. we aim to fit $f$
 > such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
 >
-> **Iteration $(i > 0)$**
-> ===
+> ### **Iteration $(i > 0)$**
 >
 > 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
 >    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
