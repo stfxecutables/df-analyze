@@ -805,7 +805,9 @@ Set:
 - $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$, and
 - $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features at iteration $i$
 
-For the *selector*, choose supervised estimator (classifier, regressor) $f$ and suitable default constant hyperparameters.
+For the *selector*, choose supervised estimator (classifier, regressor) $f$
+and suitable default constant hyperparameters for $f$, such that $f$ is fit
+to predict $y$ from any feature subset $\symbfit{X}$.
 
 **Iteration $(i > 0)$**
 
