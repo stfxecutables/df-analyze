@@ -1,6 +1,6 @@
 from pathlib import Path
 
-VERSION = "3.3.0"
+VERSION = "3.3.1"
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DATADIR = ROOT / "data"
