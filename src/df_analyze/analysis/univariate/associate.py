@@ -24,9 +24,6 @@ from warnings import warn
 
 import numpy as np
 import pandas as pd
-from df_analyze.analysis.metrics import auroc, cohens_d, cramer_v
-from df_analyze.enumerables import RandEnum
-from df_analyze.preprocessing.prepare import PreparedData
 from joblib import Parallel, delayed
 from pandas import DataFrame, Series
 from scipy.stats import (
@@ -42,6 +39,10 @@ from sklearn.feature_selection import mutual_info_classif as minfo_cat
 from sklearn.feature_selection import mutual_info_regression as minfo_cont
 from sklearn.preprocessing import LabelEncoder
 from tqdm import tqdm
+
+from df_analyze.analysis.metrics import auroc, cohens_d, cramer_v
+from df_analyze.enumerables import RandEnum
+from df_analyze.preprocessing.prepare import PreparedData
 
 
 class Association:
@@ -373,7 +374,7 @@ class AssocResults:
                     f"{tables}\n\n**Note**: values less than 1e-10 are rounded to zero.\n"
                 )
                 if path is not None:
-                    path.write_text(tables)
+                    path.write_text(tables, encoding="utf-8")
                 return tables
         except Exception as e:
             warn(

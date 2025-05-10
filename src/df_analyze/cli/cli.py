@@ -21,6 +21,7 @@ from pathlib import Path
 from random import choice, randint, uniform
 from typing import (
     TYPE_CHECKING,
+    Any,
     Optional,
     Tuple,
     Type,
@@ -35,7 +36,6 @@ import pandas as pd
 from pandas import DataFrame
 
 from df_analyze._constants import (
-    VERSION,
     FULL_RESULTS,
     N_WRAPPER_DEFAULT,
     P_FILTER_CAT_DEFAULT,
@@ -455,16 +455,57 @@ class ProgramOptions(Debug):
             path = self.program_dirs.options
             if path is None:
                 return
-            path.write_text(str(jsonpickle.encode(self, unpicklable=False, indent=4)))
+            path.write_text(
+                str(jsonpickle.encode(self, unpicklable=False, indent=4)),
+                encoding="utf-8",
+            )
         except Exception as e:
             print(f"Got error saving options: {e}")
             traceback.print_exc()
 
     @staticmethod
     def from_json(root: Path) -> ProgramOptions:
+        def is_jsonpickle_dict(value: Any) -> bool:
+            return isinstance(value, dict) and "__objclass__" in value
+
+        def to_enum(d: dict) -> Enum:
+            enum = d["__objclass__"]
+            return enum(d["_value_"])
+
+        def is_path(d: dict) -> bool:
+            return isinstance(d, dict) and "_raw_paths" in d
+
+        def to_path(d: dict) -> Enum:
+            return Path(d["_raw_paths"][0])
+
         options = root / "options.json"
-        obj = jsonpickle.decode(options.read_text())
-        return cast(ProgramOptions, obj)
+        obj = cast(dict, jsonpickle.decode(options.read_text()))
+        obj.pop("version", None)
+        obj.pop("cli_args", None)
+        obj.pop("comparables", None)
+        obj.pop("program_dirs", None)
+
+        program_dirs = ProgramDirs.new(
+            root=options.parent.parent, hsh=options.parent.name
+        )
+
+        for key, d in obj.items():
+            if is_jsonpickle_dict(d):
+                obj[key] = to_enum(d)
+            elif is_path(d):
+                obj[key] = to_path(d)
+            elif isinstance(d, list) and len(d) > 0 and is_jsonpickle_dict(d[0]):
+                for i, item in enumerate(d):
+                    d[i] = to_enum(item)
+
+        tuples = ["feat_select", "embed_select"]
+        for key in tuples:
+            if key in obj:
+                obj[key] = tuple(obj[key])
+
+        opts = ProgramOptions(**obj)
+        opts.program_dirs = program_dirs
+        return opts
 
     @staticmethod
     def from_jsonfile(file: Path) -> ProgramOptions:

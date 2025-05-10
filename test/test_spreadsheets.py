@@ -51,10 +51,10 @@ ARGS_MIN = (TEMPLATES / "minimum_args.txt").read_text()
 ARGS_FULL = (TEMPLATES / "spread_full_args.txt").read_text()
 
 SPREAD_MIN = TEMPLATES / "student/minimal_sheet.csv"
-SPREAD_MIN.write_text(f"{ARGS_MIN}\n\n{DATALINES}")
+SPREAD_MIN.write_text(f"{ARGS_MIN}\n\n{DATALINES}", encoding="utf-8")
 
 SPREAD_FULL = TEMPLATES / "student/full_sheet.csv"
-# SPREAD_FULL.write_text(f"{ARGS_FULL}\n\n{DATALINES}")
+# SPREAD_FULL.write_text(f"{ARGS_FULL}\n\n{DATALINES}", encoding="utf-8")
 
 
 def do_main(minimal: bool) -> None:

@@ -56,7 +56,7 @@ def do_random_spreadsheet(dataset: tuple[str, TestDataset]) -> None:
             table = buf.getvalue()
             header = "\n".join(args) + "\n\n"
             content = header + table
-            datafile.write_text(content)
+            datafile.write_text(content, encoding="utf-8")
             options = get_options(" ".join(args))
             target = options.target
             categoricals = options.categoricals

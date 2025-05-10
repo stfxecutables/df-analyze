@@ -327,10 +327,10 @@ class EvaluationResults:
         }
         try:
             enc = str(jsonpickle.encode(remain, unpicklable=False))
-            (root / "eval_htune_results.json").write_text(enc)
+            (root / "eval_htune_results.json").write_text(enc, encoding="utf-8")
         except TypeError:
             enc = str(jsonpickle.encode(remain, unpicklable=False, fail_safe=str))
-            (root / "eval_htune_results.json").write_text(enc)
+            (root / "eval_htune_results.json").write_text(enc, encoding="utf-8")
 
     @classmethod
     def load(cls, root: Path) -> EvaluationResults:

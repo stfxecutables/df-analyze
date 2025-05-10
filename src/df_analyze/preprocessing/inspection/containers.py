@@ -495,7 +495,7 @@ class InspectionResults:
 
     def to_json(self, path: Path) -> None:
         try:
-            path.write_text(str(jsonpickle.encode(self)))
+            path.write_text(str(jsonpickle.encode(self)), encoding="utf-8")
         except Exception as e:
             warn(
                 f"Got exception when saving inspection results to .json. Details:\n"

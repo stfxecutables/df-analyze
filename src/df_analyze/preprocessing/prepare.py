@@ -122,7 +122,7 @@ class PreparationInfo:
         return "".join(sections)
 
     def to_json(self, path: Path) -> None:
-        path.write_text(str(jsonpickle.encode(self)))
+        path.write_text(str(jsonpickle.encode(self)), encoding="utf-8")
 
     @staticmethod
     def from_json(path: Path) -> Optional[PreparationInfo]:

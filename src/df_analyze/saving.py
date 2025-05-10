@@ -176,7 +176,7 @@ class ProgramDirs(Debug):
             report = renames.to_markdown()
             if report is None:
                 return
-            out.write_text(report)
+            out.write_text(report, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save feature renames. "
@@ -190,7 +190,7 @@ class ProgramDirs(Debug):
             return
         out = self.results / "results_report.md"
         try:
-            out.write_text(results.to_markdown())
+            out.write_text(results.to_markdown(), encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save final evaluation report. "
@@ -241,7 +241,7 @@ class ProgramDirs(Debug):
             model = embed_selected.model.value
             out = self.embed / f"{model}_embedded_selection_report.md"
             try:
-                out.write_text(report)
+                out.write_text(report, encoding="utf-8")
             except Exception as e:
                 warn(
                     f"Got exception when attempting to save embedded selection report for model '{model}'. "
@@ -259,7 +259,7 @@ class ProgramDirs(Debug):
         report = selected.wrap_selected.to_markdown()
         out = self.wrapper / "wrapper_selection_report.md"
         try:
-            out.write_text(report)
+            out.write_text(report, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save wrapper selection report. "
@@ -277,7 +277,7 @@ class ProgramDirs(Debug):
         json = selected.wrap_selected.to_json()
         out = self.wrapper / "wrapper_selection_data.json"
         try:
-            out.write_text(json)
+            out.write_text(json, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save wrapper selection data. "
@@ -298,7 +298,7 @@ class ProgramDirs(Debug):
             model = embed_selected.model.value
             out = self.embed / f"{model}_embed_selection_data.json"
             try:
-                out.write_text(json)
+                out.write_text(json, encoding="utf-8")
             except Exception as e:
                 warn(
                     "Got exception when attempting to save embeded selection data. "
@@ -318,7 +318,7 @@ class ProgramDirs(Debug):
             return
         out = self.filter / f"{selected.method}_selection_report.md"
         try:
-            out.write_text(selected.to_markdown())
+            out.write_text(selected.to_markdown(), encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save filter selection report "
@@ -330,7 +330,7 @@ class ProgramDirs(Debug):
             return
         out = self.predictions / "predictions_report.md"
         try:
-            out.write_text(report)
+            out.write_text(report, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save predictions report. "
@@ -342,7 +342,7 @@ class ProgramDirs(Debug):
             return
         out = self.associations / "associations_report.md"
         try:
-            out.write_text(report)
+            out.write_text(report, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save associations report. "
@@ -402,7 +402,7 @@ class ProgramDirs(Debug):
 
         out = self.prepared / "preparation_report.md"
         try:
-            out.write_text(report)
+            out.write_text(report, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save preparation report. "
@@ -417,9 +417,9 @@ class ProgramDirs(Debug):
             full = inspection.full_report()
             out_short = self.inspection / "short_inspection_report.md"
             out_full = self.inspection / "full_inspection_report.md"
-            out_short.write_text(short)
+            out_short.write_text(short, encoding="utf-8")
             if full is not None:
-                out_full.write_text(full)
+                out_full.write_text(full, encoding="utf-8")
         except Exception as e:
             warn(
                 "Got exception when attempting to save inspection reports. "

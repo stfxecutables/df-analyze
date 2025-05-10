@@ -143,7 +143,7 @@ class PredResults:
             if tables.replace("\n", "") != "":
                 tables = tables + legend
                 if path is not None:
-                    path.write_text(tables)
+                    path.write_text(tables, encoding="utf-8")
                 return tables
         except Exception as e:
             warn(
