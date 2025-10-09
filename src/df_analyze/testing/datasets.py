@@ -16,6 +16,7 @@ import jsonpickle
 import numpy as np
 import pandas as pd
 import pytest
+from numpy.random import Generator
 from pandas import DataFrame, Series
 from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
@@ -244,13 +245,20 @@ def fake_data(
     C: int = 5,
     noise: float = 1.0,
     num_classes: int = 2,
+    rng: Generator | None = None,
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
-    X_cont_tr = np.random.uniform(0, 1, [N, C])
-    X_cont_test = np.random.uniform(0, 1, [N, C])
+    if rng is None:
+        rng = np.random.default_rng()
+    if C == 0:
+        # or concat logic is tedious
+        raise ValueError("Must have C > 0")
 
-    cat_sizes = np.random.randint(2, 20, C)
-    cats_tr = [np.random.randint(0, c, [N]) for c in cat_sizes]
-    cats_test = [np.random.randint(0, c, [N]) for c in cat_sizes]
+    X_cont_tr = rng.uniform(0, 1, [N, C])
+    X_cont_test = rng.uniform(0, 1, [N, C])
+
+    cat_sizes = rng.integers(2, 20, C)
+    cats_tr = [rng.integers(0, c, N) for c in cat_sizes]
+    cats_test = [rng.integers(0, c, N) for c in cat_sizes]
 
     X_cat_tr = np.empty([N, C])
     for i, cat in enumerate(cats_tr):
