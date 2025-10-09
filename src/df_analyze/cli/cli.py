@@ -454,7 +454,7 @@ class ProgramOptions(Debug):
             path = self.program_dirs.options
             if path is None:
                 return
-            path.write_text(str(jsonpickle.encode(self, unpicklable=False, indent=4)))
+            path.write_text(str(jsonpickle.encode(self, unpicklable=True, indent=4)))
         except Exception as e:
             print(f"Got error saving options: {e}")
             traceback.print_exc()

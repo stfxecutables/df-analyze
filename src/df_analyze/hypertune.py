@@ -326,10 +326,10 @@ class EvaluationResults:
             "is_classification": self.is_classification,
         }
         try:
-            enc = str(jsonpickle.encode(remain, unpicklable=False))
+            enc = str(jsonpickle.encode(remain, unpicklable=True))
             (root / "eval_htune_results.json").write_text(enc)
         except TypeError:
-            enc = str(jsonpickle.encode(remain, unpicklable=False, fail_safe=str))
+            enc = str(jsonpickle.encode(remain, unpicklable=True, fail_safe=str))
             (root / "eval_htune_results.json").write_text(enc)
 
     @classmethod

@@ -297,37 +297,33 @@ class PreparedData:
         seed: int | None = SEED,
     ) -> tuple[PreparedData, PreparedData]:
         y = self.y.copy()
-        # if self.groups is not None:
-        #     ...
-        #     # TODO: use OmniSplit and n_splits=int(1/desired_test_ratio)
-        #     # and fallback if the train_size is to annoying
-        #     raise NotImplementedError("TODO: Use ApproximateStratifiedGroupSplit")
-        # else:
-        #     if self.is_classification:
-        #         ss = StratifiedShuffleSplit(
-        #             train_size=train_size, n_splits=1, random_state=seed
-        #         )
-        #     else:
-        #         ss = ShuffleSplit(train_size=train_size, n_splits=1, random_state=seed)
+        if self.groups is None:
+            if self.is_classification:
+                ss = StratifiedShuffleSplit(
+                    train_size=train_size, n_splits=1, random_state=seed
+                )
+            else:
+                ss = ShuffleSplit(train_size=train_size, n_splits=1, random_state=seed)
 
-        ss = ApproximateStratifiedGroupSplit(
-            train_size=train_size,
-            is_classification=self.is_classification,
-            grouped=self.groups is not None,
-            labels=self.split_labels,
-            seed=seed,
-            warn_on_fallback=True,
-            warn_on_large_size_diff=True,
-            df_analyze_phase="Initial holdout splitting",
-        )
-
-        (idx_train, idx_test), group_fail = ss.split(y.to_frame(), y, self.groups)
+            idx_train, idx_test = next(ss.split(y.to_frame(), y))
+        else:
+            ss = ApproximateStratifiedGroupSplit(
+                train_size=train_size,
+                is_classification=self.is_classification,
+                grouped=self.groups is not None,
+                labels=self.split_labels,
+                seed=seed,
+                warn_on_fallback=True,
+                warn_on_large_size_diff=True,
+                df_analyze_phase="Initial holdout splitting",
+            )
+            (idx_train, idx_test), group_fail = ss.split(y.to_frame(), y, self.groups)
 
         prep_train = self.subsample(idx_train)
         prep_train.phase = "train"
 
         prep_test = self.subsample(idx_test)
-        prep_train.phase = "test"
+        prep_test.phase = "test"
 
         return prep_train, prep_test
 

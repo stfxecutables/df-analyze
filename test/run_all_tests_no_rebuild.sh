@@ -26,7 +26,7 @@ echo "==========================================================================
 echo "Testing basic data inspection, cleaning, preparation, and associational stats"
 echo "================================================================================="
 "$PYTEST" \
-    -m 'not regen' -m 'cached' -x \
+    -m 'not regen' -m 'cached' -m 'fast' -x \
     test/test_inspection.py \
     test/test_prepare.py \
     test/test_splitting.py \
@@ -48,9 +48,11 @@ echo "==========================================================================
 "$PYTEST" -n auto \
     test/test_loading.py \
     test/test_datasets.py \
-    test/test_models.py \
-    test/test_tuning_score.py \
-    -x  # don't do the exit here, with parallel maybe issues?
+    test/test_models.py -x || { echo "Basic IO failed."; exit 1; }
+
+
+"$PYTEST" \
+    test/test_tuning_score.py -x || { echo "IO with tuning scores failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing result saving (slow)"

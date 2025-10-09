@@ -211,7 +211,7 @@ def test_approximate_split(capsys: CaptureFixture) -> None:
 
 def do_prep_split_cached(dataset: tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
-    if dsname in ["internet_usage"]:
+    if dsname in ["internet_usage", "dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc"]:
         with pytest.raises(
             ValueError, match=r".*Target 'target' has undersampled levels.*"
         ):

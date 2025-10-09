@@ -203,12 +203,12 @@ class OmniKFold:
         y_t = y_str[ix_t]
         tr_cnts = np.unique(y_tr, return_counts=True)[1]
         t_cnts = np.unique(y_t, return_counts=True)[1]
-        if len(tr_cnts) == 1:
+        if len(tr_cnts) <= 1:
             return True  # definitely cannot proceed, degen training set
 
         # Can proceed, technically, but will get errors for later AUROC and
         # other metrics...
-        if len(t_cnts) == 1:
+        if len(t_cnts) <= 1:
             return True
 
         tr_cnts_n_min = tr_cnts.min()
