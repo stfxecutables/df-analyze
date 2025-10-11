@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import json
 import sys
 from copy import deepcopy
 from dataclasses import is_dataclass
@@ -77,9 +78,7 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
         return True
     elif isinstance(obj1, ndarray) and isinstance(obj2, ndarray):
         return (obj1.ravel().round(8) == obj2.ravel().round(8)).all()
-    elif isinstance(obj1, (DataFrame, Series)) and isinstance(
-        obj2, (DataFrame, Series)
-    ):
+    elif isinstance(obj1, (DataFrame, Series)) and isinstance(obj2, (DataFrame, Series)):
         return np.all((obj1.round(8).values == obj2.round(8).values)).item()
     else:
         return obj1 == obj2
@@ -192,5 +191,52 @@ def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
                     )
     except Exception as e:
         raise ValueError(f"Got error saving eval results for data {dsname}:\n{e}")
+    finally:
+        tempdir.cleanup()
+
+
+@fast_ds
+def test_eval_preds_save(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
+        return  # defective target
+    tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
+    try:
+        for _ in range(10):
+            options = ProgramOptions.random(ds, outdir=outdir)
+            selected = EvaluationResults.random(ds, options)
+            preds = [result.to_preds() for result in selected.results]
+
+            selected.save(root=outdir)
+            loaded_preds = EvaluationResults.load_preds(root=outdir)
+
+            for i, pred in enumerate(preds):
+                for key in pred.__dict__.keys():
+                    original = pred.__dict__[key]
+                    loaded = loaded_preds[i].__dict__[key]
+                    if key == "params":
+                        if str(original) == str(loaded):
+                            continue
+                    if not are_equal(original, loaded):
+                        raise ValueError(
+                            f"Saved values at key: '{key}' are not equal after loading:\n"
+                            "Before:\n"
+                            f"{original}\n"
+                            "Loaded:\n"
+                            f"{loaded}"
+                        )
+
+            # Check predictions load as plain json for use outside of df-analyze
+            json_str = (outdir / "prediction_results.json").read_text()
+            try:
+                json.loads(json_str)
+            except Exception as e:
+                raise ValueError("Could not load predictions as plain json.") from e
+
+    except Exception as e:
+        raise ValueError(
+            f"Got error saving prediction results for data {dsname}:\n{e}"
+        ) from e
     finally:
         tempdir.cleanup()

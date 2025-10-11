@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import sys
 import traceback
 import warnings
 from dataclasses import dataclass, field
@@ -20,6 +22,7 @@ from typing import (
     Type,
     Union,
     cast,
+    no_type_check,
 )
 from warnings import warn
 
@@ -28,6 +31,7 @@ import optuna
 import pandas as pd
 from numpy import ndarray
 from pandas import DataFrame, Index, Series
+from scipy.special import softmax
 from sklearn.metrics import (
     accuracy_score,
     explained_variance_score,
@@ -86,7 +90,7 @@ class HtuneResult:
     embed_select_model: Optional[EmbedSelectionModel]
     model_cls: Type[DfAnalyzeModel]
     model: DfAnalyzeModel
-    params: dict[str, Any]
+    params: dict[str, Any]  # optuna best_params
     metric: Union[ClassifierScorer, RegressorScorer]
     score: float
     preds_test: Series
@@ -104,7 +108,7 @@ class HtuneResult:
             other.probs_test, ndarray
         ):
             probs_test_equal = np.all(
-                (self.probs_test.round(8) == other.probs_test.round(8)).to_numpy()
+                (self.probs_test.round(8) == other.probs_test.round(8))
             ).item()
         else:
             probs_test_equal = False
@@ -155,9 +159,77 @@ class HtuneResult:
             index=[0],
         )
 
+    def to_preds_json(self) -> str:
+        if self.probs_test is None:
+            probs_test = None
+            probs_dtype = None
+        else:
+            probs_test = self.probs_test.tolist()
+            probs_dtype = str(self.probs_test.dtype)
+
+        if self.probs_train is None:
+            probs_train = None
+        else:
+            probs_train = self.probs_train.tolist()
+        preds_dtype = str(self.preds_train.dtype)
+        if isinstance(self.preds_test, Series):
+            preds_test = self.preds_test.to_list()
+        else:
+            preds_test = self.preds_test.tolist()
+        if isinstance(self.preds_test, Series):
+            preds_train = self.preds_train.to_list()
+        else:
+            preds_train = self.preds_train.tolist()
+        selector = (
+            None if self.embed_select_model is None else self.embed_select_model.value
+        )
+        obj = {
+            "selection": self.selection,
+            "selected_cols": self.selected_cols,
+            "embed_select_model": selector,
+            "model_cls": self.model_cls.__name__,
+            "params": str(self.params),
+            "metric": self.metric.name,
+            "score": self.score,
+            "preds_test": preds_test,
+            "preds_train": preds_train,
+            "probs_test": probs_test,
+            "probs_train": probs_train,
+            "preds_dtype": preds_dtype,
+            "probs_dtype": probs_dtype,
+        }
+        return json.dumps(obj)
+
+    def to_preds(self) -> PredResult:
+        embed_model = (
+            self.embed_select_model.value
+            if self.embed_select_model is not None
+            else "none"
+        )
+        return PredResult(
+            selection=self.selection,
+            selected_cols=self.selected_cols,
+            embed_select_model=embed_model,
+            model_cls=str(self.model_cls.__name__),
+            params=str(self.params),
+            metric=self.metric.name,
+            score=self.score,
+            preds_test=self.preds_test,
+            preds_train=self.preds_train,
+            probs_test=self.probs_test,
+            probs_train=self.probs_train,
+        )
+
+    @staticmethod
+    def all_from_json(root: Path) -> HtuneResult:
+        raise NotImplementedError(
+            "This should be handled by src.df_analyze.hypertune.py::EvaluationResults"
+        )
+
     @staticmethod
     def random(
         ds: TestDataset,
+        y_test: Series,
         selection: Optional[Literal["none", "assoc", "pred", "embed", "wrap"]] = None,
         selected_cols: Optional[list[str]] = None,
         model_cls: Optional[Type[DfAnalyzeModel]] = None,
@@ -167,6 +239,8 @@ class HtuneResult:
 
         n_cols = ds.shape[1]
         is_cls = ds.is_classification
+        n_cls = 1 if not ds.is_classification else len(np.unique(y_test))
+        n_samp = ds.shape[0]
         n_sel = randint(1, n_cols)
 
         selection = selection or choice(["none", "assoc", "pred", "embed", "wrap"])
@@ -186,6 +260,11 @@ class HtuneResult:
         score = (
             np.random.uniform(0, 1) if ds.is_classification else np.random.uniform(0, 10)
         )
+        if is_cls:
+            probs_test = softmax(np.random.standard_normal([n_samp, n_cls]), axis=1)
+        else:
+            probs_test = None
+
         return HtuneResult(
             selection=selection,  # type: ignore
             selected_cols=selected,
@@ -197,9 +276,24 @@ class HtuneResult:
             score=score,
             preds_test=Series(),
             preds_train=Series(),
-            probs_test=None,
+            probs_test=probs_test,
             probs_train=None,
         )
+
+
+@dataclass
+class PredResult:
+    selection: Literal["none", "assoc", "pred", "embed", "wrap"]
+    selected_cols: list[str]
+    embed_select_model: str
+    model_cls: str
+    params: str  # optuna best_params
+    metric: str
+    score: float
+    preds_test: Series
+    preds_train: Series
+    probs_test: Optional[ndarray]
+    probs_train: Optional[ndarray]
 
 
 @dataclass
@@ -247,6 +341,7 @@ class EvaluationResults:
                 selected_cols = selected_cols.tolist()
                 result = HtuneResult.random(
                     ds=ds,
+                    y_test=prep_test.y,
                     selection=selection,
                     selected_cols=selected_cols,
                     model_cls=model_cls,
@@ -313,6 +408,16 @@ class EvaluationResults:
         return text
 
     def to_json(self) -> str:
+        # obj = {
+        #     "df": self.df.to_json()
+        #     "X_train": DataFrame
+        #     "y_train": Series
+        #     "X_test": DataFrame
+        #     "y_test": Series
+        #     "results": list[HtuneResult]
+        #     "is_classification": bool
+        # }
+        # raise NotImplementedError()
         return str(jsonpickle.encode(self))
 
     def save(self, root: Path) -> None:
@@ -321,16 +426,26 @@ class EvaluationResults:
         self.X_test.to_csv(root / "X_test.csv", index=False)
         self.y_train.to_frame().to_csv(root / "y_train.csv", index=True)
         self.y_test.to_frame().to_csv(root / "y_test.csv", index=True)
+        results_json = ", ".join([result.to_preds_json() for result in self.results])
+        results_json = "{" + '"predictions": [' + results_json + "]}"
         remain = {
             "results": self.results,
             "is_classification": self.is_classification,
         }
         try:
             enc = str(jsonpickle.encode(remain, unpicklable=True))
-            (root / "eval_htune_results.json").write_text(enc)
+            (root / "eval_htune_results_jsonpickle.json").write_text(enc)
         except TypeError:
             enc = str(jsonpickle.encode(remain, unpicklable=True, fail_safe=str))
-            (root / "eval_htune_results.json").write_text(enc)
+            (root / "eval_htune_results_jsonpickle.json").write_text(enc)
+        try:
+            (root / "prediction_results.json").write_text(results_json)
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
+            print(
+                "Error saving manual results .json. Information above.", file=sys.stderr
+            )
 
     @classmethod
     def load(cls, root: Path) -> EvaluationResults:
@@ -344,7 +459,7 @@ class EvaluationResults:
         y_test = Series(
             data=df_y_test.values.ravel(), name=df_y_test.columns.to_list()[0]
         )
-        enc = (root / "eval_htune_results.json").read_text()
+        enc = (root / "eval_htune_results_jsonpickle.json").read_text()
         remain = cast(dict[str, Any], jsonpickle.decode(enc))
         return EvaluationResults(
             df=df,
@@ -355,6 +470,41 @@ class EvaluationResults:
             results=remain["results"],
             is_classification=remain["is_classification"],
         )
+
+    @classmethod
+    def load_preds(cls, root: Path) -> list[PredResult]:
+        path = root / "prediction_results.json"
+        results: dict[Literal["predictions"], list[dict[str, Any]]] = json.loads(
+            path.read_text()
+        )
+        pred_results = []
+        for result in results["predictions"]:
+            preds_dtype = result["preds_dtype"]
+            probs_dtype = result["probs_dtype"]
+            if result["probs_test"] is None:
+                probs_test = None
+            else:
+                probs_test = np.array(result["probs_test"], dtype=probs_dtype)
+            if result["probs_train"] is None:
+                probs_train = None
+            else:
+                probs_train = np.array(result["probs_train"], dtype=probs_dtype)
+
+            pred_result = PredResult(
+                selection=result["selection"],
+                selected_cols=result["selected_cols"],
+                embed_select_model=result["embed_select_model"],
+                model_cls=result["model_cls"],
+                params=result["params"],
+                metric=result["metric"],
+                score=result["score"],
+                preds_test=Series(result["preds_test"], dtype=preds_dtype),
+                preds_train=Series(result["preds_train"], dtype=preds_dtype),
+                probs_test=probs_test,
+                probs_train=probs_train,
+            )
+            pred_results.append(pred_result)
+        return pred_results
 
 
 def _get_cols(

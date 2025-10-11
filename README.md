@@ -1141,6 +1141,7 @@ available in the [`features` directory](#📂-features).
 ├── eval_htune_results.json
 ├── final_performances.csv
 ├── performance_long_table.csv
+├── prediction_results.json
 ├── results_report.md
 ├── X_test.csv
 ├── X_train.csv
@@ -1148,10 +1149,26 @@ available in the [`features` directory](#📂-features).
 └── y_train.csv
 ```
 
-- `final_performances.csv` and `performance_long_table.csv` [TODO: make one of these wide table]
-  - final summary table of all performances for all models and feature selection methods
+- `final_performances.csv` and `performance_long_table.csv` [TODO: make one
+  of these wide table]
+  - final summary table of all performances for all models and feature
+    selection methods
+- `prediction_results.json`
+  - dictionary of all actual predictions (predicted classes in
+    classification, predicted target values in regression) and, if
+    classification and available for the model, predicted probabilities
+  - can be loaded externally with `json.loads(path.read_text())` using Python
+    stdlib [`json`](https://docs.python.org/3/library/json.html#module-json),
+    and where `path` is a
+    [Pathlib](https://docs.python.org/3/library/pathlib.html#module-pathlib)
+    `Path` pointing to `prediction_results.json`
+    - the `preds_train`, `preds_test`, `probs_train`, and `probs_test` fields
+    are Python lists that can be converted to NumPy with `np.array`
+    - Dtype information for above conversions is stored in `preds_dtype` and
+      `probs_dtype` fields
 - `results_report.md`
-  - readable report (with wide-form tables of performances) of above information
+  - readable report (with wide-form tables of performances) of above
+    information
 - `X_test.csv`
   - predictors used for final holdout and k-fold evaluations
 - `X_train.csv`
@@ -1161,7 +1178,8 @@ available in the [`features` directory](#📂-features).
 - `y_train.csv`
   - target samples used for training and tuning
 - `eval_htune_results.json`
-  - serialization of final results object (not human readable, for internal use)
+  - serialization of final results object (not human readable, for internal
+    use)
 
 ## Complete Listing
 
