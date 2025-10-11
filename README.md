@@ -1166,6 +1166,11 @@ available in the [`features` directory](#📂-features).
     are Python lists that can be converted to NumPy with `np.array`
     - Dtype information for above conversions is stored in `preds_dtype` and
       `probs_dtype` fields
+    - for the predictions, e.g. `preds_test`, after making a NumPy ndarray,
+      the entry at [*i*, *j*] corresponds to the predicted probabilities for
+      sample *i*, and label *j*
+    - the original meaning of the labels prior to encoding is stored in
+      `labels.parquet`, in the [`prepared` folder](#📂-prepared)
 - `results_report.md`
   - readable report (with wide-form tables of performances) of above
     information
