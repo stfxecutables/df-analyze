@@ -43,7 +43,6 @@ def describe_continuous(df: DataFrame, column: str) -> DataFrame:
         "kurt",
         "kurt_p",
         "entropy",
-        "nan_n",
         "nan_freq",
     ]
     x = df[column].to_numpy()
@@ -80,7 +79,6 @@ def describe_continuous(df: DataFrame, column: str) -> DataFrame:
         "kurt": kurtosis(x, nan_policy="omit"),
         "kurt_p": p_kurt,
         "entropy": entrop,
-        "nan_n": n_nan,
         "nan_freq": n_nan / len(df[column]),
     }
     return DataFrame(
