@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import re
 import traceback
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
+from math import ceil
 from pathlib import Path
+from typing import Generator as Gen
 from typing import Literal, Optional, Tuple, Union, cast
 from warnings import warn
 
@@ -25,7 +28,7 @@ from df_analyze._constants import (
     SEED,
     UNIVARIATE_PRED_MAX_N_SAMPLES,
 )
-from df_analyze.enumerables import NanHandling
+from df_analyze.enumerables import NanHandling, ValidationMethod
 from df_analyze.preprocessing.cleaning import (
     clean_regression_target,
     deflate_categoricals,
@@ -56,6 +59,8 @@ class PrepFiles:
     y_raw: str = "y.parquet"
     g_raw: str = "g.parquet"
     labels: str = "labels.parquet"
+    ix_train: str = "idx_train.json"
+    ix_tests: str = "idx_tests.json"
     info: str = "info.json"
 
 
@@ -226,9 +231,13 @@ class PreparedData:
         X_cont: Optional[DataFrame] = None,
         X_cat: Optional[DataFrame] = None,
         labels: Optional[dict[int, str]] = None,
+        ix_train: Optional[ndarray] = None,
+        ix_tests: Optional[list[ndarray]] = None,
+        tests_method: Optional[ValidationMethod] = ValidationMethod.List,
         inspection: Optional[InspectionResults] = None,
         info: Optional[PreparationInfo] = None,
         phase: Optional[Literal["train", "test"]] = None,
+        validate: bool = True,
     ) -> None:
         # Attempt to automatically infer classification problem based on y.dtype
         # https://numpy.org/doc/stable/reference/generated/numpy.dtype.kind.html
@@ -248,7 +257,7 @@ class PreparedData:
                     "target `y` has the proper dtype, e.g. `y = y.astype(np.float64)` if "
                     "regression, or `y = y.astype(np.int64)` if classification. "
                 )
-                X, y, labels = encode_target(X, y, _warn=True)
+                X, y, labels = encode_target(X, y, ix_train, ix_tests, _warn=True)
                 self.is_classification = True
             else:
                 tname = (
@@ -270,7 +279,8 @@ class PreparedData:
         self.files: PrepFiles = PrepFiles()
         self.phase = phase
 
-        X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
+        if validate:
+            X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
 
         self.X = self.rename_cols(X)
         self.X_cont: Optional[DataFrame] = (
@@ -285,11 +295,52 @@ class PreparedData:
         self.split_labels = labels
         self.groups: Optional[Series] = groups
 
+        self.ix_train: Optional[ndarray] = ix_train
+        self.ix_tests: list[ndarray] = ix_tests
+        self.tests_method = tests_method
+
     @property
     def num_classes(self) -> int:
         if not self.is_classification:
             return 1
         return len(np.unique(self.y))
+
+    def get_splits(
+        self, test_size: Union[int, float] = 0.4, seed: int | None = SEED
+    ) -> Union[
+        list[tuple[PreparedData, PreparedData]],
+        Gen[tuple[PreparedData, PreparedData], None, None],
+    ]:
+        if isinstance(test_size, int):
+            test_size = test_size / len(self.y)
+        train_size = 1 - test_size
+
+        if self.ix_train is None or self.ix_tests is None:
+            # Old df-analyze behaviour prior to multiple test sets
+            yield (self.split(train_size=train_size, seed=seed))
+            return
+
+        prep_train = self.subsample(self.ix_train)
+
+        if self.tests_method is ValidationMethod.List:
+            for ix_test in self.ix_tests:
+                yield (prep_train, self.subsample(ix_test))
+            return
+
+        if self.tests_method is not ValidationMethod.LODO:
+            raise ValueError(f"Impossible! Invalid ValidationMethod: {self.tests_method}")
+
+        # now construct the indices needed
+        ix_all = [self.ix_train, *self.ix_tests]
+        ix_pairs = []
+        for i, ix in enumerate(ix_all):
+            ix_train = ix
+            ix_tests = ix_all[:i] + ix_all[i + 1 :]
+            ix_test = np.concatenate(ix_tests)
+            ix_pairs.append((ix_train, ix_test))
+
+        for ix_train, ix_test in ix_pairs:
+            yield (self.subsample(ix_train), self.subsample(ix_test))
 
     def split(
         self,
@@ -328,7 +379,13 @@ class PreparedData:
         return prep_train, prep_test
 
     def subsample(self, idx: ndarray) -> PreparedData:
-        X_sub = self.X.iloc[idx]
+        try:
+            X_sub = self.X.iloc[idx].reset_index(drop=True)
+        except IndexError as e:
+            raise IndexError(
+                f"Couldn't subsample prepared data. Data shape: {self.X.shape}, "
+                f"and subsampling indices range: [{idx.min()}, {idx.max()}]"
+            ) from e
         X_cont, X_cat = self.X_cont, self.X_cat
         groups = None if self.groups is None else self.groups.iloc[idx]
         if self.info is not None:
@@ -338,14 +395,15 @@ class PreparedData:
             info_sub = None
         return PreparedData(
             X=X_sub,
-            X_cont=None if X_cont is None else X_cont.iloc[idx],
-            X_cat=None if X_cat is None else X_cat.iloc[idx],
-            y=self.y.iloc[idx].copy(),
+            X_cont=None if X_cont is None else X_cont.iloc[idx].reset_index(drop=True),
+            X_cat=None if X_cat is None else X_cat.iloc[idx].reset_index(drop=True),
+            y=self.y.iloc[idx].copy().reset_index(drop=True),
             groups=groups,
             labels=self.labels,
             inspection=self.inspection,
             info=info_sub,
             is_classification=self.is_classification,
+            validate=True,
         )
 
     def representative_subsample(
@@ -491,8 +549,10 @@ class PreparedData:
     def save_raw(self, root: Path) -> None:
         try:
             self.X.to_parquet(root / self.files.X_raw)
-            self.X_cont.to_parquet(root / self.files.X_cont_raw)
-            self.X_cat.to_parquet(root / self.files.X_cat_raw)
+            if self.X_cont is not None:
+                self.X_cont.to_parquet(root / self.files.X_cont_raw)
+            if self.X_cat is not None:
+                self.X_cat.to_parquet(root / self.files.X_cat_raw)
             self.y.to_frame().to_parquet(root / self.files.y_raw)
             if self.groups is not None:
                 self.groups.to_frame().to_parquet(root / self.files.g_raw)
@@ -500,6 +560,13 @@ class PreparedData:
                 Series(self.labels).to_frame().to_parquet(root / self.files.labels)
             if self.info is not None:
                 self.info.to_json(root / self.files.info)
+            if self.ix_train is not None:
+                js = json.dumps(self.ix_train.tolist())
+                (root / self.files.ix_train).write_text(js)
+            if self.ix_tests is not None:
+                obj = [ix_test.tolist() for ix_test in self.ix_tests]
+                js = json.dumps(obj)
+                (root / self.files.ix_tests).write_text(js)
         except Exception as e:
             warn(
                 f"Exception while saving {self.__class__.__name__} to {root}."
@@ -532,6 +599,21 @@ class PreparedData:
             is_cls = info.is_classification
         else:
             is_cls = None
+
+        ix_train_path = root / files.ix_train
+        if ix_train_path.exists():
+            obj = json.loads(ix_train_path.read_text())
+            ix_train = np.array(obj, dtype=np.int64)
+        else:
+            ix_train = None
+
+        ix_tests_path = root / files.ix_tests
+        if ix_tests_path.exists():
+            obj: list[list[int]] = json.loads(ix_tests_path.read_text())
+            ix_tests = [np.array(ix_test, dtype=np.int64) for ix_test in obj]
+        else:
+            ix_tests = None
+
         return PreparedData(
             X=X,
             X_cont=X_cont,
@@ -542,6 +624,8 @@ class PreparedData:
             inspection=inspection,
             info=info,
             is_classification=is_cls,
+            ix_train=ix_train,
+            ix_tests=ix_tests,
         )
 
 
@@ -549,16 +633,26 @@ def prepare_target(
     df: DataFrame,
     target: str,
     is_classification: bool,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
     _warn: bool = True,
-) -> tuple[DataFrame, Series, Optional[dict[int, str]]]:
+) -> tuple[
+    DataFrame,
+    Series,
+    Optional[dict[int, str]],
+    Optional[ndarray],
+    Optional[list[ndarray]],
+]:
     y = df[target]
     df = df.drop(columns=target)
     if is_classification:
-        df, y, labels = encode_target(df, y, _warn=_warn)
+        df, y, labels, ix_train, ix_tests = encode_target(
+            df, y, ix_train, ix_tests, _warn=_warn
+        )
     else:
         labels = None
-        df, y = clean_regression_target(df, y)
-    return df, y, labels
+        df, y, ix_train, ix_tests = clean_regression_target(df, y, ix_train, ix_tests)
+    return df, y, labels, ix_train, ix_tests
 
 
 def prepare_data(
@@ -567,6 +661,9 @@ def prepare_data(
     grouper: Optional[str],
     results: InspectionResults,
     is_classification: bool,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+    tests_method: Optional[ValidationMethod],
     _warn: bool = True,
 ) -> PreparedData:
     """
@@ -597,11 +694,17 @@ def prepare_data(
     df = timer(unify_nans)(df)
     df = timer(convert_categoricals)(df=df, target=target, grouper=grouper)
     info = timer(inspect_target)(df, target, is_classification=is_classification)
-    df, n_targ_drop = timer(drop_target_nans)(df, target)
+    df, n_targ_drop, ix_train, ix_tests = timer(drop_target_nans)(
+        df, target, ix_train, ix_tests
+    )
     if is_classification:
-        df, y, labels = timer(encode_target)(df, df[target])
+        df, y, labels, ix_train, ix_tests = timer(encode_target)(
+            df, df[target], ix_train, ix_tests
+        )
     else:
-        df, y = timer(clean_regression_target)(df, df[target])
+        df, y, ix_train, ix_tests = timer(clean_regression_target)(
+            df, df[target], ix_train, ix_tests
+        )
         labels = None
 
     df = timer(drop_unusable)(df, results, _warn=_warn)
@@ -628,6 +731,9 @@ def prepare_data(
         y=y,
         groups=g,
         labels=labels,
+        ix_train=ix_train,
+        ix_tests=ix_tests,
+        tests_method=tests_method,
         info=PreparationInfo(
             original_shape=orig_shape,
             final_shape=X.shape,

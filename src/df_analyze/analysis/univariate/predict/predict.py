@@ -31,6 +31,7 @@ from df_analyze.analysis.univariate.predict.models import (
     REG_MODELS,
 )
 from df_analyze.preprocessing.prepare import PreparedData
+from df_analyze.saving import add_fold_idx
 
 
 @dataclass
@@ -60,24 +61,34 @@ class PredResults:
         self.idx_subsample = idx
         self.files = PredFiles()
 
-    def save_raw(self, root: Path) -> None:
+    def save_raw(self, root: Path, fold_idx: Optional[int]) -> None:
         if self.conts is not None:
-            self.conts.to_parquet(root / self.files.conts_raw)
+            self.conts.to_parquet(
+                add_fold_idx(root / self.files.conts_raw, fold_idx=fold_idx)
+            )
         else:
-            DataFrame().to_parquet(root / self.files.conts_raw)
+            DataFrame().to_parquet(
+                add_fold_idx(root / self.files.conts_raw, fold_idx=fold_idx)
+            )
         if self.cats is not None:
-            self.cats.to_parquet(root / self.files.cats_raw)
+            self.cats.to_parquet(
+                add_fold_idx(root / self.files.cats_raw, fold_idx=fold_idx)
+            )
         else:
-            DataFrame().to_parquet(root / self.files.conts_raw)
+            DataFrame().to_parquet(
+                add_fold_idx(root / self.files.conts_raw, fold_idx=fold_idx)
+            )
         if self.idx_subsample is not None:
             with open(root / self.files.idx, "wb") as handle:
                 np.save(handle, self.idx_subsample, allow_pickle=False, fix_imports=False)
 
-    def save_tables(self, root: Path) -> None:
+    def save_tables(self, root: Path, fold_idx: Optional[int]) -> None:
         if self.conts is not None:
-            self.conts.to_csv(root / self.files.conts_csv)
+            self.conts.to_csv(
+                add_fold_idx(root / self.files.conts_csv, fold_idx=fold_idx)
+            )
         if self.cats is not None:
-            self.cats.to_csv(root / self.files.cats_csv)
+            self.cats.to_csv(add_fold_idx(root / self.files.cats_csv, fold_idx=fold_idx))
 
     @staticmethod
     def is_saved(cachedir: Path) -> bool:
@@ -88,6 +99,7 @@ class PredResults:
 
     @staticmethod
     def load(cachedir: Path, is_classification: bool) -> PredResults:
+        # TODO: handle fold_idx
         preds = PredResults(conts=None, cats=None, is_classification=is_classification)
         try:
             conts = pd.read_parquet(cachedir / preds.files.conts_raw)

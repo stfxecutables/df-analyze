@@ -9,6 +9,8 @@ sys.path.append(str(ROOT))  # isort: skip
 
 
 import pickle
+from itertools import product
+from math import ceil
 from typing import Literal, cast
 from warnings import catch_warnings, filterwarnings
 
@@ -16,8 +18,11 @@ import jsonpickle
 import numpy as np
 import pandas as pd
 import pytest
+from numpy import ndarray
 from numpy.random import Generator
 from pandas import DataFrame, Series
+from pandas._typing import Scalar
+from scipy.special import softmax
 from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
 
@@ -27,7 +32,7 @@ from df_analyze.analysis.univariate.predict.predict import (
     PredResults,
     univariate_predictions,
 )
-from df_analyze.enumerables import NanHandling
+from df_analyze.enumerables import NanHandling, ValidationMethod
 from df_analyze.preprocessing.cleaning import (
     clean_regression_target,
     drop_unusable,
@@ -140,6 +145,9 @@ class TestDataset:
             grouper=grouper,
             results=inspect,
             is_classification=self.is_classification,
+            ix_train=None,
+            ix_tests=[],
+            tests_method=ValidationMethod.List,
         )
 
         if force:
@@ -164,11 +172,11 @@ class TestDataset:
         assocs = target_associations(prep)
 
         if force:
-            assocs.save_raw(self.assoc_cachedir)
+            assocs.save_raw(self.assoc_cachedir, None)
             return assocs
 
         if not AssocResults.is_saved(self.assoc_cachedir):
-            assocs.save_raw(self.assoc_cachedir)
+            assocs.save_raw(self.assoc_cachedir, None)
 
         return assocs
 
@@ -180,11 +188,11 @@ class TestDataset:
         preds = univariate_predictions(prep, self.is_classification)
 
         if force:
-            preds.save_raw(self.preds_cachedir)
+            preds.save_raw(self.preds_cachedir, None)
             return preds
 
         if not preds.is_saved(self.preds_cachedir):
-            preds.save_raw(self.preds_cachedir)
+            preds.save_raw(self.preds_cachedir, None)
 
         return preds
 
@@ -219,9 +227,9 @@ class TestDataset:
             y = df["target"]
 
             if self.is_classification:
-                X, y, labels = encode_target(X, y)
+                X, y, labels = encode_target(X, y, ix_train=None, ix_tests=None)[:3]
             else:
-                X, y = clean_regression_target(X, y)
+                X, y = clean_regression_target(X, y, ix_train=None, ix_tests=None)[:2]
 
             strat = y
             if not self.is_classification:
@@ -231,6 +239,37 @@ class TestDataset:
         X_tr, X_test, y_tr, y_test = tt_split(X, y, test_size=test_size, stratify=strat)
         num_classes = len(np.unique(y)) if self.is_classification else 1
         return X_tr, X_test, y_tr, y_test, num_classes
+
+    def to_multitest(self, temp_train_path: Path, temp_testpaths: list[Path]) -> None:
+        df_base = self.load()
+        n_test = len(temp_testpaths)
+        # We have to be a bit careful here because subsampling can create test
+        # sets with rare classes
+        target = df_base["target"].astype(str)
+        unqs, unq_ixs, labs, cnts = np.unique(
+            target, return_counts=True, return_inverse=True, return_index=True
+        )
+        freqs = cnts / cnts.sum()
+        C = len(unqs)
+        # given C classes with frequencies (f_1, ..., f_C), uniform sampling will
+        # produce a test set with the same expected frequencies. We want instead
+        # a balanced subsample, i.e. the frequencies to be (1/C, ..., 1/C). So
+        # letting f_i * a_i = 1 / C, a_i = 1/ (f_i, C_i)
+        cls_weights = 1 / (freqs * C)
+        weights = target.copy()
+        remap = {
+            target[unq_ix]: cls_weight for unq_ix, cls_weight in zip(unq_ixs, cls_weights)
+        }
+        weights = weights.map(lambda x: remap[x])
+        weights /= weights.sum()
+
+        df_tests = [
+            df_base.sample(n=200, replace=True, weights=weights) for _ in range(n_test)
+        ]
+
+        df_base.to_parquet(temp_train_path)
+        for df_test, testpath in zip(df_tests, temp_testpaths):
+            df_test.to_parquet(testpath)
 
     @staticmethod
     def from_name(name: str) -> TestDataset:

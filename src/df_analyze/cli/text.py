@@ -67,18 +67,62 @@ For more details, see the README at https://github.com/stfxecutables/df-analyze.
 
 """
 
-DF_HELP_STR = """
-The dataframe to analyze.
-
-Currently only tables saved as either `.xlsx`, `.json` or `.csv`, or NumPy
-`ndarray`s saved as "<filename>.npy" are supported, but a file exported by
-Pandas `DataFrame.to_*` method is preferred.
+DF_FILETYPES = """
+Currently only tables saved as either `.parquet`, `.xlsx`, `.json` or `.csv` are
+supported, but a file exported by Pandas `DataFrame.to_*` method is preferred.
 
 If your data is saved as a Pandas `DataFrame`, it must have shape
 `(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
 column holding the target variable (or feature) can be specified by the
 `--target` / `-y` argument, but is "target" by default if such a column name
-exists, or the last column if it does not.
+exists, or the last column if it does not."""
+
+DF_HELP_STR = f"""
+The dataframe to analyze.
+{DF_FILETYPES}
+
+"""
+
+DF_TRAIN_HELP_STR = f"""
+The training dataframe to analyze.
+{DF_FILETYPES}
+
+"""
+
+DF_TESTS_HELP_STR = f"""
+The dataframes to use for testing. How these are used depends on the
+--test-sets-method option.
+{DF_FILETYPES}
+
+"""
+
+DF_TEST_SETS_METHOD_HELP_STR = """
+The manner in which to use the specified test sets for validation. Available
+options are:
+
+  lodo        Leave-One-Dataset-Out. Assuming --df-train=file0, and that
+              --df-test=file1,file2,...,fileN, then df-analyze runs N+1 full
+              runs of the feature selection, tuning, and validation pipeline,
+              for the sets:
+
+              X_train_0={{file0}}, X_test_0=concat({{file1, file2, ..., fileN}})
+              X_train_1={{file1}}, X_test_1=concat({{file0, file2, ..., fileN}})
+                                         ...
+              X_train_N={{fileN}}, X_test_N=concat({{file0, file2, ..., fileN-1}})
+
+              Note: In the case of a single test file, this is just 2-fold. For
+              more than 2 test files, expect this option to potentially be very
+              expensive on anything other than small datasets.
+
+              Note: In the case of N test files, this produces N+1 feature
+              selection reports, and N+1 final performance summary tables.
+
+  list        Perform feature selection and tuning only once on the file passed
+              in to --df-train, and then run validation (holdout, internal
+              k-fold) on each of the files passed into --df-tests
+
+              Note: In the case of N test files, this produces ONE feature
+              selection report, and N final performance summary tables.
 
 """
 
@@ -157,7 +201,7 @@ If "classify", do classification. If "regress", do regression.
 
 CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
-Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeClassifier]))}].
+Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeClassifier]))}].
 
   knn         scikit-learn KNeighborsClassifier.
 
@@ -180,7 +224,7 @@ Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeCla
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
-Can be a list of elements from: [{' '.join(sorted([x.value for x in DfAnalyzeRegressor]))}].
+Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeRegressor]))}].
 
   knn         scikit-learn KNeighborsRegressor.
 

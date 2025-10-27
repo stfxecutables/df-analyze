@@ -32,6 +32,7 @@ from warnings import warn
 import jsonpickle
 import numpy as np
 import pandas as pd
+from numpy import ndarray
 from pandas import DataFrame
 
 from df_analyze._constants import (
@@ -53,6 +54,7 @@ from df_analyze.cli.parsing import (
     column_parser,
     int_or_percent_parser,
     resolved_path,
+    resolved_path_list,
     separator,
 )
 from df_analyze.cli.text import (
@@ -64,6 +66,9 @@ from df_analyze.cli.text import (
     CLS_HELP_STR,
     CLS_TUNE_METRIC,
     DF_HELP_STR,
+    DF_TEST_SETS_METHOD_HELP_STR,
+    DF_TESTS_HELP_STR,
+    DF_TRAIN_HELP_STR,
     DROP_HELP_STR,
     EMBED_SELECT_MODEL_HELP,
     EXPLODE_HELP,
@@ -111,10 +116,12 @@ from df_analyze.enumerables import (
     Normalization,
     RegressorScorer,
     RegScore,
+    ValidationMethod,
     WrapperSelection,
     WrapperSelectionModel,
 )
 from df_analyze.loading import load_spreadsheet
+from df_analyze.saving import add_fold_idx
 
 if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
@@ -160,6 +167,8 @@ class ProgramOptions(Debug):
     def __init__(
         self,
         datapath: Optional[Path],
+        test_paths: list[Path],
+        tests_method: ValidationMethod,
         target: str,
         grouper: Optional[str],
         categoricals: list[str],
@@ -210,6 +219,8 @@ class ProgramOptions(Debug):
         self.version = VERSION
         self.cli_args = " ".join(sys.argv)
         self.datapath: Optional[Path] = self.validate_datapath(datapath)
+        self.test_paths: list[Path] = [self.validate_test_path(p) for p in test_paths]
+        self.tests_method = tests_method
         self.target: str = target
         self.grouper: Optional[str] = grouper
         self.categoricals: list[str] = categoricals
@@ -286,7 +297,7 @@ class ProgramOptions(Debug):
 
     @staticmethod
     def random(
-        ds: Optional[TestDataset], outdir: Optional[Path] = None
+        ds: Optional[TestDataset], outdir: Optional[Path] = None, multitest: bool = False
     ) -> ProgramOptions:
         if ds is None:
             is_cls = np.random.randint(0, 2, dtype=bool)
@@ -334,6 +345,8 @@ class ProgramOptions(Debug):
         no_warn_explosion: bool = False
         return ProgramOptions(
             datapath=datapath,
+            test_paths=[],  # TODO: think of something better here...
+            tests_method=ValidationMethod.List,  # TODO: work with above
             target="target",
             grouper=None,
             categoricals=ds.categoricals if ds is not None else [],
@@ -425,6 +438,15 @@ class ProgramOptions(Debug):
         return Path(datapath).resolve()
 
     @staticmethod
+    def validate_test_path(path: Path) -> Path:
+        datapath = resolved_path(path)
+        if not datapath.exists():
+            raise FileNotFoundError(f"The specified file {datapath} does not exist.")
+        if not datapath.is_file():
+            raise FileNotFoundError(f"{datapath} is not a file.")
+        return Path(datapath).resolve()
+
+    @staticmethod
     def get_outdir(outdir: Optional[Path], datapath: Optional[Path]) -> Optional[Path]:
         if outdir is None or datapath is None:
             return None
@@ -470,12 +492,10 @@ class ProgramOptions(Debug):
         obj = jsonpickle.decode(file.read_text())
         return cast(ProgramOptions, obj)
 
-    def load_df(self) -> DataFrame:
-        if self.datapath is None:
-            raise RuntimeError("Cannot load data as `self.datapath` is None")
-        if self.is_spreadsheet:
-            return load_spreadsheet(self.datapath, self.separator)[0]
-        path = self.datapath
+    def _load_df(self, path: Path) -> DataFrame:
+        if path is None:
+            raise RuntimeError("Expected `pathlib.Path`, but got `None`")
+
         if path.name.endswith("parquet"):
             return pd.read_parquet(path)
         if path.name.endswith("csv"):
@@ -483,6 +503,75 @@ class ProgramOptions(Debug):
         if path.name.endswith("json"):
             return pd.read_json(path)
         raise ValueError(f"Unrecognized filetype: '{path.suffix}'")
+
+    def load_df(self) -> DataFrame:
+        if self.datapath is None:
+            raise RuntimeError("Cannot load data as `self.datapath` is None")
+        if self.is_spreadsheet:
+            return load_spreadsheet(self.datapath, self.separator)[0]
+
+        return self._load_df(self.datapath)
+
+    def load_test_dfs(self) -> list[DataFrame]:
+        return [self._load_df(p) for p in self.test_paths]
+
+    def merged_df(self) -> Optional[tuple[DataFrame, ndarray, list[ndarray]]]:
+        if len(self.test_paths) == 0:
+            return None
+
+        method = self.tests_method
+        if method not in ValidationMethod:
+            raise RuntimeError(
+                f"Unrecognized argument to --df-tests-method: {method} (This error should be impossible)"
+            )
+        df = self.load_df()
+        dfs = self.load_test_dfs()
+
+        # track indices for re-splitting later, i.e. so we can recover the original
+        # dfs by df_merged.iloc[ix].reset_index(drop=True)
+        ix_train = np.arange(df.shape[0])
+        ix_tests = []
+        lengths = [df.shape[0] for df in dfs]
+        last = ix_train[-1]
+        for length in lengths:
+            ix_tests.append(np.arange(last + 1, last + 1 + length))
+            last = ix_tests[-1][-1]
+
+        ix_all = np.concatenate([ix_train, *ix_tests])
+        if not (np.diff(ix_all) == 1).all():
+            raise ValueError("Gap or repetition in indices")
+        if len(ix_all) != (len(df) + sum(lengths)):
+            raise ValueError("Merged df indices do not match number of samples.")
+
+        # ix_tests = [np.arange(df.shape[0]) for df in dfs]
+        # for i, ix_test in enumerate(ix_tests):
+        #     if i == 0:
+        #         ix_test += ix_train[-1] + 1
+        #     else:
+        #         ix_prev = ix_tests[i - 1]
+        #         ix_test += ix_prev[-1] + 1
+
+        train_cols = sorted(df.columns)
+        for i, df_test in enumerate(dfs):
+            cols = sorted(df_test.columns)
+            if cols != train_cols:
+                test_path = self.test_paths[i]
+                raise ValueError(
+                    f"The column names in file: {test_path} ({cols}) do not match the "
+                    f"column names of the training dataframe: {self.datapath} ({train_cols})"
+                )
+
+        df_all = pd.concat([df, *dfs], axis=0, ignore_index=True, join="inner")
+        # Check again concat didn't mess anything up
+        all_cols = sorted(df_all.columns)
+        if all_cols != train_cols:
+            raise RuntimeError(
+                "Unexpected error. Concatenating test dataframes resulted in "
+                f"columns: {all_cols}, which are inconsistent with the columns "
+                f"in the training data: {train_cols}"
+            )
+
+        return df_all, ix_train, ix_tests
 
 
 def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> Namespace:
@@ -510,10 +599,19 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
         print(f"df-analyze {VERSION}")
         exit(0)
 
+    # validate core data input args
     if cli_args.spreadsheet is None and cli_args.df is None:
-        raise ValueError(
-            "Must specify one of either `--spreadsheet [file]` or `--df [file]`."
-        )
+        if cli_args.df_train is None:
+            raise ValueError(
+                "Must specify one of either `--spreadsheet [file]` or `--df [file]` or "
+                "`--df-train`."
+            )
+        else:
+            if len(cli_args.df_tests) == 0:
+                raise ValueError(
+                    "If using `--df-train` argument, must pass at least one test "
+                    "dataset file to `--df-tests`."
+                )
 
     sentinel_cli_args = (
         sentinel_parser.parse_known_args()[0]
@@ -526,6 +624,12 @@ def parse_and_merge_args(parser: ArgumentParser, args: Optional[str] = None) -> 
 
     spreadsheet = cli_args.spreadsheet
     if spreadsheet is not None:
+        if cli_args.df_train is not None:
+            raise ValueError(
+                "Specifying training and test sets is incompatible with `--spreadsheet` "
+                "argument. Use either (1) `--df`, (2) `--spreadsheet`, or (3) both "
+                "`--df-train` and `--df-test` arguments. "
+            )
         options = load_spreadsheet(spreadsheet)[1]
     else:
         options = ""
@@ -561,6 +665,31 @@ def make_parser() -> ArgumentParser:
         required=False,
         default=None,
         help=DF_HELP_STR,
+    )
+    parser.add_argument(
+        "--df-train",
+        action="store",
+        type=resolved_path,
+        required=False,
+        default=None,
+        help=DF_TRAIN_HELP_STR,
+    )
+    parser.add_argument(
+        "--df-tests",
+        action="store",
+        type=resolved_path_list,
+        required=False,
+        default=[],
+        help=DF_TESTS_HELP_STR,
+    )
+    parser.add_argument(
+        "--df-tests-method",
+        action="store",
+        type=ValidationMethod.parse,
+        choices=ValidationMethod.choices(),
+        required=False,
+        default=ValidationMethod.List,
+        help=DF_TEST_SETS_METHOD_HELP_STR,
     )
     parser.add_argument(
         "--separator",
@@ -928,8 +1057,16 @@ ArgsDict = dict[str, tuple[RandKind, Optional[list[str]]]]
 
 
 def get_parser_dict() -> ArgsDict:
+    """
+    Returns an ArgsDict, which is a dictionary where each key is the name (with
+    dashes) of a CLI argument (e.g. one key is `--df-train`), and where each
+    value is a tuple[RandKind, Optional[list[Choices]]].
+    """
     args_dict: ArgsDict = {
         "--df": (RandKind.Path, None),
+        "--df-train": (RandKind.Path, None),
+        "--df-tests": (RandKind.Custom, None),  # TODO: Handle!
+        "--df-tests-method": (RandKind.ChooseN, ValidationMethod.choices()),
         "--spreadsheet": (RandKind.Path, None),
         "--separator": (RandKind.Custom, None),
         "--target": (RandKind.Target, None),
@@ -982,9 +1119,37 @@ def randip(
 
 
 def random_cli_args(
-    ds: TestDataset, tempdir: Path, spreadsheet: bool = True
-) -> tuple[list[str], Path]:
-    args_dict = get_parser_dict()
+    ds: TestDataset,
+    tempdir: Path,
+    spreadsheet: bool = True,
+    multitest: bool = False,
+    random_target: bool = True,
+    n_tests_min: int = 1,
+    n_tests_max: int = 4,
+) -> tuple[list[str], Path, list[Path]]:
+    """Generate random valid CLI args and data paths for testing.
+
+    Returns
+    -------
+    arg_options: list[str]
+        List of CLI args with valid random arguments
+
+    datapath: Path
+        Path to which temporary training data will be written if multitest=True,
+        otherwise, path to which full temporary data will be written.
+
+    testpaths: list[Path]
+        Paths to which temporary testing datasets will be written if
+        multitest=True, otherwise, empty list.
+    """
+    if multitest and spreadsheet:
+        raise RuntimeError(
+            "`--spreadsheet` option is incompatible with multiple test set inputs."
+        )
+    # if (not multitest) and (not spreadsheet):
+    #     raise RuntimeError("Either test multiple test sets or spreadsheets. ")
+
+    # choose random sizes for number of features selected, test set, etc
     n, p = ds.shape[0], ds.shape[1] - 1
     p_max = min(15, p)
     p_min = 1
@@ -1005,7 +1170,10 @@ def random_cli_args(
     }
 
     cols = set(ds.load().columns.to_list())
-    target = choice(list(cols))
+    if random_target:
+        target = choice(list(cols))
+    else:
+        target = "target"
     cols.remove(target)
     # if " " in target:
     #     target = f"'{target}'"
@@ -1031,18 +1199,53 @@ def random_cli_args(
     # ords = f"'{' '.join(ords)}'"
     ords = " ".join([f'"{x}"' if " " in x else x for x in ords])
 
-    datafile = tempdir / f"{ds.dsname}.csv" if spreadsheet else ds.datapath
+    # there is no reason ever to be returning the path in `ds.datapath`` since
+    # the caller of this function already has access to `ds
+    spreadsheet_tempfile = tempdir / f"{ds.dsname}.csv"
+    tempfile = tempdir / f"{ds.dsname}.parquet"
+    # TODO: handle --df-train and --df-tests cases
+    testfiles: list[Path] = []
+
+    args_dict = get_parser_dict()
+    if multitest:
+        args_dict.pop("--df", None)
+        args_dict.pop("--spreadsheet", None)
+
+        n_test = np.random.randint(n_tests_min, n_tests_max)
+        fold_idxs = np.arange(n_test)
+        testfiles = [add_fold_idx(tempfile, fold_idx) for fold_idx in fold_idxs]
+        for file in testfiles:
+            file.touch()
+    else:
+        args_dict.pop("--df-train", None)
+        args_dict.pop("--df-tests", None)
+        args_dict.pop("--df-tests-method", None)
+        if not spreadsheet:
+            args_dict.pop("--spreadsheet", None)
 
     arg_options = []
     for argstr, (kind, choices) in args_dict.items():
         # handle ds-related randoms first
         if kind is RandKind.Path:
             if argstr == "--df":
-                if not spreadsheet:
-                    arg_options.append(f"{argstr} {datafile}")
+                if spreadsheet:
+                    arg_options.append(f"{argstr} {spreadsheet_tempfile}")
+                else:
+                    # raise RuntimeError(
+                    #     "Impossible! Can't have --df argument, since must be doing multitest"
+                    # )
+                    arg_options.append(f"{argstr} {tempfile}")
+            elif argstr == "--df-train":
+                if spreadsheet:
+                    raise ValueError(
+                        "Cannot use `--spreadsheet` option with `--df-train` option"
+                    )
+                arg_options.append(f"{argstr} {ds.datapath}")
             elif argstr == "--spreadsheet":
                 if spreadsheet:
-                    arg_options.append(f"{argstr} {datafile}")
+                    arg_options.append(f"{argstr} {spreadsheet_tempfile}")
+                else:
+                    raise ValueError("Impossible!")
             elif argstr == "--outdir":
                 arg_options.append(f"{argstr} {tempdir}")
             else:
@@ -1060,6 +1263,12 @@ def random_cli_args(
         elif (kind is RandKind.Custom) and (argstr == "--redundant-corr-threshold"):
             score = uniform(0.0, 1.0)
             arg_options.append(f"{argstr} {score}")
+        elif (kind is RandKind.Custom) and (argstr == "--df-tests"):
+            if not multitest:
+                pass
+            else:
+                paths_str = ",".join(map(str, testfiles))
+                arg_options.append(f"{argstr} {paths_str}")
         elif kind is RandKind.IntOrPercent:
             numeric = round(int_or_percents[argstr], 2)
             arg_options.append(f"{argstr} {numeric}")
@@ -1087,7 +1296,10 @@ def random_cli_args(
             if choices is None:
                 raise ValueError("RandKind cannot be a choice with `choices=None`")
             if kind is RandKind.ChooseOne:
-                chosen = choice(choices)
+                if argstr == "--mode" and not random_target:
+                    chosen = "classify" if ds.is_classification else "regress"
+                else:
+                    chosen = choice(choices)
                 arg_options.append(f"{argstr} {chosen}")
             elif kind is RandKind.ChooseN:
                 n_choose = np.random.randint(1, len(choices))
@@ -1105,7 +1317,10 @@ def random_cli_args(
                 f"Unhandled argument: {argstr}, kind={kind}, choices={choices}"
             )
 
-    return arg_options, datafile
+    if spreadsheet:
+        return arg_options, spreadsheet_tempfile, testfiles
+    else:
+        return arg_options, tempfile, testfiles
 
 
 def get_options(args: Optional[str] = None) -> ProgramOptions:
@@ -1160,9 +1375,18 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
 
     # https://stackoverflow.com/a/26990349,
     grouper = " ".join(cli_args.grouper) if cli_args.grouper is not None else None
+    if cli_args.df is None:
+        if cli_args.df_train is not None:
+            datapath = cli_args.df_train
+        else:
+            datapath = cli_args.spreadsheet
+    else:
+        datapath = cli_args.df
 
     return ProgramOptions(
-        datapath=cli_args.spreadsheet if cli_args.df is None else cli_args.df,
+        datapath=datapath,
+        test_paths=cli_args.df_tests,
+        tests_method=cli_args.df_tests_method,
         target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
         grouper=grouper,
         categoricals=sorted(cats),

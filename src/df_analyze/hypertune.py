@@ -7,6 +7,7 @@ import sys
 import traceback
 import warnings
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from pprint import pprint
 from random import choice, randint
@@ -67,6 +68,7 @@ from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.gandalf import GandalfEstimator
 from df_analyze.models.mlp import MLPEstimator
 from df_analyze.preprocessing.prepare import PreparedData
+from df_analyze.saving import add_fold_idx
 from df_analyze.scoring import (
     sensitivity,
     specificity,
@@ -260,10 +262,20 @@ class HtuneResult:
         score = (
             np.random.uniform(0, 1) if ds.is_classification else np.random.uniform(0, 10)
         )
+        n_samp_test = len(y_test)
+        n_samp_train = n_samp - n_samp_test
         if is_cls:
-            probs_test = softmax(np.random.standard_normal([n_samp, n_cls]), axis=1)
+            probs_train = softmax(
+                np.random.standard_normal([n_samp_train, n_cls]), axis=1
+            )
+            probs_test = softmax(np.random.standard_normal([n_samp_test, n_cls]), axis=1)
+            preds_test = Series(np.argmax(probs_test, axis=1))
+            preds_train = Series(np.argmax(probs_train, axis=1))
         else:
             probs_test = None
+            probs_train = None
+            preds_test = Series(np.random.standard_normal([n_samp_test]))
+            preds_train = Series(np.random.standard_normal([n_samp_train]))
 
         return HtuneResult(
             selection=selection,  # type: ignore
@@ -274,10 +286,10 @@ class HtuneResult:
             params=params,
             metric=metric,
             score=score,
-            preds_test=Series(),
-            preds_train=Series(),
+            preds_test=preds_test,
+            preds_train=preds_train,
             probs_test=probs_test,
-            probs_train=None,
+            probs_train=probs_train,
         )
 
 
@@ -361,11 +373,13 @@ class EvaluationResults:
             is_classification=ds.is_classification,
         )
 
-    def hp_table(self) -> DataFrame:
+    def hp_table(self, fold_idx: Optional[int] = None) -> DataFrame:
         dfs = []
         for res in self.results:
             dfs.append(res.to_row())
         df = pd.concat(dfs, axis=0, ignore_index=True)
+        if fold_idx is not None:
+            df["test_idx"] = fold_idx
         return df
 
     def wide_table(
@@ -420,12 +434,13 @@ class EvaluationResults:
         # raise NotImplementedError()
         return str(jsonpickle.encode(self))
 
-    def save(self, root: Path) -> None:
-        self.df.to_csv(root / "performance_long_table.csv", index=False)
-        self.X_train.to_csv(root / "X_train.csv", index=False)
-        self.X_test.to_csv(root / "X_test.csv", index=False)
-        self.y_train.to_frame().to_csv(root / "y_train.csv", index=True)
-        self.y_test.to_frame().to_csv(root / "y_test.csv", index=True)
+    def save(self, root: Path, fold_idx: Optional[int]) -> None:
+        fix = partial(add_fold_idx, fold_idx=fold_idx)
+        self.df.to_csv(fix(root / "performance_long_table.csv"), index=False)
+        self.X_train.to_csv(fix(root / "X_train.csv"), index=False)
+        self.X_test.to_csv(fix(root / "X_test.csv"), index=False)
+        self.y_train.to_frame().to_csv(fix(root / "y_train.csv"), index=True)
+        self.y_test.to_frame().to_csv(fix(root / "y_test.csv"), index=True)
         results_json = ", ".join([result.to_preds_json() for result in self.results])
         results_json = "{" + '"predictions": [' + results_json + "]}"
         remain = {
@@ -434,12 +449,12 @@ class EvaluationResults:
         }
         try:
             enc = str(jsonpickle.encode(remain, unpicklable=True))
-            (root / "eval_htune_results_jsonpickle.json").write_text(enc)
+            fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
         except TypeError:
             enc = str(jsonpickle.encode(remain, unpicklable=True, fail_safe=str))
-            (root / "eval_htune_results_jsonpickle.json").write_text(enc)
+            fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
         try:
-            (root / "prediction_results.json").write_text(results_json)
+            fix(root / "prediction_results.json").write_text(results_json)
         except Exception as e:
             traceback.print_exc()
             print(e)
@@ -449,6 +464,7 @@ class EvaluationResults:
 
     @classmethod
     def load(cls, root: Path) -> EvaluationResults:
+        # TODO: handle fold_idx
         df = pd.read_csv(root / "performance_long_table.csv")
         X_train = pd.read_csv(root / "X_train.csv", engine="python")
         X_test = pd.read_csv(root / "X_test.csv", engine="python")
@@ -650,7 +666,7 @@ def evaluate_tuned(
                 else:
                     nulls = Series(RegressorScorer.null_scores(), name="metric")
                 warn(
-                    f"Got exception when trying to tune and evaluate {model.shortname}:\n{e}\n"
+                    f"\nGot exception when trying to tune and evaluate {model.shortname}:\n{e}\n"
                     f"{traceback.format_exc()}"
                 )
                 df = DataFrame(

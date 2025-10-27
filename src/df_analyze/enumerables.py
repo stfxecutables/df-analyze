@@ -381,6 +381,11 @@ class EmbedSelectionModel(RandEnum, Enum):
     Linear = "linear"
 
 
+class ValidationMethod(RandEnum, Enum):
+    LODO = "lodo"
+    List = "list"
+
+
 class NanHandling(RandEnum, Enum):
     Drop = "drop"
     Mean = "mean"
@@ -535,7 +540,7 @@ class CVSplit(Enum):
     def to_string(self, value: float) -> str:
         if self is not CVSplit.Holdout:
             return self.value
-        return f"{value*100}%-holdout"
+        return f"{value * 100}%-holdout"
 
     @staticmethod
     def from_str(s: str) -> CVSplit:

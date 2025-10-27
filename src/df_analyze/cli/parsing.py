@@ -3,7 +3,7 @@ from argparse import Action
 from enum import Enum
 from math import isnan
 from pathlib import Path
-from typing import Callable, Optional, TypeVar, Union
+from typing import Callable, List, Optional, TypeVar, Union
 from warnings import warn
 
 E = TypeVar("E")
@@ -19,6 +19,25 @@ def resolved_path(p: Union[str, Path]) -> Path:
     except Exception as e:
         raise ValueError(f"Could not resolve path {path} to valid path.") from e
     return path
+
+
+def resolved_path_list(ps: str) -> List[Path]:
+    paths = []
+    for p in ps.split(","):
+        try:
+            path = Path(p)
+        except Exception as e:
+            raise ValueError(
+                f"Could not interpret string {p} as path. User-input argument: {ps}.\n\n"
+                f'Note: path arguments are split on commas (","), so make sure none of'
+                "your filepaths contain commas."
+            ) from e
+        try:
+            path = path.resolve()
+        except Exception as e:
+            raise ValueError(f"Could not resolve path {path} to valid path.") from e
+        paths.append(path)
+    return paths
 
 
 def cv_size(cv_str: str) -> Union[float, int]:

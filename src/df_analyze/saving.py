@@ -16,6 +16,8 @@ from typing import (
 )
 from warnings import warn
 
+import pandas as pd
+
 if TYPE_CHECKING:
     from df_analyze.analysis.univariate.associate import AssocResults
     from df_analyze.analysis.univariate.predict.predict import PredResults
@@ -183,12 +185,14 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_eval_report(self, results: Optional[EvaluationResults]) -> None:
+    def save_eval_report(
+        self, results: Optional[EvaluationResults], fold_idx: Optional[int] = None
+    ) -> None:
         if self.results is None:
             return
         if results is None:
             return
-        out = self.results / "results_report.md"
+        out = add_fold_idx(self.results / "results_report.md", fold_idx=fold_idx)
         try:
             out.write_text(results.to_markdown())
         except Exception as e:
@@ -197,16 +201,21 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_eval_tables(self, results: Optional[EvaluationResults]) -> None:
+    def save_eval_tables(
+        self, results: Optional[EvaluationResults], fold_idx: Optional[int] = None
+    ) -> None:
         if self.results is None or self.tuning is None:
             return
         if results is None:
             return
-        perfs = self.results / "final_performances.csv"
-        tuned = self.tuning / "tuned_models.csv"
-        df_tuned = results.hp_table()
+        perfs = add_fold_idx(self.results / "final_performances.csv", fold_idx=fold_idx)
+        tuned = add_fold_idx(self.tuning / "tuned_models.csv", fold_idx=fold_idx)
+        df_tuned = results.hp_table(fold_idx)
         try:
-            results.df.to_csv(perfs)
+            results_df = results.df
+            if fold_idx is not None:
+                results_df["test_idx"] = fold_idx
+            results_df.to_csv(perfs)
             df_tuned.to_csv(tuned)
         except Exception as e:
             warn(
@@ -214,20 +223,24 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_eval_data(self, results: Optional[EvaluationResults]) -> None:
+    def save_eval_data(
+        self, results: Optional[EvaluationResults], fold_idx: Optional[int] = None
+    ) -> None:
         if self.results is None:
             return
         if results is None:
             return
         try:
-            results.save(self.results)
+            results.save(self.results, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save final evaluation results. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_embed_report(self, selected: Optional[ModelSelected]) -> None:
+    def save_embed_report(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
         if selected is None:
             return
         embeds = selected.embed_selected
@@ -239,7 +252,9 @@ class ProgramDirs(Debug):
         for embed_selected in embeds:
             report = embed_selected.to_markdown()
             model = embed_selected.model.value
-            out = self.embed / f"{model}_embedded_selection_report.md"
+            out = add_fold_idx(
+                self.embed / f"{model}_embedded_selection_report.md", fold_idx=fold_idx
+            )
             try:
                 out.write_text(report)
             except Exception as e:
@@ -248,7 +263,9 @@ class ProgramDirs(Debug):
                     f"Details:\n{e}\n{traceback.format_exc()}"
                 )
 
-    def save_wrap_report(self, selected: Optional[ModelSelected]) -> None:
+    def save_wrap_report(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
         if selected is None:
             return
         if selected.wrap_selected is None:
@@ -266,7 +283,9 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_wrap_data(self, selected: Optional[ModelSelected]) -> None:
+    def save_wrap_data(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
         if selected is None:
             return
         if selected.wrap_selected is None:
@@ -284,7 +303,9 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_embed_data(self, selected: Optional[ModelSelected]) -> None:
+    def save_embed_data(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
         if selected is None:
             return
         embeds = selected.embed_selected
@@ -296,7 +317,9 @@ class ProgramDirs(Debug):
         for embed_selected in embeds:
             json = embed_selected.to_json()
             model = embed_selected.model.value
-            out = self.embed / f"{model}_embed_selection_data.json"
+            out = add_fold_idx(
+                self.embed / f"{model}_embed_selection_data.json", fold_idx
+            )
             try:
                 out.write_text(json)
             except Exception as e:
@@ -305,18 +328,26 @@ class ProgramDirs(Debug):
                     f"Details:\n{e}\n{traceback.format_exc()}"
                 )
 
-    def save_model_selection_reports(self, selected: Optional[ModelSelected]) -> None:
-        self.save_embed_report(selected)
-        self.save_wrap_report(selected)
+    def save_model_selection_reports(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
+        self.save_embed_report(selected, fold_idx=fold_idx)
+        self.save_wrap_report(selected, fold_idx=fold_idx)
 
-    def save_model_selection_data(self, selected: Optional[ModelSelected]) -> None:
-        self.save_embed_data(selected)
-        self.save_wrap_data(selected)
+    def save_model_selection_data(
+        self, selected: Optional[ModelSelected], fold_idx: Optional[int] = None
+    ) -> None:
+        self.save_embed_data(selected, fold_idx=fold_idx)
+        self.save_wrap_data(selected, fold_idx=fold_idx)
 
-    def save_filter_report(self, selected: Optional[FilterSelected]) -> None:
+    def save_filter_report(
+        self, selected: Optional[FilterSelected], fold_idx: Optional[int] = None
+    ) -> None:
         if (self.filter is None) or (selected is None):
             return
-        out = self.filter / f"{selected.method}_selection_report.md"
+        out = add_fold_idx(
+            self.filter / f"{selected.method}_selection_report.md", fold_idx=fold_idx
+        )
         try:
             out.write_text(selected.to_markdown())
         except Exception as e:
@@ -325,10 +356,12 @@ class ProgramDirs(Debug):
                 f"to {out}. Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_pred_report(self, report: Optional[str]) -> None:
+    def save_pred_report(
+        self, report: Optional[str], fold_idx: Optional[int] = None
+    ) -> None:
         if (self.predictions is None) or (report is None):
             return
-        out = self.predictions / "predictions_report.md"
+        out = add_fold_idx(self.predictions / "predictions_report.md", fold_idx=fold_idx)
         try:
             out.write_text(report)
         except Exception as e:
@@ -337,10 +370,14 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_assoc_report(self, report: Optional[str]) -> None:
+    def save_assoc_report(
+        self, report: Optional[str], fold_idx: Optional[int] = None
+    ) -> None:
         if (self.associations is None) or (report is None):
             return
-        out = self.associations / "associations_report.md"
+        out = add_fold_idx(
+            self.associations / "associations_report.md", fold_idx=fold_idx
+        )
         try:
             out.write_text(report)
         except Exception as e:
@@ -349,36 +386,40 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_univariate_preds(self, preds: PredResults) -> None:
+    def save_univariate_preds(
+        self, preds: PredResults, fold_idx: Optional[int] = None
+    ) -> None:
         if self.predictions is None:
             return
         try:
-            preds.save_raw(self.predictions)
+            preds.save_raw(self.predictions, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save raw predictions. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
         try:
-            preds.save_tables(self.predictions)
+            preds.save_tables(self.predictions, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save prediction csv tables. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_univariate_assocs(self, assocs: AssocResults) -> None:
+    def save_univariate_assocs(
+        self, assocs: AssocResults, fold_idx: Optional[int] = None
+    ) -> None:
         if self.associations is None:
             return
         try:
-            assocs.save_raw(self.associations)
+            assocs.save_raw(self.associations, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save raw associations. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
         try:
-            assocs.save_tables(self.associations)
+            assocs.save_tables(self.associations, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save association csv tables. "
@@ -439,6 +480,74 @@ class ProgramDirs(Debug):
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
+    def make_summary_report(self) -> Path:
+        if self.results is None:
+            raise ValueError("Missing results directory.")
+
+        tables = sorted(self.results.rglob("*final_performances*.csv"))
+        if len(tables) == 1:
+            return tables[0]
+
+        dfs = [pd.read_csv(table, index_col=0) for table in tables]
+        df = pd.concat(dfs, axis=0, ignore_index=True)
+
+        sorter = "acc" if "acc" in df["metric"].values else "mae"
+        ascending = sorter != "acc"
+        pivot_index = ["model", "selection", "test_idx"]
+
+        cols = ["holdout", "5-fold", "trainset"]
+        final_tables = {}
+        for valset in cols:
+            g = (
+                df.drop(columns=["embed_selector"])
+                .pivot(columns="metric", values=valset, index=pivot_index)
+                .reset_index()
+                .drop(columns="test_idx")
+                .groupby(["model", "selection"])
+            )
+            means = g.mean()
+            mins = g.min()
+            maxs = g.max()
+            rngs = mins.round(3).map(lambda x: f"{x:0.3f}–") + maxs.round(3).map(
+                lambda x: f"{x:0.3f}"
+            )
+            rngs.columns = rngs.columns.map(lambda col: f"{col}_rng")
+            sort_cols = []
+            for i in range(len(means.columns)):
+                sort_cols.append(means.columns[i])
+                sort_cols.append(rngs.columns[i])
+            full = pd.concat([means.round(3), rngs], axis=1).loc[:, sort_cols]
+
+            clean = (
+                full.reset_index()
+                .sort_values(by=sorter, ascending=ascending)
+                .reset_index(drop=True)
+            )
+            final_tables[valset] = clean
+
+        tab_train = final_tables["trainset"].to_markdown(
+            tablefmt="simple", floatfmt="0.3f", index=False
+        )
+
+        tab_hold = final_tables["holdout"].to_markdown(
+            tablefmt="simple", floatfmt="0.3f", index=False
+        )
+        tab_fold = final_tables["5-fold"].to_markdown(
+            tablefmt="simple", floatfmt="0.3f", index=False
+        )
+        text = (
+            "# Final Model Performances Summary Across Test Sets\n\n"
+            "## Holdout set performances\n\n"
+            f"{tab_hold}\n\n"
+            "## 5-fold performance on holdout sets\n\n"
+            f"{tab_fold}\n\n"
+            "## Training set performances\n\n"
+            f"{tab_train}\n\n"
+        )
+        outfile = self.results / "results_report.md"
+        outfile.write_text(text)
+        return outfile
+
     def cleanup(self) -> None:
         if self.root is None:
             return
@@ -463,3 +572,16 @@ def get_hash(args: dict[str, Any], ignores: Optional[list[str]] = None) -> str:
     # comparisons / different combinations we have here
     hsh = md5(str(tuple(sorted(to_hash.items()))).encode()).hexdigest()
     return hsh
+
+
+def add_fold_idx(path: Path, fold_idx: Optional[int]) -> Path:
+    if fold_idx is None:
+        return path
+    fname = path.name
+    exts = "".join(path.suffixes)
+    fname = fname.replace(exts, "")
+    fname = f"{fname}_{fold_idx:02d}{exts}"
+    newparent = path.parent / f"test{fold_idx:02d}"
+    newparent.mkdir(exist_ok=True, parents=True)
+    out = newparent / fname
+    return out
