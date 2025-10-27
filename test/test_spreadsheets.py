@@ -35,15 +35,6 @@ from df_analyze.preprocessing.inspection.inspection import inspect_data
 from df_analyze.preprocessing.prepare import prepare_data
 from df_analyze.selection.filter import filter_select_features
 from df_analyze.selection.models import model_select_features
-from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
-    FASTEST,
-    MEDIUM_INSPECTION,
-    SLOW_INSPECTION,
-    TestDataset,
-    fast_ds,
-    turbo_ds,
-)
 
 DATA = TEMPLATES / "binary_classification.csv"
 DATALINES = DATA.read_text()
