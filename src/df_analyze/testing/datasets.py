@@ -51,6 +51,8 @@ TEST_CACHE.mkdir(exist_ok=True, parents=True)
 
 
 class TestDataset:
+    __test__ = False
+
     def __init__(self, root: Path) -> None:
         self.root = root
         self.is_classification: bool = root.parent.name == "classification"
@@ -418,7 +420,11 @@ DATASET_LIST = FAST_INSPECTION + MEDIUM_INSPECTION + SLOW_INSPECTION
 # "cleveland", "heart-c", "cholesterol"
 FASTEST = []
 if len(DATASET_LIST) > 51:
-    FASTEST = [DATASET_LIST[6], DATASET_LIST[19], DATASET_LIST[51]]
+    FASTEST = [
+        DATASET_LIST[6],
+        DATASET_LIST[19],
+        DATASET_LIST[51],
+    ]
 
 
 # https://stackoverflow.com/a/5409569
@@ -442,7 +448,7 @@ turbo_ds = composed(
         FASTEST,
         ids=lambda pair: str(pair[0]),
     ),
-    pytest.mark.fast,
+    pytest.mark.turbo,
 )
 
 fast_ds = composed(

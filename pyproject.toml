@@ -94,6 +94,7 @@ section-order = [
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+console_output_style = "progress"
 filterwarnings = [
   # action:message:category:module:line
   'ignore:PytestCollectionWarning',
@@ -117,6 +118,7 @@ markers = [
   "med: marks tests as medium (deselect with '-m \"not med\"')",
   "medium: marks tests as medium (deselect with '-m \"not medium\"')",
   "fast: marks tests as fast (deselect with '-m \"not fast\"')",
+  "turbo: marks tests as fastest (deselect with '-m \"not turbo\"')",
   "regen: marks tests as being for regenerating cached results",
   "cached: marks tests as using cached results (deselect with '-m \"not cached\"')",
   "wip: marks tests not expected to pass (deselect with '-m \"not wip\"')",
