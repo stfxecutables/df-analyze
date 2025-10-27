@@ -1043,16 +1043,16 @@ Data for univariate analyses of all features.
   - columns are, for each feature:
     ```
     "n_levels":  # number of levels / categories / classes
-    "nans",      # NaN count
-    "nan_freq",  # NaN frequency
-    "med_freq",  # Median of level frequencies
-    "min_freq",  # Frequency of least-frequent class
-    "max_freq",  # Frequency of most-frequent class
-    "min_name",  # Name of least common class
-    "max_name",  # Name of most common class
-    "heterog",   # chi-square / heterogeneity
-    "heterog_p", # chi-square p-value
-    "n_entropy", # normalized entropy (closer to max of 1 = more uniform)
+    "nans":      # NaN count
+    "nan_freq":  # NaN frequency
+    "med_freq":  # Median of level frequencies
+    "min_freq":  # Frequency of least-frequent class
+    "max_freq":  # Frequency of most-frequent class
+    "min_name":  # Name of least common class
+    "max_name":  # Name of most common class
+    "heterog":   # chi-square / heterogeneity
+    "heterog_p": # chi-square p-value
+    "n_entropy": # normalized entropy (closer to max of 1 = more uniform)
     ```
 - `continuous_features.csv`
   - table where each row describes a continuous feature
