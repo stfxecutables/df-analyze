@@ -296,23 +296,23 @@ class DfAnalyzeModel(ABC):
         # Actually maybe just want to call refit in here...
         if self.tuned_model is None:
             raise RuntimeError("Cannot evaluate tuning because model has not been tuned.")
-        preds_test = self.tuned_predict(X_test)
+        holdout_preds_test = self.tuned_predict(X_test)
         preds_train = self.tuned_predict(X_train)
-        probs_train = probs_test = None
+        probs_train = holdout_probs_test = None
         if self.is_classifier:
-            probs_test = self.predict_proba(X_test)
+            holdout_probs_test = self.predict_proba(X_test)
             probs_train = self.predict_proba(X_train)
 
             scorer = ClassifierScorer
             holdout_scores = scorer.get_scores(
-                y_true=y_test, y_pred=preds_test, y_prob=probs_test
+                y_true=y_test, y_pred=holdout_preds_test, y_prob=holdout_probs_test
             )
             train_scores = scorer.get_scores(
                 y_true=y_train, y_pred=preds_train, y_prob=probs_train
             )
         else:
             scorer = RegressorScorer
-            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=preds_test)
+            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=holdout_preds_test)
             train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train)
 
         kf = OmniKFold(
@@ -326,23 +326,28 @@ class DfAnalyzeModel(ABC):
 
         scores = []
         for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
-            df_train = X_test.loc[idx_train]
-            df_test = X_test.loc[idx_test]
-            targ_train = y_test.loc[idx_train]
-            targ_test = y_test.loc[idx_test]
+            try:
+                df_train = X_test.loc[idx_train]
+                df_test = X_test.loc[idx_test]
+                targ_train = y_test.loc[idx_train]
+                targ_test = y_test.loc[idx_test]
+            except KeyError as e:
+                raise IndexError("Couldn't use .loc in internal k-fold") from e
             self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
-            preds_test = self.tuned_predict(X=df_test)
+            inner_preds_test = self.tuned_predict(X=df_test)
             if self.is_classifier:
-                probs_test = self.predict_proba(X=df_test)
+                inner_probs_test = self.predict_proba(X=df_test)
                 scorer = ClassifierScorer
                 scores.append(
                     scorer.get_scores(
-                        y_true=targ_test, y_pred=preds_test, y_prob=probs_test
+                        y_true=targ_test, y_pred=inner_preds_test, y_prob=inner_probs_test
                     )
                 )
             else:
                 scorer = RegressorScorer
-                scores.append(scorer.get_scores(y_true=targ_test, y_pred=preds_test))
+                scores.append(
+                    scorer.get_scores(y_true=targ_test, y_pred=inner_preds_test)
+                )
 
         holdout = Series(holdout_scores, name="holdout")
         train = Series(train_scores, name="trainset")
@@ -352,7 +357,7 @@ class DfAnalyzeModel(ABC):
         df = pd.concat([train, holdout, means], axis=1)
         df.index.name = "metric"
         df = df.reset_index()
-        return df, preds_train, preds_test, probs_train, probs_test
+        return df, preds_train, holdout_preds_test, probs_train, holdout_probs_test
 
     def tuned_scores(self, X: DataFrame, y: Series) -> Series:
         if self.tuned_model is None:
