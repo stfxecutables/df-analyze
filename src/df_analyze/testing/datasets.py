@@ -345,6 +345,370 @@ def fake_data(
     return df_tr, df_test, target_tr, target_test
 
 
+def sparse_snplike_data(
+    mode: Literal["classify", "regress"] = "classify",
+    N: int = 1000,
+    n_allele: int = 4,
+    n_distractor_snps: int = 50,  # dimensionality of D
+    n_predictive_snps: int = 3,  # dimensionality of V'
+    n_discrim_snps: int = 2,  # dimensionality of H
+    n_predictive_variants: int = 5,  # number of unique variants in V
+    modal_allele_frequency: float = 0.8,
+    p_target_if_predictive_variant: float = 0.8,
+    freq_target: float = 0.2,  # percent of samples where target is 1
+    p_nan: float = 0.01,  # percent chance an allele is NaN
+    rev: bool = True,  # strongly increases correlation between pred variants and target
+    rng: Generator | None = None,
+) -> tuple[DataFrame, Series]:
+    """Simulate SNP-like data.
+
+    Parameters
+    ----------
+    mode: Literal["classify", "regress"]
+        Whether to generate classification or regression task
+
+    N: int = 500
+        Number of samples
+
+    n_snp: int = 100
+        Number of features with n_poly classes (and maybe NaN)
+
+    n_allele: int = 4
+        Number of alleles (classes) per polymorphism (snp feature)
+
+    n_distractor_snps: int = 50
+        Dimensionality of D, i.e. how many distractor SNP features. See notes
+        for details on D.
+
+    n_predictive_snps: int = 3
+        Dimensionality of V', i.e., how many SNPs are predictive of y=1 with
+        probability `p_target_if_predictive_variant`. See notes for definition
+        of V'. Larger values of this argument relative to n_discrim_snps should
+        lead to more false positive predictions.
+
+    n_discrim_snps: int = 2
+        Dimensionality of H, i.e. how many SNPs distinguish predictive variants
+        as actually predictive. Larger values of this relative to
+        n_predictive_snps
+
+    n_predictive_variants: int = 5
+        Number of unique variants in V. Larger values make prediction more
+        difficult by making the
+
+
+
+    modal_allele_frequency: float = 0.8,
+
+    p_target_if_predictive_variant: float = 0.8,
+
+    freq_target_min: float = 0.2, # percent of samples where target is 1
+
+    p_nan: float = 0.01
+        Percent chance an allele is NaN
+
+    freq_target_min: float = 0.2
+        Minimum number of samples from the target class of interest in the
+        binary classification case.
+
+    rng: Generator | None = None
+        RNG for reproducing data during testing.
+
+
+    Notes
+    -----
+
+    # Feature Generation
+
+    If SNP features are generated as following: if m=modal_frequency, and rng
+    is a NumPy generator, then each SNP, f, will be generated via:
+
+    ```
+    snp_features = []
+    for _ in range(n_snp):
+        if n_poly > 1:
+            n_r = n_allele - 1  # number of non-dominant alleles remaining
+            p_r = (1 - m - p_nan)  # probability for other alleles
+            p_remains = sorted(softmax(rng._exponential(2, n_r))) * p_r
+            ps = [m, p_nan, *p_remains]
+        else:
+            ps = [m, p_nan]
+
+        f = rng.choice(n_poly + 1, size=N, p=ps, replace=True)
+        snp_features.append(f)
+    ```
+
+    Most of the time, if m=0.8 and p_nan is small, this will result in the
+    second most common allele frequency being about 8-15%.
+
+    # Target Generation
+
+    For classification, the assumptive model will be that a specific combination
+    of alleles is predictive of the target class `effect_size` percent of the time.
+
+
+    Why not just generate much more samples than needed, select the variants
+    from the related features as needed until reaching the desired number, and
+    then discard un-needed samples to get a final exact n? This seems far more
+    straightforward.
+
+    It also makes sense to have a "hidden" discriminative feature that is
+    necessary to make a variant predictive. This can be generated exactly,
+    i.e. we have our n predictive variants (v is dimensionality of the
+    predictive variants):
+
+                            V1 = (i_11, i_12, ..., i_1v)    h_1
+                            V2 = (i_21, i_22, ..., i_2v)    h_2
+                                         ...                ...
+                            Vn = (i_n1, i_n2, ..., i_nv)    h_n
+
+    Randomly sample m = freq_target_min * N of these to get e.g. m samples
+
+               V_i1, V_i2, ..., V_im,  ik in {1, 2, ..., n} for all k
+
+    Now, randomly sample from
+
+            p_r = (1 - freq_target_min - p_nan)
+            p_remains = sorted(softmax(rng._exponential(2, N))) * p_r
+            ps = [freq_target_min, p_nan, *p_remains]
+            h = rng.choice(n_allele + 1, size=N, p=ps, replace=True)
+
+    On expectation,
+
+    They key is: we need to generate *rows* for the variants, and only
+    h, the discriminator, is generated as a column. We can stil generate
+    the rows by our methods above, and than sampling otherwise. Basically, we
+    have blocks
+
+
+                           <-  V' -> h   y
+
+                     |     |       | 0 | 1 |
+                     |     |   V   | 0 | 1 |
+                     |     |       | 1 | 0 |
+                     |     |_______| 0 | 1 |
+                     |     |       | 0 | 0 |
+                     |  D  |   V^  | 0 | 0 |
+                     |     |       | 1 | 0 |
+                     |     |       | 1 | 0 |
+                     |     |       | 0 | 0 |
+                     |     |       | 1 | 0 |
+
+               variants in V and V^ are mutually exclusive
+
+
+    - D, the distractors, can be generated column-wise, as above and already
+      implemented
+
+    - V and V^ can also be generated in the same manner as X, but then we
+      want to look at all the resulting unique rows, and randomly sample m
+      of them for V, and N - m of them for V^. Or do we want this, actually?
+
+      I.e. perhaps we want to allow predictive variants to appear in V^ as
+      well? No, then this breaks the control over the proportion. But how can
+      we ensure V' remains SNP-like? Maybe a greedy approach.
+
+    - h is sampled as rng.binomial(n=1, p=target_freq_min, [N])
+
+    - y = 1 only if: (v in V) AND (h == 1)
+
+    - h can optionally be included in X (replace one column of X with h) to
+      act as a distractor
+
+    - h could also optionally be multidimensional with dimensionality H, if
+      each h is sampled instead independently as
+
+                      p =  target_freq_min**(1/H)
+                      rng.binomial(n=1, p=p, [N])
+
+      in fact, if we want to include h in X, we should do:
+
+          p_r = (1 - freq_target_min - p_nan)
+          p_remains = sorted(softmax(rng._exponential(2, N))) * p_r
+          ps = [freq_target_min**(1/H), p_nan, *p_remains]
+          hs = rng.choice(n_allele + 1, size=[N, H], p=ps, replace=True)
+
+
+                              V'  <----- h ------>  y
+                                  h1 h2 h3  ... hH
+                     |     |     | 0  0  0  ...  0| 1 |
+                     |     |     | 0  0  0  ...  0| 1 |
+                     |     |  V  | 0  0  0  ...  0| 1 |
+                     |     |     | 0  1  0  ...  0| 0 |
+                     |     |     | 1  0  0  ...  0| 0 |
+                     |     |_____| 0  0  1  ...  0| 0 |
+                     |     |     | 0  0  0  ...  1| 0 |
+                     |  D  |  V^ | 0  1  0  ...  0| 0 |
+                     |     |     | 0  0  0  ...  0| 0 |
+                     |     |     | 0  0  1  ...  1| 0 |
+                     |     |     | 0  0  0  ...  0| 0 |
+                     |     |     | 0  0  0  ...  1| 0 |
+
+                     P(h = (0, 0, ..., 0)) = target_freq_min
+
+
+
+
+    Also, suppose V is our predictive set of variants, and they predict the
+    target y = 1 with probability p. I.e.
+
+    P( y = 1 | V ) = p
+
+    By law of total probability, we have, if A is y=1
+
+    P(A) = P(A|V) * P(V) + P( A | V^ ) * P(V^)
+         =    p   * P(V) + P( A | V^ ) * P(V^)
+
+
+
+
+
+
+    """
+    m = modal_allele_frequency
+    if n_allele <= 1:
+        raise ValueError("Got n_allele <=1. Can't have constant SNPs")
+    if m < 0.5:
+        raise ValueError("Must have modal_frequency >= 0.5")
+
+    if n_predictive_snps < 2:
+        raise ValueError(
+            "Must have more than one predictive SNP. Data generation can also "
+            "fail <10%% of the time when n_predictive_snps == 2, often when "
+            "also simultaneously n_predictive_variants >= 4"
+        )
+
+    rng = rng or np.random.default_rng()
+
+    def make_features(n: int, label: str) -> DataFrame:
+        names = []
+        snp_features = []
+        for i in range(n):
+            n_r = n_allele - 1  # number of non-dominant polymorphisms remaining
+            p_r = 1 - m - p_nan  # probability for other alleles
+            p_remains = sorted(softmax(rng.exponential(2, n_r)) * p_r)
+            ps = [m, *p_remains, p_nan]
+
+            f = rng.choice([*np.arange(n_allele), np.nan], size=N, p=ps, replace=True)
+            snp_features.append(f)
+            names.append(f"{label}{i:03d}")
+        X = np.stack(snp_features, axis=1)
+        X = DataFrame(X, columns=names)
+        return X
+
+    def make_V_prime() -> DataFrame:
+        names = [f"v{i:03d}" for i in range(n_predictive_snps)]
+        N_max = ceil(freq_target * N / p_target_if_predictive_variant)
+
+        def _make_V_prime() -> tuple[DataFrame, ndarray]:
+            # maybe the best way to handle this is just by rejection sampling
+            v = n_predictive_variants
+            variants = []
+            all_variants = product([*range(n_allele)], repeat=n_predictive_snps)
+            for variant in all_variants:
+                variants.append(np.array(variant))
+                if len(variants) >= v:
+                    break
+            del all_variants
+
+            p_vs = np.sort(softmax(rng.exponential(1.5, v)))
+            V_preds = rng.choice(variants, size=N_max, p=p_vs)
+
+            m = modal_allele_frequency
+            n_r = n_allele - 1  # number of non-dominant polymorphisms remaining
+            p_r = 1 - m - p_nan  # probability for other alleles
+            # p_remains = sorted(softmax(rng.exponential(2, n_r)) * p_r)
+            p_remains = sorted(softmax(rng.exponential(1.3, n_r)) * p_r)
+            if rev:
+                p_remains = reversed(p_remains)
+                ps = [*p_remains, m, p_nan]
+            else:
+                ps = [m, *p_remains, p_nan]
+            # make plenty to ensure we have enough after removing pred variants
+            V_large = rng.choice(
+                [*np.arange(n_allele), np.nan],
+                size=[N * 5, n_predictive_snps],
+                p=ps,
+                replace=True,
+            )
+
+            is_predictives = []
+            for variant in variants:
+                is_predictive = np.apply_along_axis(
+                    lambda x: np.equal(x, variant).all(), arr=V_large, axis=1
+                ).reshape(-1, 1)
+                is_predictives.append(is_predictive)
+            removes = np.any(np.concatenate(is_predictives, axis=1), axis=1)
+            V_clean = V_large[~removes]
+            V_clean = rng.choice(V_clean, size=N - V_preds.shape[0], replace=False)
+
+            V_prime = np.concatenate([V_preds, V_clean], axis=0)
+            V_prime = DataFrame(V_prime, columns=names)
+            return V_prime, p_vs
+
+        N_attempts = 50
+        for _ in range(N_attempts):
+            try:
+                V, ps = _make_V_prime()
+            except ValueError as e:
+                if "larger sample than population" in str(e):
+                    continue
+                else:
+                    raise e
+
+            ccs = V.iloc[:N_max].value_counts().reset_index()
+            n_var = ccs.shape[0]
+            if n_var == n_predictive_variants:
+                return V
+
+        raise ValueError("Couldn't generate predictive features to spec")
+
+    def make_h() -> tuple[DataFrame, Series]:
+        H = n_discrim_snps
+        names = [f"d{i:02d}" for i in range(H)]
+        N_target = freq_target * N
+        N_max = ceil(N_target / p_target_if_predictive_variant)
+
+        def _make_h() -> DataFrame:
+            H = n_discrim_snps
+            n_r = n_allele - 1
+
+            p_h = p_target_if_predictive_variant ** (1 / H)
+            p_r = 1 - p_h - p_nan
+            p_remains = sorted(softmax(rng.exponential(2, n_r)) * p_r)
+            ps = [p_h, *p_remains, p_nan]
+            hs = [
+                rng.choice(n_allele + 1, size=[N_max], p=ps, replace=True)
+                for _ in range(H)
+            ]
+            hs = np.stack(hs, axis=1)
+            h = DataFrame(hs, columns=names)
+            return h
+
+        N_attempts = 10
+        for _ in range(N_attempts):
+            h = _make_h()
+            ands = h["d00"] == 0
+            for i in range(1, h.shape[1]):
+                ands &= h[f"d{i:02d}"] == 0
+            n_target = ands.sum()
+            if abs(N_target - n_target) / N <= 0.01:
+                remain = np.zeros([N - len(h), h.shape[1]], dtype=np.int64)
+                remain = DataFrame(remain, columns=h.columns)
+                h = pd.concat([h, remain], axis=0, ignore_index=True)
+                return h, ands
+
+        raise ValueError("Couldn't generate discriminative features to spec")
+
+    # Make distractors
+    D = make_features(n=n_distractor_snps, label="x")
+    V = make_V_prime()
+    h, ands = make_h()
+    y = ands.astype(np.int64)
+    y = Series(np.concatenate([y, np.zeros(N - len(y), dtype=np.int64)]), name="target")
+    X = pd.concat([D, V, h], axis=1)
+    return X, y
+
+
 try:
     __UNSORTED: list[tuple[str, TestDataset]] = [(p.name, TestDataset(p)) for p in ALL]
 
