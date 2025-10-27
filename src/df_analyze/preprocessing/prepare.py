@@ -28,6 +28,7 @@ from df_analyze._constants import (
     SEED,
     UNIVARIATE_PRED_MAX_N_SAMPLES,
 )
+from df_analyze.analysis.univariate.describe import describe_all_features
 from df_analyze.enumerables import NanHandling, ValidationMethod
 from df_analyze.preprocessing.cleaning import (
     clean_regression_target,
@@ -540,6 +541,16 @@ class PreparedData:
             counts[col] += 1
         df.columns = new_cols
         return df
+
+    def describe_features(
+        self,
+    ) -> tuple[Optional[DataFrame], Optional[DataFrame], DataFrame]:
+        return describe_all_features(
+            continuous=self.X_cont,
+            categoricals=self.X_cat,
+            target=self.y,
+            is_classification=self.is_classification,
+        )
 
     def to_markdown(self) -> Optional[str]:
         if self.info is not None:

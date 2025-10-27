@@ -43,6 +43,7 @@
     - [`📂 prepared`](#-prepared)
     - [`📂 features`](#-features)
       - [`📂 associations`](#-associations)
+      - [`📂 descriptions`](#-descriptions)
       - [`📂 predictions`](#-predictions)
     - [`📂 selection`](#-selection)
       - [`📂 embed`](#-embed)
@@ -851,6 +852,7 @@ The output directory structure is as follows:
 └── 📂 fe57fcf2445a2909e688bff847585546/
     ├── 📂 features/
     │   ├── 📂 associations/
+    │   ├── 📂 descriptions/
     │   └── 📂 predictions/
     ├── 📂 inspection/
     ├── 📂 prepared/
@@ -999,6 +1001,7 @@ as well.
 ```
 📂 features/
 ├── 📂 associations/
+├── 📂 descriptions/
 ├── 📂 predictions/
 ```
 
@@ -1025,6 +1028,54 @@ Data for univariate analyses of all features.
   - plaintext table of continuous feature-target associations
 - `continuous_features.parquet`
   - Parquet table of continuous feature-target associations
+
+#### `📂 descriptions`
+
+```
+📂 descriptions/
+├── categorical_features.csv
+├── continuous_features.csv
+└── target.csv
+```
+
+- `categorical_features.csv`
+  - table where each row describes a categorical feature
+  - columns are, for each feature:
+    ```
+    "n_levels":  # number of levels / categories / classes
+    "nans",      # NaN count
+    "nan_freq",  # NaN frequency
+    "med_freq",  # Median of level frequencies
+    "min_freq",  # Frequency of least-frequent class
+    "max_freq",  # Frequency of most-frequent class
+    "min_name",  # Name of least common class
+    "max_name",  # Name of most common class
+    "heterog",   # chi-square / heterogeneity
+    "heterog_p", # chi-square p-value
+    "n_entropy", # normalized entropy (closer to max of 1 = more uniform)
+    ```
+- `continuous_features.csv`
+  - table where each row describes a continuous feature
+  - columns are, for each feature:
+    ```
+    "min":       # minimum value
+    "mean":      # mean value
+    "max":       # maximum value
+    "sd":        # standard deviation
+    "p05":       # 5th percentile value
+    "median":    # median value
+    "p95":       # 95th percentile value
+    "iqr":       # interquartile range
+    "skew":      # skewness / asymmetry
+    "skew_p":    # p-value for test if skew is different from Gaussian
+    "kurt":      # kurtosis / tailedness
+    "kurt_p":    # p-value for test if kurtosis is different from Gaussian
+    "entropy":   # differential entropy (scipy.stats, default args)
+    "nan_freq":  # proportion of NaN values
+    ```
+- `target.csv`
+  - same format as either of above, depending on if the task is classification
+    or regression
 
 #### `📂 predictions`
 

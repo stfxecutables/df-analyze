@@ -17,6 +17,7 @@ from typing import (
 from warnings import warn
 
 import pandas as pd
+from pandas import DataFrame
 
 if TYPE_CHECKING:
     from df_analyze.analysis.univariate.associate import AssocResults
@@ -52,6 +53,7 @@ class ProgramDirs(Debug):
     inspection: Optional[Path] = None
     prepared: Optional[Path] = None
     features: Optional[Path] = None
+    descriptions: Optional[Path] = None
     associations: Optional[Path] = None
     predictions: Optional[Path] = None
     selection: Optional[Path] = None
@@ -79,6 +81,7 @@ class ProgramDirs(Debug):
             inspection=root / "inspection",
             prepared=root / "prepared",
             features=root / "features",
+            descriptions=root / "features/descriptions",
             associations=root / "features/associations",
             predictions=root / "features/predictions",
             selection=root / "selection",
@@ -424,6 +427,45 @@ class ProgramDirs(Debug):
             warn(
                 "Got exception when attempting to save association csv tables. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+    def save_feature_descriptions(
+        self,
+        desc_cont: Optional[DataFrame],
+        desc_cat: Optional[DataFrame],
+        desc_target: DataFrame,
+    ) -> None:
+        if self.descriptions is None:
+            return
+
+        conts = self.descriptions / "continuous_features.csv"
+        cats = self.descriptions / "categorical_features.csv"
+        target = self.descriptions / "target.csv"
+
+        if desc_cont is not None:
+            try:
+                desc_cont.to_csv(conts)
+            except Exception as e:
+                warn(
+                    "Got exception when attempting to save continuous feature "
+                    f"descriptions. Details:\n{e}\n{traceback.format_exc()}"
+                )
+
+        if desc_cat is not None:
+            try:
+                desc_cat.to_csv(cats)
+            except Exception as e:
+                warn(
+                    "Got exception when attempting to save categorical feature "
+                    f"descriptions. Details:\n{e}\n{traceback.format_exc()}"
+                )
+
+        try:
+            desc_target.to_csv(target)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save target "
+                f"descriptions. Details:\n{e}\n{traceback.format_exc()}"
             )
 
     def save_prepared_raw(self, prepared: PreparedData) -> None:

@@ -166,7 +166,9 @@ def main() -> None:
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
 
-    # HERE we deviate and must loop
+    # describe prepared features
+    desc_cont, desc_cat, desc_target = prepared.describe_features()
+    prog_dirs.save_feature_descriptions(desc_cont, desc_cat, desc_target)
 
     prep_splits = prepared.get_splits(test_size=test_size)
     for fold_idx, (prep_train, prep_test) in enumerate(prep_splits):

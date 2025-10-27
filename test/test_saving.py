@@ -270,3 +270,25 @@ def test_eval_preds_save(dataset: Tuple[str, TestDataset]) -> None:
         ) from e
     finally:
         tempdir.cleanup()
+
+
+@fast_ds
+def test_descs_save(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
+        return  # defective target
+    tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
+
+    try:
+        options = ProgramOptions.random(ds, outdir=outdir)
+        preds = ds.prepared(load_cached=True)
+        df_cont, df_cat, df_targ = preds.describe_features()
+        options.program_dirs.save_feature_descriptions(df_cont, df_cat, df_targ)
+
+    except Exception as e:
+        raise ValueError(
+            f"Got error saving prediction results for data {dsname}:\n{e}"
+        ) from e
+    finally:
+        tempdir.cleanup()
