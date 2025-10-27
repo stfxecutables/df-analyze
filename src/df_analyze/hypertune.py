@@ -401,6 +401,8 @@ class EvaluationResults:
         )
         sorter = "acc" if self.is_classification else "mae"
         ascending = not self.is_classification
+        if "embed_selector" in df.columns:
+            df.drop(columns="embed_selector")
         return df.sort_values(by=sorter, ascending=ascending)
 
     def to_markdown(self) -> str:
