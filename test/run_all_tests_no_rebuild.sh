@@ -54,6 +54,9 @@ echo "==========================================================================
 "$PYTEST" \
     test/test_tuning_score.py -x || { echo "IO with tuning scores failed."; exit 1; }
 
+"$PYTEST" \
+    test/test_confusion_mat_scoring.py -x || { echo "Confusion matrix scoring failed."; exit 1; }
+
 echo "================================================================================="
 echo "Testing result saving (slow)"
 echo "================================================================================="
