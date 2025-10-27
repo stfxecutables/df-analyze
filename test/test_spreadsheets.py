@@ -25,6 +25,7 @@ from df_analyze.enumerables import (
     DfAnalyzeRegressor,
     EmbedSelectionModel,
     FeatureSelection,
+    ValidationMethod,
     WrapperSelection,
     WrapperSelectionModel,
 )
@@ -89,6 +90,9 @@ def do_main(minimal: bool) -> None:
         grouper=grouper,
         results=inspection,
         is_classification=is_cls,
+        ix_tests=None,
+        ix_train=None,
+        tests_method=ValidationMethod.List,
     )
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
