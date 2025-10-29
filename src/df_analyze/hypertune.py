@@ -121,7 +121,7 @@ class HtuneResult:
             other.probs_train, ndarray
         ):
             probs_train_equal = np.all(
-                (self.probs_train.round(8) == other.probs_train.round(8)).to_numpy()
+                (self.probs_train.round(8) == other.probs_train.round(8))
             ).item()
         else:
             probs_train_equal = False

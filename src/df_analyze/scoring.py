@@ -28,7 +28,7 @@ def consistent_confusion_matrix(
     """This ensures that in the binary case, we are getting entries of the confusion
     matrix that correspond to "1" as the label for the class we are trying to predict
     """
-    labs = np.unique(np.concat([y_true, y_pred], axis=0))
+    labs = np.unique(np.concatenate([y_true, y_pred], axis=0))
     if len(labs) == 2:
         labs = [1]
     return multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred, labels=labs)
