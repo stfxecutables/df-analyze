@@ -345,6 +345,56 @@ def fake_data(
     return df_tr, df_test, target_tr, target_test
 
 
+def random_grouped_data(
+    n_grp: int,
+    n_cls: int,
+    n_samp: int = 200,
+    n_min_per_g: int = 2,
+    n_min_per_targ_cls: int = 20,
+    degenerate: bool = True,
+) -> tuple[Series, Series]:
+    g = []
+    for i in range(n_grp):
+        for _ in range(n_min_per_g):
+            g.append(i)
+
+    y = []
+    for i in range(n_cls):
+        for _ in range(n_min_per_targ_cls):
+            y.append(i)
+
+    n_grp_remain = n_samp - len(g)
+    n_cls_remain = n_samp - len(y)
+
+    rng = np.random.default_rng()
+    if degenerate:
+        p_cls = rng.standard_exponential(size=n_cls)
+        p_grp = rng.standard_exponential(size=n_grp)
+    else:
+        p_cls = rng.triangular(left=1, mode=3, right=3, size=n_cls)
+        p_grp = rng.triangular(left=1, mode=3, right=3, size=n_grp)
+
+    p_cls = p_cls / p_cls.sum()
+    p_grp = p_grp / p_grp.sum()
+
+    grp_labels = [*range(n_grp)]
+    cls_labels = [*range(n_cls)]
+    y = y + rng.choice(cls_labels, size=n_cls_remain, replace=True, p=p_cls).tolist()
+    g = g + rng.choice(grp_labels, size=n_grp_remain, replace=True, p=p_grp).tolist()
+
+    rng.shuffle(y)
+    rng.shuffle(g)
+
+    y_cnts = np.unique(y, return_counts=True)[1]
+    if len(y_cnts) != n_cls or y_cnts.min() < n_min_per_targ_cls:
+        raise RuntimeError("Impossible!")
+
+    g_cnts = np.unique(g, return_counts=True)[1]
+    if len(g_cnts) != n_grp or g_cnts.min() < n_min_per_g:
+        raise RuntimeError("Impossible!")
+    return Series(name="y", data=y), Series(name="g", data=g)
+
+
 def sparse_snplike_data(
     mode: Literal["classify", "regress"] = "classify",
     N: int = 1000,

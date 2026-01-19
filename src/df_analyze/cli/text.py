@@ -78,20 +78,20 @@ column holding the target variable (or feature) can be specified by the
 exists, or the last column if it does not."""
 
 DF_HELP_STR = f"""
-The dataframe to analyze.
+The dataframe to analyze. Cannot be used with `--df-train` or `--df-tests` arguments.
 {DF_FILETYPES}
 
 """
 
 DF_TRAIN_HELP_STR = f"""
-The training dataframe to analyze.
+The training dataframe to analyze. Cannot be used with `--df` argument.
 {DF_FILETYPES}
 
 """
 
 DF_TESTS_HELP_STR = f"""
 The dataframes to use for testing. How these are used depends on the
---test-sets-method option.
+--test-sets-method option. Cannot be used with `--df` argument.
 {DF_FILETYPES}
 
 """
@@ -123,6 +123,20 @@ options are:
 
               Note: In the case of N test files, this produces ONE feature
               selection report, and N final performance summary tables.
+
+"""
+
+SEED_HELP_STR = """
+Seed for random splits if using `--spreadsheet` or `--df` arguments. Options:
+
+  random      Do not use a fixed seed (np.random.default_rng() will be called
+              to create RNGs where needed).
+
+  default     Use the fixed, default constant seed. With this option, (or if
+              the `--seed` option is unspecified), the same splits are created
+              across df-analyze invocations.
+
+  [integer]   Integer seed for np.random.default_rng in splitting operations.
 
 """
 

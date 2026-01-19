@@ -12,6 +12,7 @@ sys.path.append(str(ROOT))  # isort: skip
 File for defining all options passed to `df-analyze.py`.
 """
 import os
+import secrets
 import sys
 import traceback
 from argparse import ArgumentParser, Namespace, RawTextHelpFormatter
@@ -41,6 +42,7 @@ from df_analyze._constants import (
     P_FILTER_CAT_DEFAULT,
     P_FILTER_CONT_DEFAULT,
     P_FILTER_TOTAL_DEFAULT,
+    SEED,
     SENTINEL,
     VERSION,
 )
@@ -55,6 +57,7 @@ from df_analyze.cli.parsing import (
     int_or_percent_parser,
     resolved_path,
     resolved_path_list,
+    seed_parser,
     separator,
 )
 from df_analyze.cli.text import (
@@ -93,6 +96,7 @@ from df_analyze.cli.text import (
     REDUNDANT_THRESHOLD,
     REG_HELP_STR,
     REG_TUNE_METRIC,
+    SEED_HELP_STR,
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
@@ -116,6 +120,7 @@ from df_analyze.enumerables import (
     Normalization,
     RegressorScorer,
     RegScore,
+    SeedKind,
     ValidationMethod,
     WrapperSelection,
     WrapperSelectionModel,
@@ -130,6 +135,10 @@ from df_analyze.saving import ProgramDirs, get_hash
 from df_analyze.utils import Debug
 
 Size = Union[float, int]
+
+
+class ArgumentError(Exception):
+    pass
 
 
 class Verbosity(Enum):
@@ -210,6 +219,7 @@ class ProgramOptions(Debug):
         outdir: Path,
         is_spreadsheet: bool,
         separator: str,
+        seed: Union[int, SeedKind],
         verbosity: Verbosity,
         no_warn_explosion: bool,
         no_preds: bool,
@@ -217,6 +227,14 @@ class ProgramOptions(Debug):
         # memoization-related
         # other
         self.version = VERSION
+        if isinstance(seed, int):
+            self.seed = seed
+        elif seed in [SeedKind.Default, None]:
+            self.seed = SEED
+        elif seed is SeedKind.Random:
+            self.seed = secrets.randbelow(2**16 - 1)
+        else:
+            raise ValueError(f"Invalid seed type: {type(seed)}: {seed}")
         self.cli_args = " ".join(sys.argv)
         self.datapath: Optional[Path] = self.validate_datapath(datapath)
         self.test_paths: list[Path] = [self.validate_test_path(p) for p in test_paths]
@@ -305,6 +323,9 @@ class ProgramOptions(Debug):
             n_samples, n_feats = ds.shape
             is_cls = ds.is_classification
         # feat_clean = FeatureCleaning.random_n()
+        seed = SeedKind.random_seed()
+        if isinstance(seed, str):
+            seed = SeedKind(seed)
         feat_select = FeatureSelection.random_n()
         wrap_select = WrapperSelection.random()
         wrap_model = WrapperSelectionModel.random()
@@ -384,6 +405,7 @@ class ProgramOptions(Debug):
             htune_reg_metric=htune_reg_metric,
             # test_val=test_val,
             test_val_size=test_val_size,
+            seed=seed,
             outdir=outdir,
             is_spreadsheet=is_spreadsheet,
             separator=separator,
@@ -1021,6 +1043,12 @@ def make_parser() -> ArgumentParser:
         help=EXPLODE_HELP,
     )
     parser.add_argument(
+        "--seed",
+        type=seed_parser(SeedKind),
+        default=SeedKind.default(),
+        help=SEED_HELP_STR,
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help=VERSION_HELP,
@@ -1069,6 +1097,7 @@ def get_parser_dict() -> ArgsDict:
         "--df-tests-method": (RandKind.ChooseN, ValidationMethod.choices()),
         "--spreadsheet": (RandKind.Path, None),
         "--separator": (RandKind.Custom, None),
+        "--seed": (RandKind.Custom, None),
         "--target": (RandKind.Target, None),
         # TODO do this properly for --grouper
         "--grouper": (RandKind.Custom, None),
@@ -1254,6 +1283,9 @@ def random_cli_args(
                 )
         elif (kind is RandKind.Custom) and (argstr == "--separator"):
             continue
+        elif (kind is RandKind.Custom) and (argstr == "--seed"):
+            seed = SeedKind.random_seed()
+            arg_options.append(f"{argstr} {seed}")
         elif (kind is RandKind.Custom) and (argstr == "--grouper"):
             continue  # TODO: actually implement something here
         elif (kind is RandKind.Custom) and (argstr == "--redundant-threshold"):
@@ -1375,6 +1407,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
 
     # https://stackoverflow.com/a/26990349,
     grouper = " ".join(cli_args.grouper) if cli_args.grouper is not None else None
+
+    if cli_args.df is not None and cli_args.df_train is not None:
+        raise ArgumentError("Arguments `--df` and `--df-train` are mutually exclusive.")
+
     if cli_args.df is None:
         if cli_args.df_train is not None:
             datapath = cli_args.df_train
@@ -1425,6 +1461,7 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         test_val_size=cli_args.test_val_size,
         # mc_repeats=cli_args.mc_repeats,
         outdir=cli_args.outdir,
+        seed=cli_args.seed,
         is_spreadsheet=cli_args.spreadsheet is not None,
         separator=cli_args.separator,
         verbosity=cli_args.verbosity,

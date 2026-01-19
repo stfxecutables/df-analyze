@@ -187,11 +187,15 @@ class OmniKFold:
         StratifiedGroupKFold.split(X, y=None, groups=None)
                   GroupKFold.split(X, y=None, groups=None)
         """
-        # NOTE: We always do shuffle=False, random_state=self.seed since
-        # shuffling is handled by us
+        # NOTE: We always do shuffle=False, random_state=None since
+        # shuffling is handled by us and seeded there
 
         kf_args = dict(n_splits=self.n_splits, shuffle=False, random_state=None)
-        grp_args = dict(n_splits=self.n_splits)
+        grp_args = dict(
+            n_splits=self.n_splits,
+            shuffle=False,  # VERY IMPORTANT: shuffle is bugged!
+            # https://github.com/scikit-learn/scikit-learn/issues/24656
+        )
         args = grp_args if kf is GroupKFold else kf_args
         return args
 

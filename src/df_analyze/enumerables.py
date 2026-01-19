@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, EnumMeta
@@ -33,6 +34,7 @@ from sklearn.metrics import (
     r2_score,
 )
 
+from df_analyze._constants import SEED
 from df_analyze.scoring import npv, ppv, robust_auroc_score, sensitivity, specificity
 
 if TYPE_CHECKING:
@@ -247,6 +249,7 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
     F1 = "f1"
     BalancedAccuracy = "bal-acc"
 
+    @staticmethod
     @abstractmethod
     def default() -> ClassifierScorer:
         return ClassifierScorer.Accuracy
@@ -329,6 +332,7 @@ class RegressorScorer(Scorer, RandEnum, Enum):
     R2 = "r2"
     VarExp = "var-exp"
 
+    @staticmethod
     @abstractmethod
     def default() -> RegressorScorer:
         return RegressorScorer.MAE
@@ -583,3 +587,19 @@ class CVSplit(Enum):
             return CVSplit(cv)
 
         return CVSplit(s)
+
+
+class SeedKind(RandEnum, Enum):
+    Default = "default"
+    Random = "random"
+
+    @classmethod
+    def random_seed(cls: Type[SeedKind]) -> Union[str, int]:
+        is_seeded = np.random.randint(0, 2, dtype=bool)
+        if is_seeded:
+            return secrets.randbelow(2**16 - 1)
+        return choice([*cls]).value
+
+    @staticmethod
+    def default() -> int:
+        return SEED

@@ -124,6 +124,7 @@ def main() -> None:
     grouper = options.grouper
     test_size = options.test_val_size
     method = options.tests_method
+    seed = options.seed
     # joblib_cache = options.program_dirs.joblib_cache
     # if joblib_cache is not None:
     #     memory = Memory(location=joblib_cache)
@@ -170,7 +171,7 @@ def main() -> None:
     desc_cont, desc_cat, desc_target = prepared.describe_features()
     prog_dirs.save_feature_descriptions(desc_cont, desc_cat, desc_target)
 
-    prep_splits = prepared.get_splits(test_size=test_size)
+    prep_splits = prepared.get_splits(test_size=test_size, seed=seed)
     for fold_idx, (prep_train, prep_test) in enumerate(prep_splits):
         # prep_train, prep_test = prepared.split()
         if merged_df is None:

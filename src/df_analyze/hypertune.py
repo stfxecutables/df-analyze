@@ -644,6 +644,7 @@ def evaluate_tuned(
                     X_test=X_test,
                     y_test=prep_test.y,
                     g_test=prep_test.groups,
+                    seed=options.seed,
                 )
                 is_embed = "embed" in selection
                 embed_model = embed_models[selection] if is_embed else None

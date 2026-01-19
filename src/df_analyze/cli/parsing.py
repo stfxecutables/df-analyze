@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import re
 from argparse import Action
 from enum import Enum
 from math import isnan
 from pathlib import Path
-from typing import Callable, List, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Type, TypeVar, Union
 from warnings import warn
 
 E = TypeVar("E")
+
+if TYPE_CHECKING:
+    from src.df_analyze.enumerables import SeedKind
 
 
 def resolved_path(p: Union[str, Path]) -> Path:
@@ -128,6 +133,20 @@ def enum_or_none_parser(enum: E) -> Callable[[str], Optional[E]]:
         if "none" in arg.lower():
             return None
         return enum(arg)  # type: ignore
+
+    return inner
+
+
+def seed_parser(enum: Type[SeedKind]) -> Callable[[str], Union[int, SeedKind]]:
+    def inner(arg: str) -> Union[int, SeedKind]:
+        clean = str(arg).lower().strip()
+        if clean in enum.choices():
+            return enum(clean)
+        try:
+            seed = int(clean)
+            return seed
+        except Exception as e:
+            raise ValueError(f"Could not parse `--seed` argument: {arg}") from e
 
     return inner
 

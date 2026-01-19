@@ -30,6 +30,7 @@ echo "==========================================================================
     test/test_inspection.py \
     test/test_prepare.py \
     test/test_splitting.py \
+    test/test_seeding.py \
     test/test_associate.py \
     test/test_name_sanitize.py \
     test/test_cleaning.py || { echo "Basic functionality failed."; exit 1; }

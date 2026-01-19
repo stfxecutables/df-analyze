@@ -279,6 +279,7 @@ class DfAnalyzeModel(ABC):
         X_test: DataFrame,
         y_test: Series,
         g_test: Optional[Series],
+        seed: int,
     ) -> tuple[DataFrame, Series, Series, Optional[ndarray], Optional[ndarray]]:
         from df_analyze.hypertune import (
             ClassifierScorer,
@@ -322,6 +323,7 @@ class DfAnalyzeModel(ABC):
             labels=None,
             warn_on_fallback=True,
             df_analyze_phase="Final k-fold on holdout set",
+            seed=seed,
         )
 
         scores = []
