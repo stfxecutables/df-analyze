@@ -44,18 +44,20 @@ echo "==========================================================================
     -x || { echo "CLI testing failed."; exit 1; }
 
 echo "================================================================================="
-echo "Testing test dataset IO and basics"
+echo "Testing test dataset IO"
 echo "================================================================================="
 "$PYTEST" -n auto \
     test/test_loading.py \
-    test/test_datasets.py \
-    test/test_models.py -x || { echo "Basic IO failed."; exit 1; }
+    test/test_datasets.py -x || { echo "Basic Dataset IO failed."; exit 1; }
 
-
-"$PYTEST" \
+echo "================================================================================="
+echo "Sanity testing basic models and scoring"
+echo "================================================================================="
+"$PYTEST" -n 4 \
+    test/test_models.py || { echo "Model sanity test(s) failed."; exit 1; }
+"$PYTEST" -n auto \
     test/test_tuning_score.py -x || { echo "IO with tuning scores failed."; exit 1; }
-
-"$PYTEST" \
+"$PYTEST" -n auto \
     test/test_confusion_mat_scoring.py -x || { echo "Confusion matrix scoring failed."; exit 1; }
 
 echo "================================================================================="
