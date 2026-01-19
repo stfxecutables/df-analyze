@@ -1,6 +1,6 @@
 [project]
 name = "df-analyze"
-version = "3.4.3"
+version = "3.5.0"
 description = "Add your description here"
 authors = [{ name = "Derek Berger", email = "" }]
 dependencies = [
