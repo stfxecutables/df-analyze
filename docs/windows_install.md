@@ -3,11 +3,80 @@
 For those who can't use the [shell
 script](https://github.com/stfxecutables/df-analyze?tab=readme-ov-file#local-install-by-shell-script)
 to install the necessary `df-analyze` dependencies for a local install, this
-will be the attempted installation procedure.
+should be the attempted installation procedure.
 
-You must use PowerShell for all commands, not cmd.exe.
+**You must use PowerShell for all commands** (not cmd.exe). For Windows 10 or
+11, it is recommended users install the new [Windows
+Terminal](https://apps.microsoft.com/detail/9n0dx20hk701), and to use this
+instead. Once installed, it will appear in the start menu as "Windows
+Powershell", and this will be what you want to use with df-analyze and for
+all command-line installation instructions below.
 
-# `pyenv-win` Setup
+## \*\***NEW**\*\* Installation via `uv`
+
+1. If you haven't already, install [Windows Terminal](https://apps.microsoft.com/detail/9n0dx20hk701)
+2. Install [git](https://git-scm.com/install/windows)
+   - For those new to the command line, I recommend the following settings during the various dialogues during installation:
+      - Make sure "Associate .sh files to be run with Bash" is checked
+      - Choose "Visual Studio Code" or "Notepad++" as the default Git editor, NOT Vim
+      - In "Adjusting your PATH environment", choose the second or third option
+      - Use bundled OpenSSH
+      - Use native Windows Secure Channel library
+      - In "Configuring line ending conversions" dialogue, choose first or second option ("Checkout Windows, commit Unix" or "Checkout as-is, commit Unix", respectively), NOT the third option ("Checkout as-is, commit as-is")
+      - Use MinTTY as the terminal emulator
+      - Choose "Only ever fast-forward" for the default behaviour of `git pull`
+      - Use Git Credential Manager
+      - Leave "Configuring extra options" at defaults (just "Enable file system caching" checked)
+2. Install `uv` (https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2)
+   - i.e. run `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`, and then restart your Windows Terminal
+   - be sure to read and understand the notes on execution policies in the link above
+3. Make sure `uv` is up-to-date and you have a Python version installed compatible with df-analyze:
+   ```shell
+   uv self update
+   uv python install 3.13.11
+   ```
+4. Choose a location where you want to install df-analyze, and navigate there in the terminal:
+
+   ```shell
+   cd ~\Documents
+   git clone https://github.com/stfxecutables/df-analyze.git
+   cd df-analyze
+   uv sync
+   uv pip install pytorch_tabular
+   ```
+5. Test the install is working by viewing the CLI help for df-analyze by running:
+
+   ```shell
+   uv run df-analyze.py --help
+   ```
+
+If you get an error at this point involving lines like:
+
+```
+ × Failed to build `numpy==1.26.4`
+```
+
+or
+```
+The Meson build system
+
+[...]
+
+Project name: NumPy
+Project version: 1.2X.X
+
+[...]
+
+hint: This usually indicates a problem with the package or the build environment.
+```
+
+just after running the `uv sync` or `uv pip install pytorch_tabular` commands, you'll need
+to use the [Legacy install procedure below](#legacy--fallback-installation-via-pyenv-win).
+
+
+# Legacy / Fallback Installation via `pyenv-win`
+
+## `pyenv-win` Setup
 
 1. Install [`pyenv-win`](https://github.com/pyenv-win/pyenv-win?tab=readme-ov-file#quick-start)
    by doing the following steps, in order:
@@ -40,7 +109,7 @@ you can manually activate the correct python version at any location by running
 pyenv shell 3.12.5
 ```
 
-# Virtual Environment Creation
+## Virtual Environment Creation
 
 Make sure to `cd` to the `df-analye` directory, and that `python --version` returns `Python 3.12.5`.
 Then, run the following command:
@@ -61,7 +130,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 It might be a good idea to restart PowerShell after running this command.
 
-## Activating the Virtual Environment
+### Activating the Virtual Environment
 
 The environment can then be activated by running one of:
 
@@ -96,7 +165,7 @@ or
 You should see something like `df-analyze/.venv/bin/python.exe` somewhere in the output.
 If you do, virtual environment creation was a success.
 
-# Installing Libraries to the Virtual Environment
+### Installing Libraries to the Virtual Environment
 
 After you have confirmed that you have installed and activated the virtual
 environment, first run the following command to update `pip`:
@@ -120,7 +189,7 @@ python df-analyze.py --help
 
 This should produce the documentation for the `df-analyze` tabular prediction interface.
 
-# After Installation
+## After Installation
 
 Anytime you open PowerShell and navigate to the `df-analyze` directory, you will have
 to [activate the virtual environment](#activating-the-virtual-environment) prior to
