@@ -6,7 +6,8 @@
 - [Overview](#overview)
   - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
-  - [Local Install by Shell Script](#local-install-by-shell-script)
+  - [Installation via `uv`](#installation-via-uv)
+  - [\[\*\***LEGACY**\*\*\] Local Install by Shell Script](#legacy-local-install-by-shell-script)
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
   - [Windows Support](#windows-support)
 - [Usage](#usage)
@@ -127,15 +128,65 @@ clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
 Currently, `df-analyze` is distributed as Python scripts dependent on the
 contents of this repository. So, to run `df-analyze`, you will generally have
-to clone this repository, and either install a compatible virtual
-environment or build a container to make use of `df-anaylze`.
-I.e. you must choose between a (hopefully platform-agnostic) [local
-install](#local-install-by-shell-script) versus a [container
-build](#building-the-singularity-container) for a Linux-based system,
+to clone this repository and install a compatible virtual environment. This
+can now be done easily and quickly by [`uv`](https://docs.astral.sh/uv/)
+([instructions](#installation-via-uv)), but if for some reason you cannot use
+`uv`, there is the legacy fallback [`local_install.sh` shell install
+script](#local-install-by-shell-script).
+
+**Note**: If you are an advanced user working on an HPC cluster (e.g. Compute
+Canada / DRAC), you may need to [build a container to make use of
+`df-analyze` reliably](#building-the-singularity-container).
+
+
+## Installation via `uv`
+
+1. Install `uv` as per the [installation
+   instructions](#https://docs.astral.sh/uv/getting-started/installation/#standalone-installer)
+   - i.e. if you are on MacOS or Linux: `curl -LsSf
+   https://astral.sh/uv/install.sh | sh` - or if you are on Windows:
+   `powershell -ExecutionPolicy ByPass -c "irm
+   https://astral.sh/uv/install.ps1 | iex"`
+2. Make sure you have [installed Git](https://git-scm.com/install/). If you
+   are on MacOS or Linux, this should be there by default and this step is
+   not required.
+   - Windows users looking for guidance during installation of Git should see
+     the [Windows install instructions in this
+     repo](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md)
+3. Navigate to a suitable directory, e.g. `~/Documents` and clone the
+   repository:
+   ```shell
+   cd ~/Documents
+   git clone https://github.com/stfxecutables/df-analyze.git
+   ```
+4. Run `uv sync && uv pip install 'pytorch_tabular'`
+
+Now df-analyze is installed, and you can run e.g.
+
+```shell
+uv run python df-analyze.py --version
+```
+
+to see the version number, or e.g.
+
+```shell
+uv run python df-analyze.py --help
+```
+
+to see the complete command-line documentation.
+
+If you are on Windows and get errors with the above procedure, try the
+[Windows install
+instructions](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md).
+Otherwise, if you see any issues during installation, feel free to reach out
+in the
+[Discussions](https://github.com/stfxecutables/df-analyze/discussions), file
+an [Issue](https://github.com/stfxecutables/df-analyze/issues), or try the
+[legacy installation procedure](#local-install-by-shell-script).
 
 
 
-## Local Install by Shell Script
+## [\*\***LEGACY**\*\*] Local Install by Shell Script
 
 After having cloned the repo, the
 [`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
@@ -209,21 +260,29 @@ very well, so the [local install scripts](#local-install-by-shell-script)
 *should* just work there, as I have tried to avoid most platform-specific
 code.
 
-If for some reason you can't use the WSL, then there are experimental maual
+If for some reason you can't use the WSL, then there are experimental manual
 Windows installation instructions
 [here](https://github.com/stfxecutables/df-analyze/blob/master/docs/windows_install.md).
-But don't be surprised if things break when setting things up this way.
 
 # Usage
 
 For full documentation of `df-analyze` run:
 
 ```shell
+uv run python df-analyze.py --help
+```
+
+or
+
+```shell
 python df-analyze.py --help
 ```
 
-which will provide a complete description of all options. Alternately, you
-can see what the `--help` option outputs
+if you are using the legacy `pyenv` install with an activated virtual
+environment. **Note**: all future command line examples will omit the `uv run`
+command, with the assumption that this is implicit.
+
+Alternately, you can see what the `--help` option outputs
 [here](https://github.com/stfxecutables/df-analyze/blob/develop/docs/arguments.md),
 but keep mind the actual outputs of the `--help` command are less likely to
 be out of date.
