@@ -6,7 +6,8 @@
 - [Overview](#overview)
   - [For Students or Novices to Machine and Deep Learning](#for-students-or-novices-to-machine-and-deep-learning)
 - [Installation](#installation)
-  - [Local Install by Shell Script](#local-install-by-shell-script)
+  - [Installation via `uv`](#installation-via-uv)
+  - [\[\*\***LEGACY**\*\*\] Local Install by Shell Script](#legacy-local-install-by-shell-script)
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
   - [Windows Support](#windows-support)
 - [Usage](#usage)
@@ -31,6 +32,7 @@
     - [Data Splitting](#data-splitting)
     - [Univariate Feature Analyses](#univariate-feature-analyses)
     - [Feature Selection](#feature-selection)
+      - [Redundancy-Aware Feature Selection \*\*\[NEW\]\*\*](#redundancy-aware-feature-selection-new)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
     - [Final Validation](#final-validation)
 - [Program Outputs](#program-outputs)
@@ -42,6 +44,7 @@
     - [`📂 prepared`](#-prepared)
     - [`📂 features`](#-features)
       - [`📂 associations`](#-associations)
+      - [`📂 descriptions`](#-descriptions)
       - [`📂 predictions`](#-predictions)
     - [`📂 selection`](#-selection)
       - [`📂 embed`](#-embed)
@@ -125,15 +128,65 @@ clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
 Currently, `df-analyze` is distributed as Python scripts dependent on the
 contents of this repository. So, to run `df-analyze`, you will generally have
-to clone this repository, and either install a compatible virtual
-environment or build a container to make use of `df-anaylze`.
-I.e. you must choose between a (hopefully platform-agnostic) [local
-install](#local-install-by-shell-script) versus a [container
-build](#building-the-singularity-container) for a Linux-based system,
+to clone this repository and install a compatible virtual environment. This
+can now be done easily and quickly by [`uv`](https://docs.astral.sh/uv/)
+([instructions](#installation-via-uv)), but if for some reason you cannot use
+`uv`, there is the legacy fallback [`local_install.sh` shell install
+script](#local-install-by-shell-script).
+
+**Note**: If you are an advanced user working on an HPC cluster (e.g. Compute
+Canada / DRAC), you may need to [build a container to make use of
+`df-analyze` reliably](#building-the-singularity-container).
+
+
+## Installation via `uv`
+
+1. Install `uv` as per the [installation
+   instructions](#https://docs.astral.sh/uv/getting-started/installation/#standalone-installer)
+   - i.e. if you are on MacOS or Linux: `curl -LsSf
+   https://astral.sh/uv/install.sh | sh` - or if you are on Windows:
+   `powershell -ExecutionPolicy ByPass -c "irm
+   https://astral.sh/uv/install.ps1 | iex"`
+2. Make sure you have [installed Git](https://git-scm.com/install/). If you
+   are on MacOS or Linux, this should be there by default and this step is
+   not required.
+   - Windows users looking for guidance during installation of Git should see
+     the [Windows install instructions in this
+     repo](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md)
+3. Navigate to a suitable directory, e.g. `~/Documents` and clone the
+   repository:
+   ```shell
+   cd ~/Documents
+   git clone https://github.com/stfxecutables/df-analyze.git
+   ```
+4. Run `uv sync && uv pip install 'pytorch_tabular'`
+
+Now df-analyze is installed, and you can run e.g.
+
+```shell
+uv run python df-analyze.py --version
+```
+
+to see the version number, or e.g.
+
+```shell
+uv run python df-analyze.py --help
+```
+
+to see the complete command-line documentation.
+
+If you are on Windows and get errors with the above procedure, try the
+[Windows install
+instructions](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md).
+Otherwise, if you see any issues during installation, feel free to reach out
+in the
+[Discussions](https://github.com/stfxecutables/df-analyze/discussions), file
+an [Issue](https://github.com/stfxecutables/df-analyze/issues), or try the
+[legacy installation procedure](#local-install-by-shell-script).
 
 
 
-## Local Install by Shell Script
+## [\*\***LEGACY**\*\*] Local Install by Shell Script
 
 After having cloned the repo, the
 [`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
@@ -207,21 +260,29 @@ very well, so the [local install scripts](#local-install-by-shell-script)
 *should* just work there, as I have tried to avoid most platform-specific
 code.
 
-If for some reason you can't use the WSL, then there are experimental maual
+If for some reason you can't use the WSL, then there are experimental manual
 Windows installation instructions
 [here](https://github.com/stfxecutables/df-analyze/blob/master/docs/windows_install.md).
-But don't be surprised if things break when setting things up this way.
 
 # Usage
 
 For full documentation of `df-analyze` run:
 
 ```shell
+uv run python df-analyze.py --help
+```
+
+or
+
+```shell
 python df-analyze.py --help
 ```
 
-which will provide a complete description of all options. Alternately, you
-can see what the `--help` option outputs
+if you are using the legacy `pyenv` install with an activated virtual
+environment. **Note**: all future command line examples will omit the `uv run`
+command, with the assumption that this is implicit.
+
+Alternately, you can see what the `--help` option outputs
 [here](https://github.com/stfxecutables/df-analyze/blob/develop/docs/arguments.md),
 but keep mind the actual outputs of the `--help` command are less likely to
 be out of date.
@@ -772,6 +833,64 @@ leakage.
 - Wrapper (stepwise) selection
 - Filter selection
 
+#### Redundancy-Aware Feature Selection \*\*[NEW]\*\*
+
+<!-- $\boldsymbol{X}$
+\boldsymbol{X}
+$\symbfit{X}$
+\symbfit{X} -->
+
+
+Given training data
+$\mathcal{D}\_\text{train} = (\mathbf{X}\_{\text{train}}, y\_{\text{train}})$
+and a univariate estimator $f$ ("*selector*") with
+suitable fixed default hyperparameters, redundancy-aware feature selection
+performs forward stepwise selection, removing from consideration all features
+with similar performances at each step. This similarity is controlled by a
+*equivalence threshold* $\tau$ (default 0.005, i.e. an invisible difference
+after rounding to two decimal places).
+
+At each step of stepwise selection, the best candidate feature
+$\symbfit{x}^{\star}$ produces some loss $\mathcal{L}^{\star}$. This defines a
+*redundant set* of features,
+$R = \\{ \symbfit{x} \text{ s.t. } | \mathcal{L}\big( f(\symbfit{x}), y \big) - \mathcal{L}^{\star} | < \tau \\}$.
+That is, all features $\symbfit{x}$ in the redundant set are such that adding
+$\symbfit{x}$ instead of $\symbfit{x}^{\star}$ to the previous iteration
+feature pool produces performance that is considered equivalent at threshold
+$\tau$. At the next iteration of redundant stepwise selection, rather than
+just eliminating $\symbfit{x}^{\star}$ from consideration, instead all
+features in $\symbfit{R}$ are also greedily eliminated.
+
+
+**Algorithm**
+
+> #### **Initialization $(i = 0)$**
+>
+> - define $\symbfit{F}_i = \\{\symbfit{x}_1, \dots, \symbfit{x}_p\\}$ to be the *candidate feature pool* at iteration $i$
+> - define $\symbfit{X}_i^{\star} = \emptyset$, to be the *selected* features at iteration $i$
+> - define $\symbfit{X}_i^R = \emptyset$ to be the *redundant* features at iteration $i$
+> - For the *selector*, choose supervised estimator (classifier, regressor) $f$
+>   and suitable default constant hyperparameters for $f$, such that $f$ is fit
+>   to predict $y$ from any feature subset $\symbfit{X}$, i.e. we aim to fit $f$
+>   such that a loss $\mathcal{L}\big( f(\symbfit{X}), y \big)$ is minimized.
+>
+> #### **Iteration $(i > 0)$**
+>
+> 1. For each feature $\symbfit{x} \in \symbfit{F}\_i$, define
+>    $\symbfit{X}_{i} = \symbfit{X}_i^{\star} \cup \\{ \symbfit{x} \\}$ to
+>    be the *candidate feature set*.
+> 2. Define $\mathcal{L}\_{i} = \\{ \mathcal{L} \big( f( \symbfit{X}_i ), y \big) | \symbfit{x} \in \symbfit{F}_i \\}$ to be the set of candidate losses / performances
+>    of each feature set
+> 3. Define $\mathcal{L}\_i^{\star} = \min \mathcal{L}_i$. The feature $\symbfit{x}^{\star}$
+>    producing $\mathcal{L}_i^{\star}$ is the best new candidate feature.
+> 4. Set $\symbfit{R} = \big\\{ \symbfit{x} : | \mathcal{L}_k - \mathcal{L}_i^{\star} | \le \tau \text{ and } \symbfit{x} \in \symbfit{F}_i \big\\}$ to be the set of features redundant to $\symbfit{x}^{\star}$
+> 5. Set $\symbfit{F}_{i+1} = \symbfit{F}_i - \symbfit{R}$ (remove redundant features from candidate pool)
+> 6. Set $\symbfit{X}\_{i+1}^{\star} = \symbfit{X}_{i}^{\star} \cup \\{ \symbfit{x}^{\star} \\}$ (add selected feature to "selected" pool)
+> 7. Set $\symbfit{X}\_{i+1}^R = \symbfit{X}_i^R \cup \symbfit{R}$ (update redundant pool)
+> 8. Continue iterating $i$ until $\symbfit{F}_i = \emptyset$ or maximum $i$ is reached. The final selected features are defined by $\symbfit{X}_i^{\star}$.
+
+
+
 ### Hyperparameter Tuning
 
 - Bayesian (Optuna) hyperparameter optimization with internal 5-fold
@@ -792,6 +911,7 @@ The output directory structure is as follows:
 └── 📂 fe57fcf2445a2909e688bff847585546/
     ├── 📂 features/
     │   ├── 📂 associations/
+    │   ├── 📂 descriptions/
     │   └── 📂 predictions/
     ├── 📂 inspection/
     ├── 📂 prepared/
@@ -940,6 +1060,7 @@ as well.
 ```
 📂 features/
 ├── 📂 associations/
+├── 📂 descriptions/
 ├── 📂 predictions/
 ```
 
@@ -966,6 +1087,54 @@ Data for univariate analyses of all features.
   - plaintext table of continuous feature-target associations
 - `continuous_features.parquet`
   - Parquet table of continuous feature-target associations
+
+#### `📂 descriptions`
+
+```
+📂 descriptions/
+├── categorical_features.csv
+├── continuous_features.csv
+└── target.csv
+```
+
+- `categorical_features.csv`
+  - table where each row describes a categorical feature
+  - columns are, for each feature:
+    ```
+    "n_levels":  # number of levels / categories / classes
+    "nans":      # NaN count
+    "nan_freq":  # NaN frequency
+    "med_freq":  # Median of level frequencies
+    "min_freq":  # Frequency of least-frequent class
+    "max_freq":  # Frequency of most-frequent class
+    "min_name":  # Name of least common class
+    "max_name":  # Name of most common class
+    "heterog":   # chi-square / heterogeneity
+    "heterog_p": # chi-square p-value
+    "n_entropy": # normalized entropy (closer to max of 1 = more uniform)
+    ```
+- `continuous_features.csv`
+  - table where each row describes a continuous feature
+  - columns are, for each feature:
+    ```
+    "min":       # minimum value
+    "mean":      # mean value
+    "max":       # maximum value
+    "sd":        # standard deviation
+    "p05":       # 5th percentile value
+    "median":    # median value
+    "p95":       # 95th percentile value
+    "iqr":       # interquartile range
+    "skew":      # skewness / asymmetry
+    "skew_p":    # p-value for test if skew is different from Gaussian
+    "kurt":      # kurtosis / tailedness
+    "kurt_p":    # p-value for test if kurtosis is different from Gaussian
+    "entropy":   # differential entropy (scipy.stats, default args)
+    "nan_freq":  # proportion of NaN values
+    ```
+- `target.csv`
+  - same format as either of above, depending on if the task is classification
+    or regression
 
 #### `📂 predictions`
 
@@ -1082,6 +1251,7 @@ available in the [`features` directory](#📂-features).
 ├── eval_htune_results.json
 ├── final_performances.csv
 ├── performance_long_table.csv
+├── prediction_results.json
 ├── results_report.md
 ├── X_test.csv
 ├── X_train.csv
@@ -1089,10 +1259,31 @@ available in the [`features` directory](#📂-features).
 └── y_train.csv
 ```
 
-- `final_performances.csv` and `performance_long_table.csv` [TODO: make one of these wide table]
-  - final summary table of all performances for all models and feature selection methods
+- `final_performances.csv` and `performance_long_table.csv` [TODO: make one
+  of these wide table]
+  - final summary table of all performances for all models and feature
+    selection methods
+- `prediction_results.json`
+  - dictionary of all actual predictions (predicted classes in
+    classification, predicted target values in regression) and, if
+    classification and available for the model, predicted probabilities
+  - can be loaded externally with `json.loads(path.read_text())` using Python
+    stdlib [`json`](https://docs.python.org/3/library/json.html#module-json),
+    and where `path` is a
+    [Pathlib](https://docs.python.org/3/library/pathlib.html#module-pathlib)
+    `Path` pointing to `prediction_results.json`
+    - the `preds_train`, `preds_test`, `probs_train`, and `probs_test` fields
+    are Python lists that can be converted to NumPy with `np.array`
+    - Dtype information for above conversions is stored in `preds_dtype` and
+      `probs_dtype` fields
+    - for the predictions, e.g. `preds_test`, after making a NumPy ndarray,
+      the entry at [*i*, *j*] corresponds to the predicted probabilities for
+      sample *i*, and label *j*
+    - the original meaning of the labels prior to encoding is stored in
+      `labels.parquet`, in the [`prepared` folder](#📂-prepared)
 - `results_report.md`
-  - readable report (with wide-form tables of performances) of above information
+  - readable report (with wide-form tables of performances) of above
+    information
 - `X_test.csv`
   - predictors used for final holdout and k-fold evaluations
 - `X_train.csv`
@@ -1102,7 +1293,8 @@ available in the [`features` directory](#📂-features).
 - `y_train.csv`
   - target samples used for training and tuning
 - `eval_htune_results.json`
-  - serialization of final results object (not human readable, for internal use)
+  - serialization of final results object (not human readable, for internal
+    use)
 
 ## Complete Listing
 

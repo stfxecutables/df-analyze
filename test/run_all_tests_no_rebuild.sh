@@ -26,10 +26,11 @@ echo "==========================================================================
 echo "Testing basic data inspection, cleaning, preparation, and associational stats"
 echo "================================================================================="
 "$PYTEST" \
-    -m 'not regen' -m 'cached' -x \
+    -m 'not regen' -m 'cached' -m 'fast' -x \
     test/test_inspection.py \
     test/test_prepare.py \
     test/test_splitting.py \
+    test/test_seeding.py \
     test/test_associate.py \
     test/test_name_sanitize.py \
     test/test_cleaning.py || { echo "Basic functionality failed."; exit 1; }
@@ -43,14 +44,21 @@ echo "==========================================================================
     -x || { echo "CLI testing failed."; exit 1; }
 
 echo "================================================================================="
-echo "Testing test dataset IO and basics"
+echo "Testing test dataset IO"
 echo "================================================================================="
 "$PYTEST" -n auto \
     test/test_loading.py \
-    test/test_datasets.py \
-    test/test_models.py \
-    test/test_tuning_score.py \
-    -x  # don't do the exit here, with parallel maybe issues?
+    test/test_datasets.py -x || { echo "Basic Dataset IO failed."; exit 1; }
+
+echo "================================================================================="
+echo "Sanity testing basic models and scoring"
+echo "================================================================================="
+"$PYTEST" -n 4 \
+    test/test_models.py || { echo "Model sanity test(s) failed."; exit 1; }
+"$PYTEST" -n auto \
+    test/test_tuning_score.py -x || { echo "IO with tuning scores failed."; exit 1; }
+"$PYTEST" -n auto \
+    test/test_confusion_mat_scoring.py -x || { echo "Confusion matrix scoring failed."; exit 1; }
 
 echo "================================================================================="
 echo "Testing result saving (slow)"

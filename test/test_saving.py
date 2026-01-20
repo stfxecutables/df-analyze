@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import json
 import sys
 from copy import deepcopy
 from dataclasses import is_dataclass
@@ -41,17 +42,19 @@ def test_random_options(dataset: Tuple[str, TestDataset]) -> None:
 def test_hashing(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     for _ in range(100):
-        opts1 = ProgramOptions.random(ds)
-        opts2 = ProgramOptions.random(ds)
-        opts11 = deepcopy(opts1)
-        opts22 = deepcopy(opts2)
-        hsh1 = opts1.hash()
-        hsh2 = opts2.hash()
-        hsh11 = opts11.hash()
-        hsh22 = opts22.hash()
-        assert hsh1 != hsh2
-        assert hsh1 == hsh11
-        assert hsh2 == hsh22
+        with TemporaryDirectory() as tempdir:
+            outdir = Path(tempdir)
+            opts1 = ProgramOptions.random(ds, outdir=outdir)
+            opts2 = ProgramOptions.random(ds, outdir=outdir)
+            opts11 = deepcopy(opts1)
+            opts22 = deepcopy(opts2)
+            hsh1 = opts1.hash()
+            hsh2 = opts2.hash()
+            hsh11 = opts11.hash()
+            hsh22 = opts22.hash()
+            assert hsh1 != hsh2
+            assert hsh1 == hsh11
+            assert hsh2 == hsh22
 
 
 def are_equal(obj1: Any, obj2: Any) -> bool:
@@ -177,7 +180,7 @@ def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
             options = ProgramOptions.random(ds, outdir=outdir)
             selected = EvaluationResults.random(ds, options)
 
-            selected.save(root=outdir)
+            selected.save(root=outdir, fold_idx=None)
             loaded = EvaluationResults.load(root=outdir)
 
             assert isinstance(loaded, EvaluationResults)
@@ -192,5 +195,102 @@ def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
                     )
     except Exception as e:
         raise ValueError(f"Got error saving eval results for data {dsname}:\n{e}")
+    finally:
+        tempdir.cleanup()
+
+
+@fast_ds
+def test_eval_preds_save(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
+        return  # defective target
+    tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
+    try:
+        for _ in range(10):
+            options = ProgramOptions.random(ds, outdir=outdir)
+            selected = EvaluationResults.random(ds, options)
+            preds = [result.to_preds() for result in selected.results]
+
+            selected.save(root=outdir, fold_idx=None)
+            loaded_preds = EvaluationResults.load_preds(root=outdir)
+
+            for i, pred in enumerate(preds):
+                for key in pred.__dict__.keys():
+                    original = pred.__dict__[key]
+                    loaded = loaded_preds[i].__dict__[key]
+                    if key == "params":
+                        if str(original) == str(loaded):
+                            continue
+                    if not are_equal(original, loaded):
+                        raise ValueError(
+                            f"Saved values at key: '{key}' are not equal after loading:\n"
+                            "Before:\n"
+                            f"{original}\n"
+                            "Loaded:\n"
+                            f"{loaded}"
+                        )
+
+                probs_test = pred.probs_test
+                probs_test_loaded = loaded_preds[i].__dict__["probs_test"]
+                probs_train = pred.probs_train
+                probs_train_loaded = loaded_preds[i].__dict__["probs_train"]
+
+                preds_test = pred.preds_test
+                preds_test_loaded = loaded_preds[i].__dict__["preds_test"]
+                preds_train = pred.preds_train
+                preds_train_loaded = loaded_preds[i].__dict__["preds_train"]
+
+                assert preds_test is not None, "Null / missing preds"
+                assert preds_train is not None, "Null / missing preds"
+                assert preds_test_loaded is not None, "Null / missing preds"
+                assert preds_train_loaded is not None, "Null / missing preds"
+
+                if ds.is_classification:
+                    assert probs_test is not None, "Null / missing probs"
+                    assert probs_train is not None, "Null / missing probs"
+                    assert probs_test_loaded is not None, "Null / missing probs"
+                    assert probs_train_loaded is not None, "Null / missing probs"
+
+                    assert len(probs_test) == len(preds_test), (
+                        "Test probs and preds mismatch"
+                    )
+                    assert len(probs_test_loaded) == len(preds_test_loaded), (
+                        "Loaded test probs and preds mismatch"
+                    )
+
+            # Check predictions load as plain json for use outside of df-analyze
+            json_str = (outdir / "prediction_results.json").read_text()
+            try:
+                json.loads(json_str)
+            except Exception as e:
+                raise ValueError("Could not load predictions as plain json.") from e
+
+    except Exception as e:
+        raise ValueError(
+            f"Got error saving prediction results for data {dsname}:\n{e}"
+        ) from e
+    finally:
+        tempdir.cleanup()
+
+
+@fast_ds
+def test_descs_save(dataset: Tuple[str, TestDataset]) -> None:
+    dsname, ds = dataset
+    if dsname in ["dgf_96f4164d-956d-4c1c-b161-68724eb0ccdc", "internet_usage"]:
+        return  # defective target
+    tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
+
+    try:
+        options = ProgramOptions.random(ds, outdir=outdir)
+        preds = ds.prepared(load_cached=True)
+        df_cont, df_cat, df_targ = preds.describe_features()
+        options.program_dirs.save_feature_descriptions(df_cont, df_cat, df_targ)
+
+    except Exception as e:
+        raise ValueError(
+            f"Got error saving prediction results for data {dsname}:\n{e}"
+        ) from e
     finally:
         tempdir.cleanup()

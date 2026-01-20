@@ -43,6 +43,7 @@ from tqdm import tqdm
 from df_analyze.analysis.metrics import auroc, cohens_d, cramer_v
 from df_analyze.enumerables import RandEnum
 from df_analyze.preprocessing.prepare import PreparedData
+from df_analyze.saving import add_fold_idx
 
 
 class Association:
@@ -382,18 +383,18 @@ class AssocResults:
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
 
-    def save_tables(self, root: Path) -> None:
+    def save_tables(self, root: Path, fold_idx: Optional[int]) -> None:
         if self.conts is not None:
-            self.conts.to_csv(root / self.files.conts_csv)
+            self.conts.to_csv(add_fold_idx(root / self.files.conts_csv, fold_idx))
         if self.cats is not None:
-            self.cats.to_csv(root / self.files.cats_csv)
+            self.cats.to_csv(add_fold_idx(root / self.files.cats_csv, fold_idx))
 
-    def save_raw(self, root: Path) -> None:
+    def save_raw(self, root: Path, fold_idx: Optional[int]) -> None:
         conts = DataFrame() if self.conts is None else self.conts
         cats = DataFrame() if self.cats is None else self.cats
 
-        conts.to_parquet(root / self.files.conts_raw)
-        cats.to_parquet(root / self.files.cats_raw)
+        conts.to_parquet(add_fold_idx(root / self.files.conts_raw, fold_idx))
+        cats.to_parquet(add_fold_idx(root / self.files.cats_raw, fold_idx))
 
     @staticmethod
     def is_saved(cachedir: Path) -> bool:

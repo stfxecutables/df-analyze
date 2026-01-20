@@ -113,7 +113,7 @@ def main() -> None:
     # if options.verbosity.value > 0:
     #     log_options(options)
 
-    print(options.drops)
+    # print(options.drops)
     # sys.exit(0)
     is_cls = options.is_classification
     prog_dirs = options.program_dirs
@@ -122,75 +122,108 @@ def main() -> None:
     ordinals = options.ordinals
     drops = options.drops
     grouper = options.grouper
+    test_size = options.test_val_size
+    method = options.tests_method
+    seed = options.seed
     # joblib_cache = options.program_dirs.joblib_cache
     # if joblib_cache is not None:
     #     memory = Memory(location=joblib_cache)
 
     df = options.load_df()
+    merges = options.merged_df()
+    if merges is not None:
+        merged_df, ix_train, ix_tests = merges
+    else:
+        merged_df, ix_train, ix_tests = (None, None, None)
+
     df, renames = sanitize_names(df, target)
+    if merged_df is not None:
+        # We already check column names are identical across test dfs, so
+        # we do not need to use renaming info twice
+        merged_df = sanitize_names(merged_df, target)[0]
     prog_dirs.save_renames(renames)
 
+    # Likewise, below variables are just list[str], and so we don't need to do
+    # anything for the merged_df
     categoricals = renames.rename_columns(categoricals)
     ordinals = renames.rename_columns(ordinals)
     drops = renames.rename_columns(drops)
 
-    df, inspection = inspect_data(
-        df, target, grouper, categoricals, ordinals, drops, _warn=True
-    )
+    if merged_df is not None:
+        merged_df, inspection = inspect_data(
+            merged_df, target, grouper, categoricals, ordinals, drops, _warn=True
+        )
+    else:
+        df, inspection = inspect_data(
+            df, target, grouper, categoricals, ordinals, drops, _warn=True
+        )
     prog_dirs.save_inspect_reports(inspection)
     prog_dirs.save_inspect_tables(inspection)
 
-    prepared = prepare_data(df, target, grouper, inspection, is_cls)
+    raw_df = merged_df if merged_df is not None else df
+    prepared = prepare_data(
+        raw_df, target, grouper, inspection, is_cls, ix_train, ix_tests, method
+    )
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
-    prep_train, prep_test = prepared.split()
 
-    associations = target_associations(prep_train)
-    prog_dirs.save_univariate_assocs(associations)
-    prog_dirs.save_assoc_report(associations.to_markdown())
+    # describe prepared features
+    desc_cont, desc_cat, desc_target = prepared.describe_features()
+    prog_dirs.save_feature_descriptions(desc_cont, desc_cat, desc_target)
 
-    if options.no_preds:
-        predictions = None
-    else:
-        predictions = univariate_predictions(prep_train, is_cls)
-        prog_dirs.save_univariate_preds(predictions)
-        prog_dirs.save_pred_report(predictions.to_markdown())
+    prep_splits = prepared.get_splits(test_size=test_size, seed=seed)
+    for fold_idx, (prep_train, prep_test) in enumerate(prep_splits):
+        # prep_train, prep_test = prepared.split()
+        if merged_df is None:
+            fold_idx = None
 
-    # select features via filter methods first
-    assoc_filtered, pred_filtered = filter_select_features(
-        prep_train, associations, predictions, options
-    )
-    prog_dirs.save_filter_report(assoc_filtered)
-    prog_dirs.save_filter_report(pred_filtered)
+        associations = target_associations(prep_train)
+        prog_dirs.save_univariate_assocs(associations, fold_idx)
+        prog_dirs.save_assoc_report(associations.to_markdown(), fold_idx)
 
-    # TODO: make embedded and wrapper selection mutually exclusive. Only two
-    # phases of feature selection: filter selection, and model-based
-    # selection, wher model-based selection means either embedded or wrapper
-    # (stepup, stepdown) methods.
-    selected = model_select_features(prep_train, options)
-    prog_dirs.save_model_selection_reports(selected)
-    prog_dirs.save_model_selection_data(selected)
+        if options.no_preds:
+            predictions = None
+        else:
+            predictions = univariate_predictions(prep_train, is_cls)
+            prog_dirs.save_univariate_preds(predictions, fold_idx)
+            prog_dirs.save_pred_report(predictions.to_markdown(), fold_idx)
 
-    silence_spam()
-    eval_results = evaluate_tuned(
-        prepared=prepared,
-        prep_train=prep_train,
-        prep_test=prep_test,
-        assoc_filtered=assoc_filtered,
-        pred_filtered=pred_filtered,
-        model_selected=selected,
-        options=options,
-    )
-    prog_dirs.save_eval_report(eval_results)
-    prog_dirs.save_eval_tables(eval_results)
-    prog_dirs.save_eval_data(eval_results)
-    try:
-        print(eval_results.to_markdown())
-    except ValueError as e:
-        warn(
-            f"Got error when attempting to print final report:\n{e}\n"
-            f"Details:\n{traceback.format_exc()}"
+        # select features via filter methods first
+        assoc_filtered, pred_filtered = filter_select_features(
+            prep_train, associations, predictions, options
         )
+        prog_dirs.save_filter_report(assoc_filtered, fold_idx)
+        prog_dirs.save_filter_report(pred_filtered, fold_idx)
+
+        # TODO: make embedded and wrapper selection mutually exclusive. Only two
+        # phases of feature selection: filter selection, and model-based
+        # selection, wher model-based selection means either embedded or wrapper
+        # (stepup, stepdown) methods.
+        selected = model_select_features(prep_train, options)
+        prog_dirs.save_model_selection_reports(selected, fold_idx)
+        prog_dirs.save_model_selection_data(selected, fold_idx)
+
+        silence_spam()
+        eval_results = evaluate_tuned(
+            prepared=prepared,
+            prep_train=prep_train,
+            prep_test=prep_test,
+            assoc_filtered=assoc_filtered,
+            pred_filtered=pred_filtered,
+            model_selected=selected,
+            options=options,
+        )
+        prog_dirs.save_eval_report(eval_results, fold_idx)
+        prog_dirs.save_eval_tables(eval_results, fold_idx)
+        prog_dirs.save_eval_data(eval_results, fold_idx)
+        try:
+            print(eval_results.to_markdown())
+        except ValueError as e:
+            warn(
+                f"Got error when attempting to print final report:\n{e}\n"
+                f"Details:\n{traceback.format_exc()}"
+            )
+    # TODO: Assemble final summary tables
 
 
 if __name__ == "__main__":

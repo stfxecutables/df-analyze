@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import re
 from argparse import Action
 from enum import Enum
 from math import isnan
 from pathlib import Path
-from typing import Callable, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Type, TypeVar, Union
 from warnings import warn
 
 E = TypeVar("E")
+
+if TYPE_CHECKING:
+    from src.df_analyze.enumerables import SeedKind
 
 
 def resolved_path(p: Union[str, Path]) -> Path:
@@ -19,6 +24,25 @@ def resolved_path(p: Union[str, Path]) -> Path:
     except Exception as e:
         raise ValueError(f"Could not resolve path {path} to valid path.") from e
     return path
+
+
+def resolved_path_list(ps: str) -> List[Path]:
+    paths = []
+    for p in ps.split(","):
+        try:
+            path = Path(p)
+        except Exception as e:
+            raise ValueError(
+                f"Could not interpret string {p} as path. User-input argument: {ps}.\n\n"
+                f'Note: path arguments are split on commas (","), so make sure none of'
+                "your filepaths contain commas."
+            ) from e
+        try:
+            path = path.resolve()
+        except Exception as e:
+            raise ValueError(f"Could not resolve path {path} to valid path.") from e
+        paths.append(path)
+    return paths
 
 
 def cv_size(cv_str: str) -> Union[float, int]:
@@ -109,6 +133,20 @@ def enum_or_none_parser(enum: E) -> Callable[[str], Optional[E]]:
         if "none" in arg.lower():
             return None
         return enum(arg)  # type: ignore
+
+    return inner
+
+
+def seed_parser(enum: Type[SeedKind]) -> Callable[[str], Union[int, SeedKind]]:
+    def inner(arg: str) -> Union[int, SeedKind]:
+        clean = str(arg).lower().strip()
+        if clean in enum.choices():
+            return enum(clean)
+        try:
+            seed = int(clean)
+            return seed
+        except Exception as e:
+            raise ValueError(f"Could not parse `--seed` argument: {arg}") from e
 
     return inner
 

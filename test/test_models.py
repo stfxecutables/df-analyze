@@ -43,20 +43,19 @@ from df_analyze.models.linear import (
 )
 from df_analyze.models.svm import SVMClassifier, SVMRegressor
 
-C = 20
+C = 10
 
 
 def fake_data(
     mode: Literal["classify", "regress"], noise: float = 1.0
 ) -> tuple[DataFrame, DataFrame, Series, Series]:
     N = 100
-
     X_cont_tr = np.random.standard_normal([N, C])
     X_cont_test = np.random.standard_normal([N, C])
 
-    cat_sizes = np.random.randint(2, 20, C)
-    cats_tr = [np.random.randint(0, c) for c in cat_sizes]
-    cats_test = [np.random.randint(0, c) for c in cat_sizes]
+    cat_sizes = np.random.randint(2, 5, C)
+    cats_tr = [np.random.randint(0, c, N) for c in cat_sizes]
+    cats_test = [np.random.randint(0, c, N) for c in cat_sizes]
 
     X_cat_tr = np.empty([N, C])
     for i, cat in enumerate(cats_tr):
@@ -85,7 +84,7 @@ def fake_data(
 
     if mode == "classify":
         encoder = KBinsDiscretizer(n_bins=2, encode="ordinal")
-        encoder.fit(y_tr.reshape(-1, 1))
+        encoder.fit(np.concatenate([y_tr.reshape(-1, 1), y_test.reshape(-1, 1)]))
         y_tr = encoder.transform(y_tr.reshape(-1, 1))
         y_test = encoder.transform(y_test.reshape(-1, 1))
 
@@ -116,9 +115,14 @@ def check_optuna_tune_metric(
     model: DfAnalyzeModel,
     mode: Literal["classify", "regress"],
     metric: Union[ClassifierScorer, RegressorScorer],
-) -> tuple[float, ndarray | None]:
+) -> tuple[float, ndarray | Series | None]:
     ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
     X_tr, X_test, y_tr, y_test = fake_data(mode)
+    const_target = (len(y_tr.unique()) == 1) or (len(y_test.unique()) == 1)
+    while const_target:
+        X_tr, X_test, y_tr, y_test = fake_data(mode)
+        const_target = (len(y_tr.unique()) == 1) or (len(y_test.unique()) == 1)
+
     # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
     model = deepcopy(model)
     try:
@@ -151,16 +155,35 @@ def check_optuna_tune_metric(
             n_trials=4,
             n_jobs=1,
         )
+
+        if not hasattr(study, "best_params"):
+            raise RuntimeError("No trials ever ran for some reason.")
         overrides = study.best_params
         print(overrides)
     except ValueError as e:  # handle braindead Optuna race condition
-        # print(e)
-        # print(e.args)
-        raise ValueError(f"Got error for metric: {metric.name}") from e
+        msg = (
+            f"Got error for metric: {metric.name}. Targets:\n"
+            f"y_tr unique values: {np.unique(y_tr, return_counts=True)}\n"
+            f"{y_tr}\n"
+            f"y_test unique values: {np.unique(y_test, return_counts=True)}\n"
+            f"{y_test}\n"
+        )
+        print(e)
+        if "No trials are completed yet" in str(e):
+            raise ValueError(
+                f"No trials completed by Optuna for some reason. Info:\n{msg}"
+            )
+        raise ValueError(msg) from e
+    # print(f"Best params: {overrides}")
     model.refit_tuned(X_tr, y_tr, tuned_args=overrides)
     preds = model.tuned_predict(X_test)
-    score = metric.tuning_score(y_true=y_test, y_pred=preds)
-    return score
+    try:
+        score = metric.tuning_score(y_true=y_test, y_pred=preds)
+    except Exception:
+        raise ValueError(
+            "Could not get score on final generated test data. Maybe all same class?"
+        )
+    return score, preds
 
 
 def check_optuna_tune(
@@ -172,7 +195,8 @@ def check_optuna_tune(
     # metric = ClassifierScorer.default() if is_cls else RegressorScorer.default()
     for metric in metrics:
         print(
-            metric.name, check_optuna_tune_metric(model=model, mode=mode, metric=metric)
+            metric.name,
+            check_optuna_tune_metric(model=model, mode=mode, metric=metric)[0],
         )
 
 

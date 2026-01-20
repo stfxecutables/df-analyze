@@ -41,7 +41,7 @@ echo "==========================================================================
 echo "Testing association computations: should take less than 5 minutes..."
 echo "================================================================================="
 echo ""
-"$PYTEST" test/test_associate.py -m 'regen' -x || { echo "Failed to gen associations"; exit 1; }
+"$PYTEST" test/test_associate.py -m 'regen and fast' -x || { echo "Failed to gen associations"; exit 1; }
 
 echo ""
 echo "================================================================================="

@@ -17,32 +17,54 @@ from sklearn.metrics import (
     median_absolute_error,
     multilabel_confusion_matrix,
     r2_score,
-    recall_score,
     roc_auc_score,
 )
 from sklearn.utils import assert_all_finite
 
 
+def consistent_confusion_matrix(
+    y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]
+) -> ndarray:
+    """This ensures that in the binary case, we are getting entries of the confusion
+    matrix that correspond to "1" as the label for the class we are trying to predict
+    """
+    labs = np.unique(np.concatenate([y_true, y_pred], axis=0))
+    if len(labs) == 2:
+        labs = [1]
+    return multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred, labels=labs)
+
+
 def sensitivity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
-    return float(recall_score(y_true, y_pred, average="macro", zero_division=np.nan))  # type: ignore
+    mat = consistent_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    if mat.shape[0] == 2:  # binary case:
+        mat = mat[0].reshape(1, *mat.shape[1:])
+    tps = mat[:, 1, 1]
+    fns = mat[:, 1, 0]
+
+    ps = tps + fns  # all actual positives
+    if np.all(ps == 0):
+        return float("nan")
+    idx = ps > 0
+    sens = tps[idx] / ps[idx]
+    return sens.mean()
 
 
 def specificity(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
-    mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    mat = consistent_confusion_matrix(y_true=y_true, y_pred=y_pred)
     if mat.shape[0] == 2:  # binary case:
         mat = mat[0].reshape(1, *mat.shape[1:])
     tns = mat[:, 0, 0]
     fps = mat[:, 0, 1]
-    denom = tns + fps
-    if np.all(denom == 0):
+    ns = tns + fps  # all actual negatives
+    if np.all(ns == 0):
         return float("nan")
-    idx = denom > 0
-    specs = tns[idx] / denom[idx]
+    idx = ns > 0
+    specs = tns[idx] / ns[idx]
     return specs.mean()
 
 
 def ppv(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
-    mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    mat = consistent_confusion_matrix(y_true=y_true, y_pred=y_pred)
     if mat.shape[0] == 2:  # binary case:
         mat = mat[0].reshape(1, *mat.shape[1:])
     tps = mat[:, 1, 1]  # shape is (n_classes,)
@@ -56,7 +78,7 @@ def ppv(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float
 
 
 def npv(y_true: Union[Series, ndarray], y_pred: Union[ndarray, Series]) -> float:
-    mat = multilabel_confusion_matrix(y_true=y_true, y_pred=y_pred)
+    mat = consistent_confusion_matrix(y_true=y_true, y_pred=y_pred)
     if mat.shape[0] == 2:  # binary case:
         mat = mat[0].reshape(1, *mat.shape[1:])
     tns = mat[:, 0, 0]

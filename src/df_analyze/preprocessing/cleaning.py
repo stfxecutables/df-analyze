@@ -170,8 +170,9 @@ def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
 
 
 def restore_names(df: DataFrame, renames: list[tuple[str, str]]) -> DataFrame:
+    raise NotImplementedError()
     for original, renamed in renames:
-        raise NotImplementedError()
+        ...
 
 
 def cleaning_inform(message: str) -> None:
@@ -270,16 +271,58 @@ def normalize_continuous(X_cont: DataFrame, robust: bool = True) -> DataFrame:
     return normalize(df=X_cont, target=None, robust=robust)
 
 
+def reindex(
+    idx_keep: ndarray | Series,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+) -> tuple[
+    Optional[ndarray],
+    Optional[list[ndarray]],
+]:
+    if ix_train is None or ix_tests is None:
+        return ix_train, ix_tests
+
+    n_dropped = (~idx_keep).sum()
+    if n_dropped == 0:
+        return ix_train, ix_tests
+
+    ix_all = np.concatenate([ix_train, *ix_tests])
+    ix_remain = ix_all[idx_keep]
+    ix_train = np.intersect1d(ix_train, ix_remain)
+    ix_tests = [np.intersect1d(ix_test, ix_remain) for ix_test in ix_tests]
+
+    # we re-index later, so, we need to regen the indices to be increasing again
+    lengths = [len(ix) for ix in ix_tests]
+    ix_train = np.arange(len(ix_train))
+    ix_tests = []
+    last = ix_train[-1]
+    for length in lengths:
+        ix_tests.append(np.arange(last + 1, last + 1 + length))
+        last = ix_tests[-1][-1]
+
+    return ix_train, ix_tests
+
+
 def drop_target_nans(
     df: DataFrame,
     target: str,
-) -> tuple[DataFrame, int]:
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+) -> tuple[
+    DataFrame,
+    int,
+    Optional[ndarray],
+    Optional[list[ndarray]],
+]:
     y_str = df[target].copy(deep=True)
     y_str = y_str.apply(lambda x: np.nan if x in NAN_STRINGS else x)
 
-    idx = ~y_str.isna()
-    df = df.loc[idx]
-    return df, (~idx).sum()
+    idx_keep = ~y_str.isna()
+
+    df = df.loc[idx_keep]
+    n_dropped = (~idx_keep).sum()
+    ix_train, ix_tests = reindex(idx_keep, ix_train, ix_tests)
+    return df, n_dropped, ix_train, ix_tests
 
 
 def handle_continuous_nans(
@@ -377,8 +420,12 @@ def handle_continuous_nans(
 
 
 def encode_target(
-    df: DataFrame, target: Series, _warn: bool = False
-) -> tuple[DataFrame, Series, dict[int, str]]:
+    df: DataFrame,
+    target: Series,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+    _warn: bool = False,
+) -> tuple[DataFrame, Series, dict[int, str], Optional[ndarray], Optional[list[ndarray]]]:
     unqs, cnts = np.unique(unify_nans(target).astype(str), return_counts=True)
     if len(unqs) <= 1:
         raise ValueError(f"Target variable {target.name} is constant.")
@@ -397,16 +444,19 @@ def encode_target(
                 "remove all samples that belong to these labels, bringing the "
                 f"total number of classes down to {n_cls - np.sum(idx).item()}"
             )
-        idx_drop = ~target.isin(unqs[idx])
-        df = df.copy().loc[idx_drop].reset_index(drop=True)
+        idx_keep = ~target.isin(unqs[idx])
+        ix_train, ix_tests = reindex(idx_keep, ix_train, ix_tests)
+        df = df.copy().loc[idx_keep].reset_index(drop=True)
         # reset index extremely important for later concats
-        target = target[idx_drop].reset_index(drop=True)
+        target = target[idx_keep].reset_index(drop=True)
 
     # drop NaNs: Makes no sense to count correct NaN predictions toward
     # classification performance
-    idx_drop = ~target.isna()
-    df = df.copy().loc[idx_drop].reset_index(drop=True)
-    target = target[idx_drop].reset_index(drop=True)
+    idx_keep = ~target.isna()
+    ix_train, ix_tests = reindex(idx_keep, ix_train, ix_tests)
+
+    df = df.copy().loc[idx_keep].reset_index(drop=True)
+    target = target[idx_keep].reset_index(drop=True)
 
     enc = LabelEncoder()
     encoded = np.array(enc.fit_transform(target))
@@ -416,18 +466,31 @@ def encode_target(
         df,
         Series(encoded, name=target.name),
         {i: cls for i, cls in zip(ints, classes)},
+        ix_train,
+        ix_tests,
     )
 
 
-def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, Series]:
+def clean_regression_target(
+    df: DataFrame,
+    target: Series,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+) -> tuple[
+    DataFrame,
+    Series,
+    Optional[ndarray],
+    Optional[list[ndarray]],
+]:
     """NaN targets cannot be predicted. Remove them, and then robustly
     normalize target to facilitate convergence and interpretation
     of metrics
     """
-    idx_drop = ~target.isna()
+    idx_keep = ~target.isna()
+    ix_train, ix_tests = reindex(idx_keep, ix_train, ix_tests)
     # reset index extremely important for later concats
-    df = df.loc[idx_drop].reset_index(drop=True)
-    target = target[idx_drop].reset_index(drop=True)
+    df = df.loc[idx_keep].reset_index(drop=True)
+    target = target[idx_keep].reset_index(drop=True)
 
     y = (
         RobustScaler(quantile_range=(2.5, 97.5))
@@ -436,7 +499,7 @@ def clean_regression_target(df: DataFrame, target: Series) -> tuple[DataFrame, S
     )
     target = Series(y, name=target.name)
 
-    return df, target
+    return df, target, ix_train, ix_tests
 
 
 def drop_cols(

@@ -12,9 +12,9 @@ from tempfile import TemporaryDirectory
 from typing import Type, Union
 
 import pytest
-from pytest import CaptureFixture
 from cli_test_helpers import ArgvContext
 
+from df_analyze._constants import SEED
 from df_analyze.analysis.univariate.associate import (
     CatClsStats,
     CatRegStats,
@@ -40,6 +40,7 @@ PATH = list(TEST_DATASETS.values())[0].datapath
 
 
 @pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_classifiers() -> None:
     with ArgvContext(
         "df-analyze.py",
@@ -54,6 +55,7 @@ def test_classifiers() -> None:
 
 
 @pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_quoted_classifiers() -> None:
     # NOTE: can also just confirm manually that this does work to allow
     # column names with spaces in them.
@@ -68,6 +70,64 @@ def test_quoted_classifiers() -> None:
     ):
         opts = get_options()
     assert opts.categoricals == ["a one", "a two"]
+
+
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_int_seed() -> None:
+    with ArgvContext(
+        "df-analyze.py",
+        "--df",
+        f"{PATH}",
+        "--seed",
+        "12345",  # spaces are allowed but count in names; commas separate
+    ):
+        # opts = get_options(f"--df {PATH} --categoricals one two three")
+        opts = get_options()
+        assert opts.seed == 12345
+
+
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_unseeded() -> None:
+    with ArgvContext(
+        "df-analyze.py",
+        "--df",
+        f"{PATH}",
+    ):
+        # opts = get_options(f"--df {PATH} --categoricals one two three")
+        opts = get_options()
+        assert opts.seed == SEED
+
+
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_default_seeded() -> None:
+    with ArgvContext(
+        "df-analyze.py",
+        "--df",
+        f"{PATH}",
+        "--seed",
+        "default",  # spaces are allowed but count in names; commas separate
+    ):
+        # opts = get_options(f"--df {PATH} --categoricals one two three")
+        opts = get_options()
+        assert opts.seed == SEED
+
+
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_random_seeded() -> None:
+    with ArgvContext(
+        "df-analyze.py",
+        "--df",
+        f"{PATH}",
+        "--seed",
+        "random",  # spaces are allowed but count in names; commas separate
+    ):
+        # opts = get_options(f"--df {PATH} --categoricals one two three")
+        opts = get_options()
+        assert isinstance(opts.seed, int)
 
 
 @all_ds

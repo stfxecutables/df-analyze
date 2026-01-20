@@ -25,6 +25,7 @@ from df_analyze.enumerables import (
     DfAnalyzeRegressor,
     EmbedSelectionModel,
     FeatureSelection,
+    ValidationMethod,
     WrapperSelection,
     WrapperSelectionModel,
 )
@@ -35,15 +36,6 @@ from df_analyze.preprocessing.inspection.inspection import inspect_data
 from df_analyze.preprocessing.prepare import prepare_data
 from df_analyze.selection.filter import filter_select_features
 from df_analyze.selection.models import model_select_features
-from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
-    FASTEST,
-    MEDIUM_INSPECTION,
-    SLOW_INSPECTION,
-    TestDataset,
-    fast_ds,
-    turbo_ds,
-)
 
 DATA = TEMPLATES / "binary_classification.csv"
 DATALINES = DATA.read_text()
@@ -98,6 +90,9 @@ def do_main(minimal: bool) -> None:
         grouper=grouper,
         results=inspection,
         is_classification=is_cls,
+        ix_tests=None,
+        ix_train=None,
+        tests_method=ValidationMethod.List,
     )
     prog_dirs.save_prepared_raw(prepared)
     prog_dirs.save_prep_report(prepared.to_markdown())
