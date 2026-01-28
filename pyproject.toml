@@ -24,6 +24,7 @@ dependencies = [
   "pytest>=9.0.2",
   "pytest-xdist[psutil]>=3.8.0",
   "python-dateutil>=2.9.0.post0",
+  "pytorch-tabular>=1.2.0",
   "scikit-image>=0.26.0",
   "scikit-learn>=1.8.0",
   "scipy>=1.17.0",

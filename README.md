@@ -159,7 +159,7 @@ Canada / DRAC), you may need to [build a container to make use of
    cd ~/Documents
    git clone https://github.com/stfxecutables/df-analyze.git
    ```
-4. Run `uv sync && uv pip install 'pytorch_tabular'`
+4. Run `uv sync`
 
 Now df-analyze is installed, and you can run e.g.
 
