@@ -189,7 +189,7 @@ class InspectionInfo:
 
     __repr__ = __str__
 
-    def __eq__(self, other: InspectionInfo) -> bool:
+    def __eq__(self, other: object | InspectionInfo) -> bool:
         if not isinstance(other, InspectionInfo):
             return False
         return (

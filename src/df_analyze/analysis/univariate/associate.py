@@ -62,8 +62,8 @@ class Association:
 
 
 class ContAssociation(Association):
-    @staticmethod
-    def random() -> ContAssociation:
+    @classmethod
+    def random(cls: Type[Association]) -> ContAssociation:
         return choice(
             [
                 ContClsStats.random(),
@@ -73,8 +73,8 @@ class ContAssociation(Association):
 
 
 class CatAssociation(Association):
-    @staticmethod
-    def random() -> CatAssociation:
+    @classmethod
+    def random(cls: Type[Association]) -> CatAssociation:
         return choice(
             [
                 CatClsStats.random(),
@@ -718,39 +718,42 @@ def target_associations(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_cats = []
+        df_conts = []
 
         cont = prepared.X_cont
-        df_conts: list[DataFrame] = Parallel(n_jobs=-1)(
-            delayed(continuous_feature_target_stats)(
-                continuous=cont,
-                column=col,
-                target=prepared.y,
-                is_classification=prepared.is_classification,
-            )
-            for col in tqdm(
-                cont.columns,
-                desc="Computing associations for continuous features",
-                total=cont.shape[1],
-            )
-        )  # type: ignore
+        if cont is not None:
+            df_conts: list[DataFrame] = Parallel(n_jobs=-1)(
+                delayed(continuous_feature_target_stats)(
+                    continuous=cont,
+                    column=col,
+                    target=prepared.y,
+                    is_classification=prepared.is_classification,
+                )
+                for col in tqdm(
+                    cont.columns,
+                    desc="Computing associations for continuous features",
+                    total=cont.shape[1],
+                )
+            )  # type: ignore
 
         # Currently X_cat is the raw cat data, neither label- nor one-hot-
         # encoded.
         cats = prepared.X_cat
-        df_cats: list[DataFrame] = Parallel(n_jobs=-1)(
-            delayed(categorical_feature_target_stats)(
-                categoricals=cats,
-                column=col,
-                target=prepared.y,
-                labels=prepared.labels,
-                is_classification=prepared.is_classification,
-            )
-            for col in tqdm(
-                cats.columns,
-                desc="Computing associations for categorical features",
-                total=cats.shape[1],
-            )
-        )  # type: ignore
+        if cats is not None:
+            df_cats: list[DataFrame] = Parallel(n_jobs=-1)(
+                delayed(categorical_feature_target_stats)(
+                    categoricals=cats,
+                    column=col,
+                    target=prepared.y,
+                    labels=prepared.labels,
+                    is_classification=prepared.is_classification,
+                )
+                for col in tqdm(
+                    cats.columns,
+                    desc="Computing associations for categorical features",
+                    total=cats.shape[1],
+                )
+            )  # type: ignore
 
         df_cont = pd.concat(df_conts, axis=0) if len(df_conts) > 0 else None
         df_cat = pd.concat(df_cats, axis=0) if len(df_cats) > 0 else None

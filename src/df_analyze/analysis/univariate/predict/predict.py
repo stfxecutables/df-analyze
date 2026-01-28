@@ -234,8 +234,8 @@ def categorical_feature_target_preds(
 
 
 def feature_target_predictions(
-    categoricals: DataFrame,
-    continuous: DataFrame,
+    categoricals: DataFrame | None,
+    continuous: DataFrame | None,
     target: Series,
     is_classification: bool,
 ) -> tuple[
@@ -245,46 +245,47 @@ def feature_target_predictions(
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_conts: list[DataFrame]
         df_cats: list[DataFrame]
-        results: list[tuple[DataFrame, Optional[Exception], list[WarningMessage]]]
+        results: list[tuple[DataFrame, Optional[Exception], list[WarningMessage]]] = []
 
-        results = Parallel(n_jobs=-1)(
-            delayed(continuous_feature_target_preds)(
-                continuous=continuous,
-                column=col,
-                target=target,
-                is_classification=is_classification,
-            )
-            for col in tqdm(
-                continuous.columns,
-                desc="Predicting continuous features",
-                total=continuous.shape[1],
-                leave=True,
-                position=0,
-            )
-        )  # type: ignore
+        if continuous is not None:
+            results = Parallel(n_jobs=-1)(
+                delayed(continuous_feature_target_preds)(
+                    continuous=continuous,
+                    column=col,
+                    target=target,
+                    is_classification=is_classification,
+                )
+                for col in tqdm(
+                    continuous.columns,
+                    desc="Predicting continuous features",
+                    total=continuous.shape[1],
+                    leave=True,
+                    position=0,
+                )
+            )  # type: ignore
         if len(results) > 0:
-            df_conts, cont_errors, cont_warns = list(zip(*results))
+            df_conts, cont_errors, cont_warns = list(zip(*results))  # type: ignore
         else:
             df_conts, cont_errors, cont_warns = [], [], []
 
-        results = Parallel(n_jobs=-1)(
-            delayed(categorical_feature_target_preds)(
-                categoricals=categoricals,
-                column=col,
-                target=target,
-                is_classification=is_classification,
-            )
-            for col in tqdm(
-                categoricals.columns,
-                desc="Predicting categorical features",
-                total=categoricals.shape[1],
-                leave=True,
-                position=0,
-            )
-        )  # type: ignore
-
+        if categoricals is not None:
+            results = Parallel(n_jobs=-1)(
+                delayed(categorical_feature_target_preds)(
+                    categoricals=categoricals,
+                    column=col,
+                    target=target,
+                    is_classification=is_classification,
+                )
+                for col in tqdm(
+                    categoricals.columns,
+                    desc="Predicting categorical features",
+                    total=categoricals.shape[1],
+                    leave=True,
+                    position=0,
+                )
+            )  # type: ignore
         if len(results) > 0:
-            df_cats, cat_errors, cat_warns = list(zip(*results))
+            df_cats, cat_errors, cat_warns = list(zip(*results))  # type: ignore
         else:
             df_cats, cat_errors, cat_warns = [], [], []
 

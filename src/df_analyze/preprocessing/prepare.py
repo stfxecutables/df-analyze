@@ -155,7 +155,7 @@ def viable_subsample(
     y: ndarray
     idx_final = idx_final[idx_keep]
     X = df.copy(deep=True).values[idx_keep]
-    y = target.copy(deep=True).values[idx_keep]
+    y = target.copy(deep=True).to_numpy()[idx_keep]
     assert np.bincount(y).min() >= N_CAT_LEVEL_MIN, "Keep fail"
 
     # shuffle once to allow getting random first n of each class later
@@ -257,7 +257,7 @@ class PreparedData:
                     "target `y` has the proper dtype, e.g. `y = y.astype(np.float64)` if "
                     "regression, or `y = y.astype(np.int64)` if classification. "
                 )
-                X, y, labels = encode_target(X, y, ix_train, ix_tests, _warn=True)
+                X, y, labels, _, _ = encode_target(X, y, ix_train, ix_tests, _warn=True)
                 self.is_classification = True
             else:
                 tname = (
@@ -296,7 +296,7 @@ class PreparedData:
         self.groups: Optional[Series] = groups
 
         self.ix_train: Optional[ndarray] = ix_train
-        self.ix_tests: list[ndarray] = ix_tests
+        self.ix_tests: list[ndarray] = ix_tests or []
         self.tests_method = tests_method
 
     @property

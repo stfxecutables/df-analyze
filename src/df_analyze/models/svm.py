@@ -76,7 +76,7 @@ class SVMClassifier(SVMEstimator):
         if self.model is None:
             kwargs = {**self.fixed_args, **self.model_args}
             self.model = self.model_cls(**kwargs)
-        self.model.fit(X_train, y_train)
+        self.model.fit(X_train, y_train)  # type: ignore
 
 
 class SVMRegressor(SVMEstimator):

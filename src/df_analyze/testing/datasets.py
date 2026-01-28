@@ -21,7 +21,6 @@ import pytest
 from numpy import ndarray
 from numpy.random import Generator
 from pandas import DataFrame, Series
-from pandas._typing import Scalar
 from scipy.special import softmax
 from sklearn.model_selection import train_test_split as tt_split
 from sklearn.preprocessing import KBinsDiscretizer
@@ -636,9 +635,11 @@ def sparse_snplike_data(
             n_r = n_allele - 1  # number of non-dominant polymorphisms remaining
             p_r = 1 - m - p_nan  # probability for other alleles
             p_remains = sorted(softmax(rng.exponential(2, n_r)) * p_r)
-            ps = [m, *p_remains, p_nan]
+            ps = np.asarray([m, *p_remains, p_nan])
 
-            f = rng.choice([*np.arange(n_allele), np.nan], size=N, p=ps, replace=True)
+            f = rng.choice(
+                np.asarray([*np.arange(n_allele), np.nan]), size=N, p=ps, replace=True
+            )
             snp_features.append(f)
             names.append(f"{label}{i:03d}")
         X = np.stack(snp_features, axis=1)
@@ -675,7 +676,7 @@ def sparse_snplike_data(
                 ps = [m, *p_remains, p_nan]
             # make plenty to ensure we have enough after removing pred variants
             V_large = rng.choice(
-                [*np.arange(n_allele), np.nan],
+                np.asarray([*np.arange(n_allele), np.nan]),
                 size=[N * 5, n_predictive_snps],
                 p=ps,
                 replace=True,

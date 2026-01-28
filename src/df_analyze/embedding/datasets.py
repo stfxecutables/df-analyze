@@ -22,7 +22,7 @@ from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
 class EmbeddingDataset:
     def __init__(
         self,
-        datapath: Path,
+        datapath: Optional[Path],
         name: Optional[str],
     ) -> None:
         self.datapath = self.validate_datapath(datapath)
@@ -35,7 +35,9 @@ class EmbeddingDataset:
 
     __repr__ = __str__
 
-    def validate_datapath(self, path: Path) -> Path:
+    def validate_datapath(self, path: Optional[Path]) -> Path:
+        if path is None:
+            raise ValueError("Got `None` for datapath. Embedding data cannot be None.")
         if not path.exists():
             raise FileNotFoundError(
                 f"No data found at {path} (realpath: {os.path.realpath(path)})"
@@ -215,7 +217,7 @@ class EmbeddingDataset:
 class VisionDataset(EmbeddingDataset):
     def __init__(
         self,
-        datapath: Path,
+        datapath: Optional[Path],
         name: Optional[str],
     ) -> None:
         super().__init__(datapath=datapath, name=name)
@@ -305,7 +307,7 @@ class VisionDataset(EmbeddingDataset):
             img = Image.open(BytesIO(byts)).convert("RGB")
             del byts
             idx = df.index[ix]
-            df.loc[idx, "image"] = img
+            df.loc[idx, "image"] = img  # type: ignore
         # im = df["image"].apply(lambda b: Image.open(BytesIO(b)).convert("RGB"))  # type: ignore
         # df = pd.concat([im, df.drop(columns="image")], axis=1)
         self.validate_data(df)
@@ -318,7 +320,7 @@ class VisionDataset(EmbeddingDataset):
 class NLPDataset(EmbeddingDataset):
     def __init__(
         self,
-        datapath: Path,
+        datapath: Optional[Path],
         name: Optional[str],
     ) -> None:
         super().__init__(datapath=datapath, name=name)

@@ -278,7 +278,7 @@ class Inference:
     def __bool__(self) -> bool:
         return bool(self.kind)
 
-    def __eq__(self, other: Inference) -> bool:
+    def __eq__(self, other: object | Inference) -> bool:
         if not isinstance(other, Inference):
             return False
         return self.kind == other.kind and self.reason == other.reason
@@ -335,7 +335,7 @@ def infer_timelike(series: Series) -> Inference:
     N = len(series)
     n_subsamp = max(ceil(0.5 * N), 500)
     n_subsamp = min(n_subsamp, N)
-    idx = np.random.permutation(N)[:n_subsamp]
+    idx = Series(np.random.permutation(N)[:n_subsamp])
 
     percent = series.iloc[idx].apply(is_timelike).sum() / n_subsamp
     if percent >= 1.0:
@@ -345,12 +345,12 @@ def infer_timelike(series: Series) -> Inference:
         if p > 0.5:
             return Inference(
                 InferredKind.CertainTime,
-                f"{p*100:< 2.2f}% of data appears parseable as datetime data",
+                f"{p * 100:< 2.2f}% of data appears parseable as datetime data",
             )
         if p > 0.3:
             return Inference(
                 InferredKind.MaybeTime,
-                f"{p*100:< 2.2f}% of data appears parseable as datetime data",
+                f"{p * 100:< 2.2f}% of data appears parseable as datetime data",
             )
     return Inference()
 
@@ -465,9 +465,7 @@ def converts_to_float(series: Series) -> bool:
 
 def infer_binary(series: Series) -> Inference:
     """To be run AFTER infer_constant, infer_timelike, infer_id"""
-    unqs = (
-        series.astype(str).apply(lambda x: np.nan if x in NAN_STRINGS else x).unique()
-    )
+    unqs = series.astype(str).apply(lambda x: np.nan if x in NAN_STRINGS else x).unique()
     try:
         str_nan = "nan" in map(str.lower, unqs.astype(str))
     except Exception:
@@ -486,9 +484,7 @@ def infer_binary(series: Series) -> Inference:
             return Inference(InferredKind.BinaryViaNan, "Only one unique non-NaN value")
         return Inference(InferredKind.Binary, "Two unique non-Nan values")
     elif len(unqs) == 3 and (numpy_nan or pandas_nan or str_nan):
-        return Inference(
-            InferredKind.BinaryPlusNan, "Two unique non-Nan values plus NaN"
-        )
+        return Inference(InferredKind.BinaryPlusNan, "Two unique non-Nan values plus NaN")
 
     return Inference()
 
@@ -522,9 +518,7 @@ def infer_ordinal(series: Series) -> Inference:
     unq_ints, cnts = np.unique(ints, return_counts=True)
     vmin, vmax = ints.min(), ints.max()
     if len(unq_ints) == 1:
-        return Inference(
-            InferredKind.CertainOrd, "Constant integer after dropping NaNs"
-        )
+        return Inference(InferredKind.CertainOrd, "Constant integer after dropping NaNs")
 
     # no categorical variable should ever be missing the first category
     if int(vmin) not in [0, 1]:

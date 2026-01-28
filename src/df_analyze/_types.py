@@ -1,8 +1,7 @@
-from typing import Union
+from typing import Literal, Union
 
 from numpy import ndarray
 from pandas import DataFrame, Series
-from typing_extensions import Literal
 
 # fmt: off
 # Data types

@@ -98,7 +98,7 @@ def test_json(dataset: Tuple[str, TestDataset]) -> None:
                 assert outdir.exists()
                 assert opts.program_dirs.options is not None
                 assert opts.program_dirs.options.exists()
-                opts2 = ProgramOptions.from_json(opts.program_dirs.root)
+                opts2 = ProgramOptions.from_json(opts.program_dirs.root)  # type: ignore
                 for attr in opts.__dict__:
                     attr1 = getattr(opts, attr)
                     attr2 = getattr(opts2, attr)

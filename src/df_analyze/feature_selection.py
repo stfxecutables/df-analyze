@@ -8,6 +8,12 @@ import os
 from typing import Union
 
 import numpy as np
+from numpy import ndarray
+from pandas import DataFrame, Series
+from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import StandardScaler
+from typing_extensions import Literal
+
 from df_analyze._setup import MEMOIZER
 from df_analyze._types import (
     CorrMethod,
@@ -16,11 +22,6 @@ from df_analyze._types import (
 from df_analyze.legacy.src.classifiers import get_classifier_constructor
 from df_analyze.legacy.src.regressors import get_regressor_constructor
 from df_analyze.sklearn_pasta._sequential import SequentialFeatureSelector
-from numpy import ndarray
-from pandas import DataFrame, Series
-from sklearn.metrics import roc_auc_score
-from sklearn.preprocessing import StandardScaler
-from typing_extensions import Literal
 
 # FEATURE_CACHE = GLOBALS.JOBLIB_CACHE_DIR / "__features__"
 # MEMOIZER = Memory(location=FEATURE_CACHE, backend="local", compress=9)
@@ -129,7 +130,7 @@ def select_stepwise_features(
         get_classifier_constructor if is_classification else get_regressor_constructor
     )
     selector = SequentialFeatureSelector(
-        estimator=get_model(estimator)(),
+        estimator=get_model(estimator)(),  # type: ignore
         n_features_to_select=n_features,
         direction=direction,
         scoring="accuracy" if is_classification else "neg_mean_absolute_error",
