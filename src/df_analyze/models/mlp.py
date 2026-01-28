@@ -297,7 +297,11 @@ class MLPEstimator(DfAnalyzeModel):
             ) from e
 
     def refit_tuned(
-        self, X: DataFrame, y: Series, tuned_args: Optional[dict[str, Any]] = None
+        self,
+        X: DataFrame,
+        y: Series,
+        g: Optional[Series] = None,
+        tuned_args: Optional[Mapping] = None,
     ) -> None:
         tuned_args = tuned_args or {}
         kwargs = {
@@ -308,7 +312,7 @@ class MLPEstimator(DfAnalyzeModel):
         }
         self.tuned_model = self.model_cls(**kwargs)
         Xt, yt = self._to_torch(X, y)
-        self.tuned_model.fit(Xt, yt)
+        self.tuned_model.fit(Xt, yt)  # type: ignore
 
     def predict(self, X: DataFrame) -> ndarray:
         Xt = self._to_torch(X)
@@ -338,10 +342,8 @@ class MLPEstimator(DfAnalyzeModel):
         Xt = self._to_torch(X)
         return self.tuned_model.predict_proba(Xt)
 
-    def _to_model_args(
-        self, optuna_args: dict[str, Any], X_train: DataFrame
-    ) -> dict[str, Any]:
-        final_args: dict[str, Any] = deepcopy(optuna_args)
+    def _to_model_args(self, optuna_args: Mapping, X_train: DataFrame) -> dict[str, Any]:
+        final_args: Mapping = {**deepcopy(optuna_args)}
         restarts = final_args.pop("restarts")
         early = final_args.pop("early_stopping")
 
@@ -538,9 +540,9 @@ if __name__ == "__main__":
         # preds = net.predict(X_test)
         # print(preds[:10])
         print("Acc:", net.score(X_test, y_test))
-        fig, ax = plt.subplots()
-        ax.plot(net.history[:, "train_loss"], color="black", label="train")
-        ax.plot(net.history[:, "valid_loss"], color="orange", label="val")
-        ax.set_title(f"LR={lr}")
-        plt.show(block=False)
+        # fig, ax = plt.subplots()
+        # ax.plot(net.history[:, "train_loss"], color="black", label="train")
+        # ax.plot(net.history[:, "valid_loss"], color="orange", label="val")
+        # ax.set_title(f"LR={lr}")
+        # plt.show(block=False)
     plt.show()

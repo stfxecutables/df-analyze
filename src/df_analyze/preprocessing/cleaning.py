@@ -105,7 +105,7 @@ def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, 
     newnames = [new for old, new in renames]
     df.columns = newnames
     df[target] = y
-    df.columns = df.columns.astype(str)
+    df.columns = df.columns.astype(str)  # type: ignore
     df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
     return df, renames
 
@@ -533,7 +533,7 @@ def drop_cols(
 
 def floatify(df: DataFrame) -> DataFrame:
     df = df.copy()
-    cols = df.select_dtypes(include=["object", "string[python]"]).columns.tolist()
+    cols = df.select_dtypes(include=["object", "string[python]"]).columns.tolist()  # type: ignore
     for col in cols:
         try:
             df[col] = df[col].astype(float)

@@ -108,7 +108,12 @@ def silent_scorer(f: Callable) -> Callable:
     return silent
 
 
-def robust_auroc_score(y_true: Series, y_prob: ndarray, *args, **kwargs) -> float:
+def robust_auroc_score(
+    y_true: Union[Series, ndarray], y_prob: ndarray, *args, **kwargs
+) -> float:
+    if not isinstance(y_true, Series):
+        y_true = Series(y_true)
+
     try:
         assert_all_finite(y_true)
         assert_all_finite(y_prob)
@@ -121,7 +126,7 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray, *args, **kwargs) -> floa
         )
         idx_keep = ~np.isnan(y_prob).any(axis=1)
         idx_keep = idx_keep & np.isfinite(y_prob).any(axis=1)
-        y_true = y_true.loc[idx_keep]
+        y_true = y_true.loc[idx_keep]  # type: ignore
         y_prob = y_prob[idx_keep]
 
     try:
@@ -147,7 +152,7 @@ def robust_auroc_score(y_true: Series, y_prob: ndarray, *args, **kwargs) -> floa
 
     except Exception as e:
         idx = np.random.permutation(len(y_true))[:20]
-        yt = y_true.iloc[idx]
+        yt = y_true.iloc[idx]  # type: ignore
         yp = y_prob[idx]
         warn(
             "Could not compute AUROC for given inputs:\n"

@@ -127,7 +127,7 @@ def test_str_continuous_warn(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     X = df.drop(columns="target")
     dtypes = ["object", "string[python]"]
-    cols = X.select_dtypes(include=dtypes).columns.tolist()
+    cols = X.select_dtypes(include=dtypes).columns.tolist()  # type: ignore
 
     # with pytest.warns(UserWarning, match=".*converted into floating.*"):
     inspect_str_columns(df, str_cols=cols, _warn=False)
@@ -138,7 +138,9 @@ def do_detect_floats(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     cats = ds.categoricals
     conts = ds.continuous
-    results = inspect_data(df=df, target="target", grouper=None, categoricals=cats)
+    df_inspect, results = inspect_data(
+        df=df, target="target", grouper=None, categoricals=cats
+    )
     float_cols = [*results.conts.infos.keys()]
     if sorted(float_cols) != sorted(conts):
         raise ValueError(f"Columns detected as continuous not as expected for {dsname}")
@@ -157,7 +159,9 @@ def do_detect_ids(dataset: tuple[str, TestDataset]) -> None:
     df = ds.load()
     cats = ds.categoricals
     try:
-        results = inspect_data(df=df, target="target", grouper=None, categoricals=cats)
+        df_inspect, results = inspect_data(
+            df=df, target="target", grouper=None, categoricals=cats
+        )
         assert "communityname" in results.ids.infos
     except Exception as e:
         raise ValueError("Identifier 'communityname' was not detected") from e

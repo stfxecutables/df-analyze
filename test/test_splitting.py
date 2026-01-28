@@ -109,9 +109,9 @@ def test_approximate_split(capsys: CaptureFixture) -> None:
     i = 0
     attempts = 0
     while i < 500:
-        n_samp = rng.integers(200, 2000)
-        n_cls = rng.integers(2, 5)
-        n_grp = rng.integers(2, 10)
+        n_samp = int(rng.integers(200, 2000))
+        n_cls = int(rng.integers(2, 5))
+        n_grp = int(rng.integers(2, 10))
         g, y = random_grouped_data(
             n_cls=n_cls, n_grp=n_grp, n_samp=n_samp, n_min_per_targ_cls=20
         )
@@ -173,9 +173,9 @@ def test_degenerate_group_splitting(capsys: CaptureFixture) -> None:
             seed = rng.integers(0, 2**32 - 1)
             rng = np.random.default_rng(seed=seed)
 
-            n_samp = rng.integers(100, 20000)
-            n_cls = rng.integers(2, 3)
-            n_grp = rng.integers(2, 10)
+            n_samp = int(rng.integers(100, 20000))
+            n_cls = int(rng.integers(2, 3))
+            n_grp = int(rng.integers(2, 10))
             y, g = random_grouped_data(
                 n_cls=n_cls, n_grp=n_grp, n_samp=n_samp, n_min_per_targ_cls=20
             )
