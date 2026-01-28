@@ -274,17 +274,17 @@ def test_degenerate_group_splitting(capsys: CaptureFixture) -> None:
                                 sgkf_ix_train
                             )
 
-                            full_infos.append(
-                                f"OmniKFold/StratifiedKFold            ({okf_n}/{skf_n}) n_overlap: {len(okf_skf_overlap)}"
-                            )
-                            full_infos.append(
-                                f"OmniKFold/StratifiedGroupKFold       ({okf_n}/{sgkf_n}) n_overlap: {len(okf_sgkf_overlap)}"
-                            )
-                            full_infos.append(
-                                f"StratifiedKFold/StratifiedGroupKFold ({skf_n}/{sgkf_n}) n_overlap: {len(skf_sgkf_overlap)}"
-                            )
+                            # full_infos.append(
+                            #     f"OmniKFold/StratifiedKFold            ({okf_n}/{skf_n}) n_overlap: {len(okf_skf_overlap)}"
+                            # )
+                            # full_infos.append(
+                            #     f"OmniKFold/StratifiedGroupKFold       ({okf_n}/{sgkf_n}) n_overlap: {len(okf_sgkf_overlap)}"
+                            # )
+                            # full_infos.append(
+                            #     f"StratifiedKFold/StratifiedGroupKFold ({skf_n}/{sgkf_n}) n_overlap: {len(skf_sgkf_overlap)}"
+                            # )
 
-                            full_info = "\n".join(full_infos)
+                            # full_info = "\n".join(full_infos)
                             row = DataFrame(
                                 {
                                     "degen": degen,

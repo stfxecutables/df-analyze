@@ -164,9 +164,9 @@ def fit_runtimes() -> None:
 
     plt.hist(df["err_h"] / 3600, bins=8, color="black")
     plt.show()
-    mean_np, med_np = df["err_np"].mean(), df["err_np"].median()
-    mean_nlogn, med_nlogn = df["err_nlogn"].mean(), df["err_nlogn"].median()
-    mean_n, med_n = df["err_n"].mean(), df["err_n"].median()
+    # mean_np, med_np = df["err_np"].mean(), df["err_np"].median()
+    # mean_nlogn, med_nlogn = df["err_nlogn"].mean(), df["err_nlogn"].median()
+    # mean_n, med_n = df["err_n"].mean(), df["err_n"].median()
 
     fig, axes = plt.subplots(ncols=2)
     sbn.scatterplot(

@@ -116,7 +116,7 @@ def check_optuna_tune_metric(
     mode: Literal["classify", "regress"],
     metric: Union[ClassifierScorer, RegressorScorer],
 ) -> tuple[float, ndarray | Series | None]:
-    ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
+    ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None  # noqa: F841
     X_tr, X_test, y_tr, y_test = fake_data(mode)
     const_target = (len(y_tr.unique()) == 1) or (len(y_test.unique()) == 1)
     while const_target:
