@@ -177,8 +177,9 @@ to see the complete command-line documentation.
 
 
 
-**Note**: If you are on Windows you may get errors with the above procedure. If
-the error is of the form:
+**Note**: If you are on Windows you may get errors with the above procedure.
+If the error involves `import torch` and a function `_load_dll_libraries()`,
+with an error message of the form:
 
 > Microsoft Visual C++ Redistributable is not installed, this may lead to the
 > DLL load failure.  It can be downloaded at [platform-specfic link]
