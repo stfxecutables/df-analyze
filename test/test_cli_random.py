@@ -8,43 +8,25 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import json
-from enum import EnumMeta
 from io import StringIO
 from tempfile import TemporaryDirectory
-from typing import Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
-import pytest
-from cli_test_helpers import ArgvContext
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from tqdm import tqdm
 
 from df_analyze.analysis.univariate.associate import (
-    CatClsStats,
-    CatRegStats,
-    ContClsStats,
-    ContRegStats,
     target_associations,
 )
 from df_analyze.analysis.univariate.predict.predict import univariate_predictions
-from df_analyze.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
+from df_analyze.cli.cli import get_options, random_cli_args
 from df_analyze.enumerables import (
-    ClsScore,
-    DfAnalyzeClassifier,
-    DfAnalyzeRegressor,
-    EmbedSelectionModel,
-    FeatureSelection,
-    NanHandling,
-    Normalization,
-    RegScore,
     ValidationMethod,
     WrapperSelection,
-    WrapperSelectionModel,
 )
 from df_analyze.hypertune import evaluate_tuned
-from df_analyze.loading import load_spreadsheet
 from df_analyze.nonsense import silence_spam
 from df_analyze.preprocessing.cleaning import sanitize_names
 from df_analyze.preprocessing.inspection.inspection import inspect_data
@@ -52,11 +34,8 @@ from df_analyze.preprocessing.prepare import prepare_data
 from df_analyze.selection.filter import filter_select_features
 from df_analyze.selection.models import model_select_features
 from df_analyze.testing.datasets import (
-    ALL_DATASETS,
     FASTEST,
-    TEST_DATASETS,
     TestDataset,
-    all_ds,
     fast_ds,
     sparse_snplike_data,
     turbo_ds,

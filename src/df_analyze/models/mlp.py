@@ -36,7 +36,6 @@ from numpy import ndarray
 from optuna import Study, Trial
 from pandas import DataFrame, Series
 from sklearn.datasets import make_classification
-from sklearn.model_selection import KFold, StratifiedKFold
 from skorch import NeuralNetClassifier, NeuralNetRegressor
 from skorch.callbacks import EarlyStopping, LRScheduler
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
@@ -57,7 +56,6 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
-from df_analyze._constants import SEED
 from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.splitting import OmniKFold

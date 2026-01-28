@@ -32,7 +32,6 @@ from df_analyze.testing.datasets import (
     all_ds,
     fast_ds,
     med_ds,
-    slow_ds,
 )
 
 

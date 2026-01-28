@@ -8,26 +8,17 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 from cli_test_helpers import ArgvContext
-from pandas import DataFrame
 
 from df_analyze._constants import TEMPLATES
 from df_analyze.analysis.univariate.associate import target_associations
 from df_analyze.analysis.univariate.predict.predict import univariate_predictions
-from df_analyze.cli.cli import ProgramOptions, get_options
+from df_analyze.cli.cli import get_options
 from df_analyze.enumerables import (
-    DfAnalyzeClassifier,
-    DfAnalyzeRegressor,
-    EmbedSelectionModel,
-    FeatureSelection,
     ValidationMethod,
-    WrapperSelection,
-    WrapperSelectionModel,
 )
 from df_analyze.hypertune import evaluate_tuned
 from df_analyze.nonsense import silence_spam

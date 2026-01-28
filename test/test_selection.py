@@ -32,7 +32,6 @@ from df_analyze.selection.filter import (
     filter_by_univariate_predictions,
 )
 from df_analyze.selection.stepwise import (
-    RedundantFeatures,
     StepwiseSelector,
     stepwise_select,
 )

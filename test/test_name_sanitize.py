@@ -14,13 +14,6 @@ import pytest
 from pandas import DataFrame
 
 from df_analyze.preprocessing.cleaning import sanitize_names
-from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
-    MEDIUM_INSPECTION,
-    SLOW_INSPECTION,
-    TestDataset,
-    fast_ds,
-)
 
 # fmt: off
 CUPID_COLS = [

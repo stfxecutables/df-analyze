@@ -12,8 +12,6 @@ import os
 import sys
 from pathlib import Path
 
-import pandas as pd
-from pandas import DataFrame
 
 from df_analyze.analysis.univariate.associate import target_associations
 from df_analyze.analysis.univariate.predict.predict import univariate_predictions
@@ -35,7 +33,6 @@ from df_analyze.selection.filter import filter_select_features
 from df_analyze.selection.models import model_select_features
 from df_analyze.testing.datasets import (
     FAST_INSPECTION,
-    FASTEST,
     MEDIUM_INSPECTION,
     SLOW_INSPECTION,
     TestDataset,

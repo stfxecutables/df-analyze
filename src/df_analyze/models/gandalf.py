@@ -14,24 +14,18 @@ import matplotlib as mpl
 mpl.rcParams["axes.formatter.useoffset"] = False
 
 import multiprocessing
-import os
-import platform
 import sys
 import warnings
 from copy import deepcopy
-from math import ceil
 from pathlib import Path
-from shutil import rmtree
 from typing import (
     Any,
     Callable,
     Mapping,
     Optional,
     Union,
-    overload,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import torch
@@ -48,23 +42,15 @@ from pytorch_tabular.models.common.layers.activations import t_softmax
 from pytorch_tabular.models.common.layers.gated_units import (
     GatedFeatureLearningUnit as GFLU,
 )
-from sklearn.datasets import make_classification
-from sklearn.model_selection import KFold, ParameterGrid, StratifiedKFold
-from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
-from skorch import NeuralNetClassifier, NeuralNetRegressor
-from skorch.callbacks import EarlyStopping, LRScheduler
+from sklearn.preprocessing import OrdinalEncoder
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
 from torch import Tensor
 from torch.nn import (
-    BatchNorm1d,
     CrossEntropyLoss,
     Dropout,
     Embedding,
-    HuberLoss,
     Identity,
     L1Loss,
-    LazyLinear,
-    LeakyReLU,
     Linear,
     Module,
     ModuleList,
@@ -74,29 +60,13 @@ from torch.nn import (
     Sequential,
 )
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy, MeanAbsoluteError
-from torchmetrics.functional import (
-    accuracy,
-    auroc,
-    explained_variance,
-    f1_score,
-    r2_score,
-    specificity,
-)
-from torchmetrics.functional import mean_absolute_error as mae_
-from torchmetrics.functional import mean_absolute_percentage_error as mape_
-from torchmetrics.functional import mean_squared_error as msqe_
-from torchmetrics.functional import recall as sensitivity
-from torchmetrics.functional import spearman_corrcoef as spearman_r
-from tqdm import tqdm
 
-from df_analyze._constants import SEED
-from df_analyze.enumerables import ClassifierScorer, Scorer
+from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
-from df_analyze.preprocessing.prepare import PreparedData
-from df_analyze.splitting import ApproximateStratifiedGroupSplit, OmniKFold
+from df_analyze.splitting import ApproximateStratifiedGroupSplit
 
 """
 If we use the usual df-analyze categorical processing pipeline, then we don't

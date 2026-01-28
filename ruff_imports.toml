@@ -1,0 +1,9 @@
+# See https://github.com/astral-sh/ruff/discussions/10106#discussioncomment-11561039
+extend = "pyproject.toml"
+
+# This special configuration is meant to *only* autofix typing issues.
+fix-only = true
+
+[lint]
+extend-safe-fixes = ["F401"]
+select = ["F401"]

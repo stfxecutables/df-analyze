@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Generator, Mapping, Optional, Type, Union
+from typing import Any, Mapping, Optional, Type, Union
 from warnings import catch_warnings, filterwarnings, warn
 
 import numpy as np
@@ -18,8 +18,6 @@ from sklearn.model_selection import (
 )
 
 from df_analyze._constants import (
-    N_TARG_LEVEL_MIN,
-    N_TARG_LEVEL_MIN_INTERNAL,
     N_TARG_LEVEL_MIN_TEST_INTERNAL,
     N_TARG_LEVEL_MIN_TRAIN_INTERNAL,
     SEED,
