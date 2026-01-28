@@ -16,9 +16,7 @@ from df_analyze._constants import (
     SIMPLE_CSV2,
     SIMPLE_XLSX,
 )
-from df_analyze.cli.cli import ProgramOptions
 from df_analyze.loading import load_csv, load_excel
-from df_analyze.testing.datasets import ALL_DATASETS, TestDataset, all_ds
 
 
 def generate_spreadsheet(tempdir: Path) -> Path: ...

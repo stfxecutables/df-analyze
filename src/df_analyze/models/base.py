@@ -8,7 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import sys
-import traceback
 from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
@@ -43,14 +42,7 @@ from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
-from sklearn.model_selection import (
-    GroupKFold,
-    KFold,
-    StratifiedGroupKFold,
-    StratifiedKFold,
-)
 
-from df_analyze._constants import SEED
 from df_analyze.enumerables import (
     Scorer,
     WrapperSelection,

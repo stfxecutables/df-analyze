@@ -15,7 +15,7 @@ import pandas as pd
 from pandas import DataFrame, Series
 from sklearn.model_selection import ParameterGrid
 
-from df_analyze.enumerables import ClassifierScorer, RegressorScorer
+from df_analyze.enumerables import RegressorScorer
 from df_analyze.models.lgbm import LightGBMRegressor
 
 FILES = sorted(Path(__file__).resolve().parent.glob("*.txt"))

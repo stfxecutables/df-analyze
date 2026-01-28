@@ -7,35 +7,13 @@ ROOT = Path(__file__).resolve().parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-import os
 import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
-from numpy.random import Generator, SeedSequence
-from pandas import DataFrame, Series
-from sklearn.metrics import multilabel_confusion_matrix, recall_score
-from typing_extensions import Literal
+from numpy.random import Generator
+from pandas import Series
+from sklearn.metrics import recall_score
 
 from src.df_analyze.scoring import npv, ppv, sensitivity, specificity
 from src.df_analyze.testing.datasets import fake_data

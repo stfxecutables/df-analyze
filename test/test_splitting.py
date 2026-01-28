@@ -12,7 +12,6 @@ sys.path.append(str(ROOT2))  # isort: skip
 
 import re
 import warnings
-from warnings import catch_warnings
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -21,13 +20,11 @@ import pandas as pd
 import pytest
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
-from sklearn.model_selection import KFold, StratifiedGroupKFold, StratifiedKFold
-from sklearn.utils.validation import check_X_y
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 from tqdm import tqdm
 
 from df_analyze.splitting import ApproximateStratifiedGroupSplit, OmniKFold
 from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
     TestDataset,
     fast_ds,
     med_ds,

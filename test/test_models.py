@@ -14,7 +14,7 @@ import traceback
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
-from typing import Literal, Optional, Union
+from typing import Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
 
-from df_analyze.enumerables import ClassifierScorer, RegressorScorer, Scorer
+from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.models.dummy import DummyClassifier, DummyRegressor
 from df_analyze.models.gandalf import LOGS, GandalfEstimator

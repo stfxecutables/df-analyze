@@ -34,7 +34,6 @@ from df_analyze.models.linear import (
     SGDClassifier,
     SGDRegressor,
 )
-from df_analyze.models.mlp import MLPEstimator
 from df_analyze.models.svm import SVMClassifier, SVMRegressor
 from df_analyze.testing.datasets import fake_data
 

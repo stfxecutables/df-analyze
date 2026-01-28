@@ -10,30 +10,16 @@ sys.path.append(str(ROOT2))  # isort: skip
 # fmt: on
 
 
-import re
-import warnings
-from argparse import Namespace
-from warnings import catch_warnings
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytest
-from pandas import DataFrame, Series
+from pandas import DataFrame
 from pytest import CaptureFixture
-from sklearn.model_selection import KFold, StratifiedGroupKFold, StratifiedKFold
-from sklearn.utils.validation import check_X_y
 from tqdm import tqdm
 
-from df_analyze.splitting import ApproximateStratifiedGroupSplit, OmniKFold
+from df_analyze.splitting import OmniKFold
 from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
-    TestDataset,
-    fast_ds,
-    med_ds,
     random_grouped_data,
-    slow_ds,
 )
 
 
