@@ -363,7 +363,7 @@ def stdout_redirected(to=os.devnull):
     stderr = sys.stderr
 
     stdout_fd = fileno(stdout)
-    stderr_fd = fileno(stderr)
+    stderr_fd = fileno(stderr)  # noqa: F841
     # copy stdout_fd before it is overwritten
     # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
     with os.fdopen(os.dup(stdout_fd), "wb") as copied:

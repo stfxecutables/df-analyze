@@ -60,7 +60,6 @@ from torch.nn import (
     Sequential,
 )
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy, MeanAbsoluteError
 
@@ -718,7 +717,6 @@ class GandalfEstimator(DfAnalyzeModel):
         #     df=X_train, y=y_train, g=g_train, is_classification=self.is_classifier
         # )
         is_cls = self.is_classifier
-        n = len(y_train)
         ss = ApproximateStratifiedGroupSplit(
             train_size=0.8,
             is_classification=is_cls,
@@ -778,7 +776,7 @@ class GandalfEstimator(DfAnalyzeModel):
         stop = "val/metric"
         delta = 0.002
         mode = "max" if is_cls else "min"
-        ckpt_metric = "val/loss"
+        # ckpt_metric = "val/loss"
         cbs = [
             # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
             ModelCheckpoint(monitor=stop, every_n_epochs=1),

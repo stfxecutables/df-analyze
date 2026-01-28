@@ -135,7 +135,7 @@ def _main_loop(ds: EmbeddingDataset, tempdir: str, modality: EmbeddingModality) 
     dl_models_from_opts(opts)
     ds = dataset_from_opts(opts)
     model, processor = get_model(opts.modality)
-    df = get_embeddings(
+    df = get_embeddings(  # noqa: F841
         ds=ds,  # type: ignore
         processor=processor,  # type: ignore
         model=model,  # type: ignore
