@@ -90,6 +90,10 @@ section-order = [
 
 [tool.pyright]
 reportMissingImports = false
+reportMissingModuleSource = false
+include = ["**/src", "**/test"]
+exclude = ["**/__*", "**/.venv", "**/src/df_analyze/legacy"]
+extraPaths = ["src/df_analyze"]
 
 
 [tool.pytest.ini_options]
