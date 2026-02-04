@@ -12,7 +12,6 @@ sys.path.append(str(ROOT2))  # isort: skip
 
 import re
 import warnings
-from warnings import catch_warnings
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -21,13 +20,11 @@ import pandas as pd
 import pytest
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
-from sklearn.model_selection import KFold, StratifiedGroupKFold, StratifiedKFold
-from sklearn.utils.validation import check_X_y
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 from tqdm import tqdm
 
 from df_analyze.splitting import ApproximateStratifiedGroupSplit, OmniKFold
 from df_analyze.testing.datasets import (
-    FAST_INSPECTION,
     TestDataset,
     fast_ds,
     med_ds,
@@ -112,9 +109,9 @@ def test_approximate_split(capsys: CaptureFixture) -> None:
     i = 0
     attempts = 0
     while i < 500:
-        n_samp = rng.integers(200, 2000)
-        n_cls = rng.integers(2, 5)
-        n_grp = rng.integers(2, 10)
+        n_samp = int(rng.integers(200, 2000))
+        n_cls = int(rng.integers(2, 5))
+        n_grp = int(rng.integers(2, 10))
         g, y = random_grouped_data(
             n_cls=n_cls, n_grp=n_grp, n_samp=n_samp, n_min_per_targ_cls=20
         )
@@ -176,9 +173,9 @@ def test_degenerate_group_splitting(capsys: CaptureFixture) -> None:
             seed = rng.integers(0, 2**32 - 1)
             rng = np.random.default_rng(seed=seed)
 
-            n_samp = rng.integers(100, 20000)
-            n_cls = rng.integers(2, 3)
-            n_grp = rng.integers(2, 10)
+            n_samp = int(rng.integers(100, 20000))
+            n_cls = int(rng.integers(2, 3))
+            n_grp = int(rng.integers(2, 10))
             y, g = random_grouped_data(
                 n_cls=n_cls, n_grp=n_grp, n_samp=n_samp, n_min_per_targ_cls=20
             )
@@ -277,17 +274,17 @@ def test_degenerate_group_splitting(capsys: CaptureFixture) -> None:
                                 sgkf_ix_train
                             )
 
-                            full_infos.append(
-                                f"OmniKFold/StratifiedKFold            ({okf_n}/{skf_n}) n_overlap: {len(okf_skf_overlap)}"
-                            )
-                            full_infos.append(
-                                f"OmniKFold/StratifiedGroupKFold       ({okf_n}/{sgkf_n}) n_overlap: {len(okf_sgkf_overlap)}"
-                            )
-                            full_infos.append(
-                                f"StratifiedKFold/StratifiedGroupKFold ({skf_n}/{sgkf_n}) n_overlap: {len(skf_sgkf_overlap)}"
-                            )
+                            # full_infos.append(
+                            #     f"OmniKFold/StratifiedKFold            ({okf_n}/{skf_n}) n_overlap: {len(okf_skf_overlap)}"
+                            # )
+                            # full_infos.append(
+                            #     f"OmniKFold/StratifiedGroupKFold       ({okf_n}/{sgkf_n}) n_overlap: {len(okf_sgkf_overlap)}"
+                            # )
+                            # full_infos.append(
+                            #     f"StratifiedKFold/StratifiedGroupKFold ({skf_n}/{sgkf_n}) n_overlap: {len(skf_sgkf_overlap)}"
+                            # )
 
-                            full_info = "\n".join(full_infos)
+                            # full_info = "\n".join(full_infos)
                             row = DataFrame(
                                 {
                                     "degen": degen,

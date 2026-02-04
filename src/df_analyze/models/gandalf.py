@@ -14,24 +14,20 @@ import matplotlib as mpl
 mpl.rcParams["axes.formatter.useoffset"] = False
 
 import multiprocessing
-import os
-import platform
 import sys
 import warnings
 from copy import deepcopy
-from math import ceil
 from pathlib import Path
-from shutil import rmtree
 from typing import (
     Any,
     Callable,
     Mapping,
     Optional,
+    Sized,
+    Type,
     Union,
-    overload,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import torch
@@ -42,29 +38,23 @@ from pytorch_lightning import LightningModule, Trainer
 from pytorch_lightning.callbacks import EarlyStopping as LightningEarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.plugins.environments import SLURMEnvironment
+from pytorch_lightning.plugins.environments import (
+    SLURMEnvironment,  # pyright: ignore[reportPrivateImportUsage]
+)
 from pytorch_tabular.models.common.layers import BatchNorm1d as GhostBatchNorm1d
 from pytorch_tabular.models.common.layers.activations import t_softmax
 from pytorch_tabular.models.common.layers.gated_units import (
     GatedFeatureLearningUnit as GFLU,
 )
-from sklearn.datasets import make_classification
-from sklearn.model_selection import KFold, ParameterGrid, StratifiedKFold
-from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
-from skorch import NeuralNetClassifier, NeuralNetRegressor
-from skorch.callbacks import EarlyStopping, LRScheduler
+from sklearn.preprocessing import OrdinalEncoder
 from skorch.callbacks.lr_scheduler import CosineAnnealingLR
 from torch import Tensor
 from torch.nn import (
-    BatchNorm1d,
     CrossEntropyLoss,
     Dropout,
     Embedding,
-    HuberLoss,
     Identity,
     L1Loss,
-    LazyLinear,
-    LeakyReLU,
     Linear,
     Module,
     ModuleList,
@@ -74,29 +64,12 @@ from torch.nn import (
     Sequential,
 )
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy, MeanAbsoluteError
-from torchmetrics.functional import (
-    accuracy,
-    auroc,
-    explained_variance,
-    f1_score,
-    r2_score,
-    specificity,
-)
-from torchmetrics.functional import mean_absolute_error as mae_
-from torchmetrics.functional import mean_absolute_percentage_error as mape_
-from torchmetrics.functional import mean_squared_error as msqe_
-from torchmetrics.functional import recall as sensitivity
-from torchmetrics.functional import spearman_corrcoef as spearman_r
-from tqdm import tqdm
 
-from df_analyze._constants import SEED
-from df_analyze.enumerables import ClassifierScorer, Scorer
+from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
-from df_analyze.preprocessing.prepare import PreparedData
-from df_analyze.splitting import ApproximateStratifiedGroupSplit, OmniKFold
+from df_analyze.splitting import ApproximateStratifiedGroupSplit
 
 """
 If we use the usual df-analyze categorical processing pipeline, then we don't
@@ -138,7 +111,8 @@ SLURMEnvironment.detect = lambda: False
 
 
 class DisabledSLURMEnvironment(SLURMEnvironment):
-    def detect(self) -> bool:
+    @staticmethod
+    def detect() -> bool:
         return False
 
     @staticmethod
@@ -712,7 +686,7 @@ class GandalfEstimator(DfAnalyzeModel):
         super().__init__(model_args)
         self.is_classifier = num_classes > 1
         self.n_cls = num_classes
-        self.model_cls: GandalfContLightningModel = GandalfContLightningModel
+        self.model_cls: Type[GandalfContLightningModel] = GandalfContLightningModel
         self.model: GandalfContLightningModel
         self.trainer: Optional[Trainer] = None
         self.tuned_trainer: Optional[Trainer] = None
@@ -748,7 +722,6 @@ class GandalfEstimator(DfAnalyzeModel):
         #     df=X_train, y=y_train, g=g_train, is_classification=self.is_classifier
         # )
         is_cls = self.is_classifier
-        n = len(y_train)
         ss = ApproximateStratifiedGroupSplit(
             train_size=0.8,
             is_classification=is_cls,
@@ -808,13 +781,27 @@ class GandalfEstimator(DfAnalyzeModel):
         stop = "val/metric"
         delta = 0.002
         mode = "max" if is_cls else "min"
-        ckpt_metric = "val/loss"
+        # ckpt_metric = "val/loss"
         cbs = [
             # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
             ModelCheckpoint(monitor=stop, every_n_epochs=1),
             LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
         ]
         # ensure we get at least one ckpt file...
+        if train.dataset is None:
+            raise ValueError("Missing training data.")
+        if train.batch_size is None:
+            raise ValueError("Missing training batch size data.")
+        if not isinstance(train.dataset, Sized):
+            raise RuntimeError("Unsupported training dataset: dataset has no len()")
+
+        if val.dataset is None:
+            raise ValueError("Missing validation data.")
+        if val.batch_size is None:
+            raise ValueError("Missing validation batch size data.")
+        if not isinstance(val.dataset, Sized):
+            raise RuntimeError("Unsupported training dataset: dataset has no len()")
+
         log_freq_train = max(1, min(len(train.dataset) // train.batch_size, 4))
         log_freq_val = max(1, min(len(val.dataset) // val.batch_size, 4))
         log_freq = min(log_freq_train, log_freq_val)
@@ -853,6 +840,8 @@ class GandalfEstimator(DfAnalyzeModel):
                 X_train=X_train, y_train=y_train, g_train=g_train
             )
             self.trainer = self._get_trainer(train=train, val=val)
+            if self.trainer is None:
+                raise ValueError("Could not get Optuna Trainer.")
             self.trainer.fit(
                 model=self.model, train_dataloaders=train, val_dataloaders=val
             )
@@ -869,7 +858,7 @@ class GandalfEstimator(DfAnalyzeModel):
         X: DataFrame,
         y: Series,
         g: Optional[Series] = None,
-        tuned_args: Optional[dict[str, Any]] = None,
+        tuned_args: Optional[Mapping] = None,
     ) -> None:
         tuned_args = tuned_args or {}
         kwargs = {
@@ -882,6 +871,8 @@ class GandalfEstimator(DfAnalyzeModel):
         kwargs["dataset"] = data
         train, val = self._train_val_loaders(X_train=X, y_train=y, g_train=g)
         self.tuned_trainer = self._get_trainer(train=train, val=val)
+        if self.tuned_trainer is None:
+            raise ValueError("Could not get Optuna tuned Trainer.")
         self.tuned_model = self.model_cls(**kwargs)
         self.tuned_trainer.fit(
             model=self.tuned_model, train_dataloaders=train, val_dataloaders=val
@@ -894,7 +885,7 @@ class GandalfEstimator(DfAnalyzeModel):
         all_logits = self.trainer.predict(
             model=self.model, dataloaders=loader, ckpt_path="best"
         )
-        logits = torch.concatenate(all_logits, dim=0)
+        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         if self.is_classifier:
             probs = torch.softmax(logits, dim=1).numpy()
             return probs.argmax(axis=1)
@@ -907,7 +898,7 @@ class GandalfEstimator(DfAnalyzeModel):
         all_logits = self.tuned_trainer.predict(
             model=self.tuned_model, dataloaders=loader, ckpt_path="best"
         )
-        logits = torch.concatenate(all_logits, dim=0)
+        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         if self.is_classifier:
             probs = torch.softmax(logits, dim=1).numpy()
             return probs.argmax(axis=1)
@@ -922,7 +913,7 @@ class GandalfEstimator(DfAnalyzeModel):
         all_logits = self.trainer.predict(
             model=self.model, dataloaders=loader, ckpt_path="best"
         )
-        logits = torch.concatenate(all_logits, dim=0)
+        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         probs = torch.softmax(logits, dim=1).numpy()
         return probs
 
@@ -935,14 +926,12 @@ class GandalfEstimator(DfAnalyzeModel):
         all_logits = self.tuned_trainer.predict(
             model=self.model, dataloaders=loader, ckpt_path="best"
         )
-        logits = torch.concatenate(all_logits, dim=0)
+        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         probs = torch.softmax(logits, dim=1).numpy()
         return probs
 
-    def _to_model_args(
-        self, optuna_args: dict[str, Any], X_train: DataFrame
-    ) -> dict[str, Any]:
-        final_args: dict[str, Any] = deepcopy(optuna_args)
+    def _to_model_args(self, optuna_args: Mapping, X_train: DataFrame) -> Mapping:
+        final_args: Mapping = deepcopy(optuna_args)
         return final_args
 
     def optuna_objective(
@@ -968,6 +957,9 @@ class GandalfEstimator(DfAnalyzeModel):
                 model_args = self._to_model_args(opt_args, X_train)
                 full_args = {**self.fixed_args, **self.default_args, **model_args}
                 full_args["dataset"] = data
+                if not isinstance(train.dataset, Sized):
+                    raise ValueError("Training data is not sized (e.g. has no length).")
+
                 n_train = len(train.dataset)
                 if full_args["virtual_batch"] > n_train:
                     full_args["virtual_batch"] = 16
@@ -980,7 +972,11 @@ class GandalfEstimator(DfAnalyzeModel):
                     model=model, dataloaders=pred, ckpt_path="best"
                 )
                 preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
-                y_true = Series(data=val.dataset.y.numpy())
+                if not hasattr(val.dataset, "y"):
+                    raise AttributeError(
+                        "Validation dataset missing target attribute `y`"
+                    )
+                y_true = Series(data=val.dataset.y.numpy())  # type: ignore
                 if self.is_classifier:
                     y_pred = Series(data=preds.argmax(axis=1))
                     y_prob = preds

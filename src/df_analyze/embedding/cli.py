@@ -222,7 +222,7 @@ class EmbeddingModality(Enum):
 class EmbeddingOptions(Debug):
     def __init__(
         self,
-        datapath: Path,
+        datapath: Optional[Path],
         modality: Union[str, EmbeddingModality],
         name: Optional[str] = None,
         outpath: Optional[Path] = None,

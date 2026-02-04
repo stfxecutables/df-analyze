@@ -8,7 +8,6 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import sys
-import traceback
 from abc import ABC, abstractmethod
 from math import ceil
 from numbers import Integral, Real
@@ -43,14 +42,7 @@ from pandas import DataFrame, Series
 from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
-from sklearn.model_selection import (
-    GroupKFold,
-    KFold,
-    StratifiedGroupKFold,
-    StratifiedKFold,
-)
 
-from df_analyze._constants import SEED
 from df_analyze.enumerables import (
     Scorer,
     WrapperSelection,
@@ -250,10 +242,14 @@ class DfAnalyzeModel(ABC):
         if self.model is None:
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
             self.model = self.model_cls_args(kwargs)[0](**kwargs)
-        self.model.fit(X_train, y_train)
+        self.model.fit(X_train, y_train)  # type: ignore
 
     def refit_tuned(
-        self, X: DataFrame, y: Series, tuned_args: Optional[Mapping] = None
+        self,
+        X: DataFrame,
+        y: Series,
+        g: Optional[Series] = None,
+        tuned_args: Optional[Mapping] = None,
     ) -> None:
         tuned_args = tuned_args or {}
         kwargs = {
@@ -269,7 +265,7 @@ class DfAnalyzeModel(ABC):
                 self.tuned_model, method="sigmoid", cv=5, n_jobs=5
             )
 
-        self.tuned_model.fit(X, y)
+        self.tuned_model.fit(X, y)  # type: ignore
 
     def htune_eval(
         self,
@@ -280,7 +276,13 @@ class DfAnalyzeModel(ABC):
         y_test: Series,
         g_test: Optional[Series],
         seed: int,
-    ) -> tuple[DataFrame, Series, Series, Optional[ndarray], Optional[ndarray]]:
+    ) -> tuple[
+        DataFrame,
+        Union[Series, ndarray],
+        Union[Series, ndarray],
+        Optional[ndarray],
+        Optional[ndarray],
+    ]:
         from df_analyze.hypertune import (
             ClassifierScorer,
             RegressorScorer,
@@ -361,7 +363,7 @@ class DfAnalyzeModel(ABC):
         df = df.reset_index()
         return df, preds_train, holdout_preds_test, probs_train, holdout_probs_test
 
-    def tuned_scores(self, X: DataFrame, y: Series) -> Series:
+    def tuned_scores(self, X: DataFrame, y: Series) -> float:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
 
@@ -423,12 +425,12 @@ class DfAnalyzeModel(ABC):
 
         return self.tuned_model.score(X, y)
 
-    def predict(self, X: DataFrame) -> Series:
+    def predict(self, X: DataFrame) -> Union[Series, ndarray]:
         if self.model is None:
             raise RuntimeError("Need to call `model.fit()` before calling `.predict()`")
         return self.model.predict(X)
 
-    def tuned_predict(self, X: DataFrame) -> Series:
+    def tuned_predict(self, X: DataFrame) -> Union[Series, ndarray]:
         if self.tuned_model is None:
             raise RuntimeError(
                 "Need to call `model.tune()` before calling `.tuned_predict()`"
@@ -459,11 +461,11 @@ class DfAnalyzeModel(ABC):
 
     @overload
     @staticmethod
-    def random(ds: TestDataset, n: Literal[1]) -> Type[DfAnalyzeModel]: ...
+    def random(ds: TestDataset, n: Literal[1]) -> Type[DfAnalyzeModel]: ...  # pyright: ignore[reportOverlappingOverload]
 
     @overload
     @staticmethod
-    def random(ds: TestDataset, n: int) -> list[Type[DfAnalyzeModel]]: ...
+    def random(ds: TestDataset, n: int) -> Sequence[Type[DfAnalyzeModel]]: ...
 
     @staticmethod
     def random(

@@ -14,7 +14,7 @@ import traceback
 from copy import deepcopy
 from pathlib import Path
 from shutil import rmtree
-from typing import Literal, Optional, Union
+from typing import Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
 
-from df_analyze.enumerables import ClassifierScorer, RegressorScorer, Scorer
+from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.models.dummy import DummyClassifier, DummyRegressor
 from df_analyze.models.gandalf import LOGS, GandalfEstimator
@@ -116,7 +116,7 @@ def check_optuna_tune_metric(
     mode: Literal["classify", "regress"],
     metric: Union[ClassifierScorer, RegressorScorer],
 ) -> tuple[float, ndarray | Series | None]:
-    ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None
+    ON_CLUSTER = os.environ.get("CC_CLUSTER") is not None  # noqa: F841
     X_tr, X_test, y_tr, y_test = fake_data(mode)
     const_target = (len(y_tr.unique()) == 1) or (len(y_test.unique()) == 1)
     while const_target:

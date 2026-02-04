@@ -159,7 +159,7 @@ Canada / DRAC), you may need to [build a container to make use of
    cd ~/Documents
    git clone https://github.com/stfxecutables/df-analyze.git
    ```
-4. Run `uv sync && uv pip install 'pytorch_tabular'`
+4. Run `uv sync`
 
 Now df-analyze is installed, and you can run e.g.
 
@@ -175,10 +175,19 @@ uv run python df-analyze.py --help
 
 to see the complete command-line documentation.
 
-If you are on Windows and get errors with the above procedure, try the
+
+
+**Note**: If you are on Windows you may get errors with the above procedure.
+If the error involves `import torch` and a function `_load_dll_libraries()`,
+with an error message of the form:
+
+> Microsoft Visual C++ Redistributable is not installed, this may lead to the
+> DLL load failure.  It can be downloaded at [platform-specfic link]
+
+try installing the missing DLL from the link provided. Otherwise, try the
 [Windows install
 instructions](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md).
-Otherwise, if you see any issues during installation, feel free to reach out
+If you see any issues during installation, feel free to reach out
 in the
 [Discussions](https://github.com/stfxecutables/df-analyze/discussions), file
 an [Issue](https://github.com/stfxecutables/df-analyze/issues), or try the

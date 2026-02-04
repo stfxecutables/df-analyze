@@ -95,11 +95,12 @@ class HtuneResult:
     params: dict[str, Any]  # optuna best_params
     metric: Union[ClassifierScorer, RegressorScorer]
     score: float
-    preds_test: Series
-    preds_train: Series
+    preds_test: Union[Series, ndarray]
+    preds_train: Union[Series, ndarray]
     probs_test: Optional[ndarray]
     probs_train: Optional[ndarray]
 
+    @no_type_check  # Pyright mucks up the conditionals here...
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HtuneResult):
             return False
@@ -178,7 +179,7 @@ class HtuneResult:
             preds_test = self.preds_test.to_list()
         else:
             preds_test = self.preds_test.tolist()
-        if isinstance(self.preds_test, Series):
+        if isinstance(self.preds_train, Series):
             preds_train = self.preds_train.to_list()
         else:
             preds_train = self.preds_train.tolist()
@@ -302,8 +303,8 @@ class PredResult:
     params: str  # optuna best_params
     metric: str
     score: float
-    preds_test: Series
-    preds_train: Series
+    preds_test: Union[Series, ndarray]
+    preds_train: Union[Series, ndarray]
     probs_test: Optional[ndarray]
     probs_train: Optional[ndarray]
 
@@ -624,7 +625,7 @@ def evaluate_tuned(
             elif model_cls is GandalfEstimator:
                 model = model_cls(num_classes=prepared.num_classes)  # type: ignore
             else:
-                model = model_cls()
+                model = model_cls()  # type: ignore
 
             print(f"Tuning {model.longname} for selection={selection}")
             try:

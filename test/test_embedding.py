@@ -26,7 +26,6 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
 from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
 from df_analyze.embedding.datasets import (
     EmbeddingDataset,
-    NLPDataset,
     VisionDataset,
     dataset_from_opts,
 )
@@ -136,7 +135,7 @@ def _main_loop(ds: EmbeddingDataset, tempdir: str, modality: EmbeddingModality) 
     dl_models_from_opts(opts)
     ds = dataset_from_opts(opts)
     model, processor = get_model(opts.modality)
-    df = get_embeddings(
+    df = get_embeddings(  # noqa: F841
         ds=ds,  # type: ignore
         processor=processor,  # type: ignore
         model=model,  # type: ignore

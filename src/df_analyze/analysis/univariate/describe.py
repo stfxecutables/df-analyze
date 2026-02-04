@@ -57,7 +57,7 @@ def describe_continuous(df: DataFrame, column: str) -> DataFrame:
         traceback.print_exc()
         p_skew = p_kurt = np.nan
     try:
-        with catch_warnings(category=RuntimeWarning) as w:
+        with catch_warnings(category=RuntimeWarning):
             warnings.filterwarnings(
                 action="ignore", category=RuntimeWarning, message=".*divide by zero.*"
             )

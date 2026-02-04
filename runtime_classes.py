@@ -7,44 +7,22 @@ ROOT = Path(__file__).resolve().parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
-import os
 import sys
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sbn
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
 from pandas import DataFrame, Index, Series
-from sklearn.linear_model import LassoCV, LinearRegression, RidgeCV
+from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
-from typing_extensions import Literal
 
 from df_analyze.testing.datasets import (
     FAST_INSPECTION,
     MEDIUM_INSPECTION,
     SLOW_INSPECTION,
-    TestDataset,
-    fast_ds,
 )
 
 matplotlib.use("QtAgg")
@@ -186,9 +164,9 @@ def fit_runtimes() -> None:
 
     plt.hist(df["err_h"] / 3600, bins=8, color="black")
     plt.show()
-    mean_np, med_np = df["err_np"].mean(), df["err_np"].median()
-    mean_nlogn, med_nlogn = df["err_nlogn"].mean(), df["err_nlogn"].median()
-    mean_n, med_n = df["err_n"].mean(), df["err_n"].median()
+    # mean_np, med_np = df["err_np"].mean(), df["err_np"].median()
+    # mean_nlogn, med_nlogn = df["err_nlogn"].mean(), df["err_nlogn"].median()
+    # mean_n, med_n = df["err_n"].mean(), df["err_n"].median()
 
     fig, axes = plt.subplots(ncols=2)
     sbn.scatterplot(

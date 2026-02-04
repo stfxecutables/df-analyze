@@ -1,3 +1,4 @@
+# pyright: reportCallIssue=false
 from __future__ import annotations
 
 import secrets
@@ -84,17 +85,17 @@ class RandEnum(Generic[T]):
     def parseN(cls, s: str) -> Optional[RandEnum]:
         if s.lower() in ["none", ""]:
             return None
-        return cls(s.lower())
+        return cls(s.lower())  # pyright: ignore[reportCallIssue]
 
     @classmethod
     def from_arg(cls: Type[T], arg: str) -> T:
-        return cls(arg)
+        return cls(arg)  # pyright: ignore[reportCallIssue]
 
     @classmethod
     def from_argN(cls: Type[T], arg: str) -> Optional[T]:
         if "none" in str(arg).lower():
             return None
-        return cls(arg)
+        return cls(arg)  # pyright: ignore[reportCallIssue]
 
     @classmethod
     def from_args(cls: Type[T], args: Sequence[str]) -> tuple[T, ...]:
@@ -103,13 +104,13 @@ class RandEnum(Generic[T]):
             return tuple()
         if isinstance(args, list) or isinstance(args, tuple):
             if all(isinstance(arg, cls) for arg in args):
-                return tuple([cls(arg) for arg in args])
+                return tuple([cls(arg) for arg in args])  # pyright: ignore[reportCallIssue]
 
             clean = tuple([s for s in args if "none" not in str(s).lower()])
             if len(clean) == 0:
                 return tuple()
             return tuple([cls(s) for s in clean])
-        return (cls(args),)
+        return (cls(args),)  # pyright: ignore[reportCallIssue]
 
     @no_type_check
     def __lt__(self: T, other: Type[T]) -> bool:
@@ -131,7 +132,7 @@ class Scorer:
 
     @staticmethod
     def get_scores(
-        y_true: Series, y_pred: Series, y_prob: ndarray
+        y_true: Series, y_pred: Series, y_prob: Optional[ndarray]
     ) -> dict[str, float]: ...
 
     @staticmethod
@@ -254,7 +255,9 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
     def default() -> ClassifierScorer:
         return ClassifierScorer.Accuracy
 
-    def tuning_score(self, y_true: Series, y_pred: Series) -> float:
+    def tuning_score(
+        self, y_true: Union[Series, ndarray], y_pred: Union[Series, ndarray]
+    ) -> float:
         item = self.value
         if self is ClassifierScorer.AUROC:
             warn(
@@ -286,8 +289,12 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
         return True
 
     @staticmethod
-    def get_scores(y_true: Series, y_pred: Series, y_prob: ndarray) -> dict[str, float]:
-        if y_prob.shape[1] == 2:
+    def get_scores(
+        y_true: Union[Series, ndarray],
+        y_pred: Union[Series, ndarray],
+        y_prob: Optional[ndarray],
+    ) -> dict[str, float]:
+        if y_prob is not None and y_prob.shape[1] == 2:
             y_prob = y_prob[:, 1].reshape(-1, 1)
 
         if np.asarray(np.isnan(y_true)).any():
@@ -295,9 +302,10 @@ class ClassifierScorer(Scorer, RandEnum, Enum):
         if np.asarray(np.isnan(y_pred)).any():
             raise ValueError("NaNs in y_pred")
 
+        auroc = np.nan if y_prob is None else robust_auroc_score(y_true, y_prob)
         raws = {
             ClassifierScorer.Accuracy.value: accuracy_score(y_true, y_pred),
-            ClassifierScorer.AUROC.value: robust_auroc_score(y_true, y_prob),
+            ClassifierScorer.AUROC.value: auroc,
             ClassifierScorer.Sensitivity.value: sensitivity(y_true, y_pred),
             ClassifierScorer.Specificity.value: specificity(y_true, y_pred),
             ClassifierScorer.PPV.value: ppv(y_true, y_pred),
@@ -337,7 +345,9 @@ class RegressorScorer(Scorer, RandEnum, Enum):
     def default() -> RegressorScorer:
         return RegressorScorer.MAE
 
-    def tuning_score(self, y_true: Series, y_pred: Series) -> float:
+    def tuning_score(
+        self, y_true: Union[Series, ndarray], y_pred: Union[Series, ndarray]
+    ) -> float:
         raws = {
             RegressorScorer.MAE.value: mean_absolute_error,
             RegressorScorer.MSqE.value: mean_squared_error,
@@ -358,7 +368,11 @@ class RegressorScorer(Scorer, RandEnum, Enum):
         }[self.value]
 
     @staticmethod
-    def get_scores(y_true: Series, y_pred: Series) -> dict[str, float]:
+    def get_scores(
+        y_true: Union[Series, ndarray],
+        y_pred: Union[Series, ndarray],
+        y_prob: Optional[ndarray] = None,
+    ) -> dict[str, float]:
         raws = {
             RegressorScorer.MAE.value: mean_absolute_error(y_true, y_pred),
             RegressorScorer.MSqE.value: mean_squared_error(y_true, y_pred),

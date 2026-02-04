@@ -1280,7 +1280,7 @@ def random_cli_args(
         args_dict.pop("--spreadsheet", None)
 
         n_test = np.random.randint(n_tests_min, n_tests_max)
-        fold_idxs = np.arange(n_test)
+        fold_idxs = np.arange(n_test).tolist()
         testfiles = [add_fold_idx(tempfile, fold_idx) for fold_idx in fold_idxs]
         for file in testfiles:
             file.touch()
