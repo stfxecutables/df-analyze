@@ -241,7 +241,8 @@ class DfAnalyzeModel(ABC):
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
-            self.model = self.model_cls_args(kwargs)[0](**kwargs)
+            model_cls, clean_args = self.model_cls_args(kwargs)
+            self.model = model_cls(**clean_args)
         self.model.fit(X_train, y_train)  # type: ignore
 
     def refit_tuned(
@@ -258,7 +259,8 @@ class DfAnalyzeModel(ABC):
             **self.model_args,
             **tuned_args,
         }
-        self.tuned_model = self.model_cls_args(kwargs)[0](**kwargs)
+        model_cls, clean_args = self.model_cls_args(kwargs)
+        self.tuned_model = model_cls(**clean_args)
 
         if self.needs_calibration:
             self.tuned_model = CVCalibrate(
@@ -328,30 +330,37 @@ class DfAnalyzeModel(ABC):
             seed=seed,
         )
 
+        tuned_model_orig = self.tuned_model
         scores = []
-        for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
-            try:
-                df_train = X_test.loc[idx_train]
-                df_test = X_test.loc[idx_test]
-                targ_train = y_test.loc[idx_train]
-                targ_test = y_test.loc[idx_test]
-            except KeyError as e:
-                raise IndexError("Couldn't use .loc in internal k-fold") from e
-            self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
-            inner_preds_test = self.tuned_predict(X=df_test)
-            if self.is_classifier:
-                inner_probs_test = self.predict_proba(X=df_test)
-                scorer = ClassifierScorer
-                scores.append(
-                    scorer.get_scores(
-                        y_true=targ_test, y_pred=inner_preds_test, y_prob=inner_probs_test
+        try:
+            for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
+                try:
+                    df_train = X_test.loc[idx_train]
+                    df_test = X_test.loc[idx_test]
+                    targ_train = y_test.loc[idx_train]
+                    targ_test = y_test.loc[idx_test]
+                except KeyError as e:
+                    raise IndexError("Couldn't use .loc in internal k-fold") from e
+
+                self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
+                inner_preds_test = self.tuned_predict(X=df_test)
+                if self.is_classifier:
+                    inner_probs_test = self.predict_proba(X=df_test)
+                    scorer = ClassifierScorer
+                    scores.append(
+                        scorer.get_scores(
+                            y_true=targ_test,
+                            y_pred=inner_preds_test,
+                            y_prob=inner_probs_test,
+                        )
                     )
-                )
-            else:
-                scorer = RegressorScorer
-                scores.append(
-                    scorer.get_scores(y_true=targ_test, y_pred=inner_preds_test)
-                )
+                else:
+                    scorer = RegressorScorer
+                    scores.append(
+                        scorer.get_scores(y_true=targ_test, y_pred=inner_preds_test)
+                    )
+        finally:
+            self.tuned_model = tuned_model_orig
 
         holdout = Series(holdout_scores, name="holdout")
         train = Series(train_scores, name="trainset")

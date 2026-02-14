@@ -19,6 +19,14 @@ from sklearn.linear_model import SGDRegressor as SklearnSGDRegressor
 # https://scikit-learn.org/stable/auto_examples/linear_model/plot_quantile_regression.html
 
 
+def _normalize_sgd_average_arg(full_args: dict[str, Any]) -> dict[str, Any]:
+    # sklearn validates `average` as bool or int > 0; Optuna best_params may return 0.
+    if full_args.get("average") == 0:
+        full_args = dict(full_args)
+        full_args["average"] = False
+    return full_args
+
+
 class ElasticNetRegressor(DfAnalyzeModel):
     shortname = "elastic"
     longname = "ElasticNet Regressor"
@@ -121,6 +129,7 @@ class SGDClassifierSelector(DfAnalyzeModel):
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        full_args = _normalize_sgd_average_arg(full_args)
         return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
@@ -131,10 +140,7 @@ class SGDClassifierSelector(DfAnalyzeModel):
             early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
             average=trial.suggest_int("average", 0, 20),
         )
-        # prevent a FutureWarning
-        if args["average"] == 0:
-            args["average"] = False
-        return args
+        return _normalize_sgd_average_arg(args)
 
 
 class SGDRegressorSelector(DfAnalyzeModel):
@@ -149,6 +155,7 @@ class SGDRegressorSelector(DfAnalyzeModel):
         self.default_args = dict(learning_rate="adaptive", penalty="l1", eta0=3e-4)
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
+        full_args = _normalize_sgd_average_arg(full_args)
         return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
@@ -167,7 +174,4 @@ class SGDRegressorSelector(DfAnalyzeModel):
             early_stopping=trial.suggest_categorical("early_stopping", [True, False]),
             average=trial.suggest_int("average", 0, 20),
         )
-        # prevent a FutureWarning
-        if args["average"] == 0:
-            args["average"] = False
-        return args
+        return _normalize_sgd_average_arg(args)

@@ -282,6 +282,16 @@ class PreparedData:
         if validate:
             X, X_cont, X_cat, y = self.validate(X, X_cont, X_cat, y)
 
+        if groups is not None:
+            if len(groups) != len(X):
+                raise ValueError(
+                    f"Grouping data number of samples ({len(groups)}) does not "
+                    f"match number of samples in processed data ({len(X)})"
+                )
+            groups = groups.copy()
+            groups.reset_index(drop=True, inplace=True)
+            groups.index = X.index.copy(deep=True)
+
         self.X = self.rename_cols(X)
         self.X_cont: Optional[DataFrame] = (
             None if X_cont is None else self.rename_cols(X_cont)

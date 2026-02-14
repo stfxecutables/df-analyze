@@ -216,6 +216,26 @@ def main() -> None:
         prog_dirs.save_eval_report(eval_results, fold_idx)
         prog_dirs.save_eval_tables(eval_results, fold_idx)
         prog_dirs.save_eval_data(eval_results, fold_idx)
+        if options.adaptive_error:
+            from df_analyze.analysis.adaptive_error.runner import (
+                run_adaptive_error_analysis,
+            )
+
+            base_dir = None
+            if prog_dirs.results is not None:
+                base_dir = prog_dirs.results / "adaptive_error"
+                if fold_idx is not None:
+                    base_dir = base_dir / f"test{fold_idx:02d}"
+
+            run_adaptive_error_analysis(
+                prep_train=prep_train,
+                prep_test=prep_test,
+                eval_results=eval_results,
+                options=options,
+                prog_dirs=prog_dirs,
+                no_preds=options.no_preds,
+                base_dir=base_dir,
+            )
         try:
             print(eval_results.to_markdown())
         except ValueError as e:

@@ -62,6 +62,29 @@ from df_analyze.cli.parsing import (
     separator,
 )
 from df_analyze.cli.text import (
+    ADAPTIVE_ERROR_HELP,
+    AER_ADAPTIVE_BINNING_HELP,
+    AER_ALPHA_HELP,
+    AER_BINS_HELP,
+    AER_CONFIDENCE_METRIC_HELP,
+    AER_ENS_ALPHA_HELP,
+    AER_ENS_BETA_HELP,
+    AER_ENS_LAMBDA_HELP,
+    AER_ENS_TAU0_HELP,
+    AER_ENS_TAU_HIGH_HELP,
+    AER_ENS_TAU_LOW_HELP,
+    AER_ENS_TOP_N_HELP,
+    AER_ENS_TRIM_Q_HELP,
+    AER_ENSEMBLE_HELP,
+    AER_ENSEMBLE_STRATEGIES_HELP,
+    AER_MIN_BIN_COUNT_HELP,
+    AER_MONOTONIC_HELP,
+    AER_NMIN_HELP,
+    AER_OOF_FOLDS_HELP,
+    AER_PRIOR_STRENGTH_HELP,
+    AER_SMOOTH_HELP,
+    AER_TARGET_ERROR_HELP,
+    AER_TOP_K_HELP,
     ASSOC_SELECT_CAT_CLS_STATS,
     ASSOC_SELECT_CAT_REG_STATS,
     ASSOC_SELECT_CONT_CLS_STATS,
@@ -224,6 +247,29 @@ class ProgramOptions(Debug):
         verbosity: Verbosity,
         no_warn_explosion: bool,
         no_preds: bool,
+        adaptive_error: bool = False,
+        aer_oof_folds: int = 5,
+        aer_bins: int = 20,
+        aer_target_error: float = 0.05,
+        aer_alpha: float = 0.05,
+        aer_min_bin_count: int = 10,
+        aer_prior_strength: float = 2.0,
+        aer_smooth: bool = True,
+        aer_monotonic: bool = False,
+        aer_adaptive_binning: bool = False,
+        aer_confidence_metric: str = "auto",
+        aer_nmin: int = 1,
+        aer_top_k: int = 0,
+        aer_ensemble: bool = False,
+        aer_ensemble_strategies: Optional[tuple[str, ...]] = None,
+        aer_ens_top_n: int = 3,
+        aer_ens_beta: float = 5.0,
+        aer_ens_tau0: float = 0.3,
+        aer_ens_lambda: float = 0.5,
+        aer_ens_alpha: float = 0.7,
+        aer_ens_trim_q: float = 0.6,
+        aer_ens_tau_low: float = 0.15,
+        aer_ens_tau_high: float = 0.35,
     ) -> None:
         # memoization-related
         # other
@@ -290,6 +336,33 @@ class ProgramOptions(Debug):
         self.verbosity: Verbosity = verbosity
         self.no_warn_explosion: bool = no_warn_explosion
         self.no_preds: bool = no_preds
+        self.adaptive_error: bool = adaptive_error
+        self.aer_oof_folds: int = aer_oof_folds
+        self.aer_bins: int = aer_bins
+        self.aer_target_error: float = aer_target_error
+        self.aer_alpha: float = aer_alpha
+        self.aer_min_bin_count: int = aer_min_bin_count
+        self.aer_prior_strength: float = aer_prior_strength
+        self.aer_smooth: bool = aer_smooth
+        self.aer_monotonic: bool = aer_monotonic
+        self.aer_adaptive_binning: bool = aer_adaptive_binning
+        self.aer_confidence_metric: str = aer_confidence_metric
+        self.aer_nmin: int = aer_nmin
+        self.aer_top_k: int = aer_top_k
+        self.aer_ensemble: bool = aer_ensemble
+        self.aer_ensemble_strategies: Optional[tuple[str, ...]] = (
+            tuple(aer_ensemble_strategies)
+            if aer_ensemble_strategies is not None
+            else None
+        )
+        self.aer_ens_top_n: int = aer_ens_top_n
+        self.aer_ens_beta: float = aer_ens_beta
+        self.aer_ens_tau0: float = aer_ens_tau0
+        self.aer_ens_lambda: float = aer_ens_lambda
+        self.aer_ens_alpha: float = aer_ens_alpha
+        self.aer_ens_trim_q: float = aer_ens_trim_q
+        self.aer_ens_tau_low: float = aer_ens_tau_low
+        self.aer_ens_tau_high: float = aer_ens_tau_high
 
         self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir, self.hash())
 
@@ -1059,6 +1132,146 @@ def make_parser() -> ArgumentParser:
         help=TEST_VALSIZES_HELP,
     )
     parser.add_argument(
+        "--adaptive-error",
+        action="store_true",
+        default=False,
+        help=ADAPTIVE_ERROR_HELP,
+    )
+    parser.add_argument(
+        "--aer-oof-folds",
+        type=int,
+        default=5,
+        help=AER_OOF_FOLDS_HELP,
+    )
+    parser.add_argument(
+        "--aer-bins",
+        type=int,
+        default=20,
+        help=AER_BINS_HELP,
+    )
+    parser.add_argument(
+        "--aer-target-error",
+        type=float,
+        default=0.05,
+        help=AER_TARGET_ERROR_HELP,
+    )
+    parser.add_argument(
+        "--aer-alpha",
+        type=float,
+        default=0.05,
+        help=AER_ALPHA_HELP,
+    )
+    parser.add_argument(
+        "--aer-min-bin-count",
+        type=int,
+        default=10,
+        help=AER_MIN_BIN_COUNT_HELP,
+    )
+    parser.add_argument(
+        "--aer-prior-strength",
+        type=float,
+        default=2.0,
+        help=AER_PRIOR_STRENGTH_HELP,
+    )
+    parser.add_argument(
+        "--no-aer-smooth",
+        dest="aer_smooth",
+        action="store_false",
+        default=True,
+        help=AER_SMOOTH_HELP,
+    )
+    parser.add_argument(
+        "--aer-monotonic",
+        action="store_true",
+        default=False,
+        help=AER_MONOTONIC_HELP,
+    )
+    parser.add_argument(
+        "--aer-adaptive-binning",
+        action="store_true",
+        default=False,
+        help=AER_ADAPTIVE_BINNING_HELP,
+    )
+    parser.add_argument(
+        "--aer-confidence-metric",
+        type=str,
+        default="auto",
+        help=AER_CONFIDENCE_METRIC_HELP,
+    )
+    parser.add_argument(
+        "--aer-nmin",
+        type=int,
+        default=1,
+        help=AER_NMIN_HELP,
+    )
+    parser.add_argument(
+        "--aer-top-k",
+        type=int,
+        default=0,
+        help=AER_TOP_K_HELP,
+    )
+    parser.add_argument(
+        "--aer-ensemble",
+        action="store_true",
+        default=False,
+        help=AER_ENSEMBLE_HELP,
+    )
+    parser.add_argument(
+        "--aer-ensemble-strategies",
+        nargs="+",
+        type=str,
+        default=None,
+        help=AER_ENSEMBLE_STRATEGIES_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-top-n",
+        type=int,
+        default=3,
+        help=AER_ENS_TOP_N_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-beta",
+        type=float,
+        default=5.0,
+        help=AER_ENS_BETA_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-tau0",
+        type=float,
+        default=0.3,
+        help=AER_ENS_TAU0_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-lambda",
+        type=float,
+        default=0.5,
+        help=AER_ENS_LAMBDA_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-alpha",
+        type=float,
+        default=0.7,
+        help=AER_ENS_ALPHA_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-trim-q",
+        type=float,
+        default=0.6,
+        help=AER_ENS_TRIM_Q_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-tau-low",
+        type=float,
+        default=0.15,
+        help=AER_ENS_TAU_LOW_HELP,
+    )
+    parser.add_argument(
+        "--aer-ens-tau-high",
+        type=float,
+        default=0.35,
+        help=AER_ENS_TAU_HIGH_HELP,
+    )
+    parser.add_argument(
         "--outdir",
         type=resolved_path,
         required=False,
@@ -1506,6 +1719,33 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         verbosity=cli_args.verbosity,
         no_warn_explosion=cli_args.no_warn_explosion,
         no_preds=cli_args.no_preds,
+        adaptive_error=cli_args.adaptive_error,
+        aer_oof_folds=cli_args.aer_oof_folds,
+        aer_bins=cli_args.aer_bins,
+        aer_target_error=cli_args.aer_target_error,
+        aer_alpha=cli_args.aer_alpha,
+        aer_min_bin_count=cli_args.aer_min_bin_count,
+        aer_prior_strength=cli_args.aer_prior_strength,
+        aer_smooth=cli_args.aer_smooth,
+        aer_monotonic=cli_args.aer_monotonic,
+        aer_adaptive_binning=cli_args.aer_adaptive_binning,
+        aer_confidence_metric=cli_args.aer_confidence_metric,
+        aer_nmin=cli_args.aer_nmin,
+        aer_top_k=cli_args.aer_top_k,
+        aer_ensemble=cli_args.aer_ensemble,
+        aer_ensemble_strategies=(
+            tuple(cli_args.aer_ensemble_strategies)
+            if cli_args.aer_ensemble_strategies is not None
+            else None
+        ),
+        aer_ens_top_n=cli_args.aer_ens_top_n,
+        aer_ens_beta=cli_args.aer_ens_beta,
+        aer_ens_tau0=cli_args.aer_ens_tau0,
+        aer_ens_lambda=cli_args.aer_ens_lambda,
+        aer_ens_alpha=cli_args.aer_ens_alpha,
+        aer_ens_trim_q=cli_args.aer_ens_trim_q,
+        aer_ens_tau_low=cli_args.aer_ens_tau_low,
+        aer_ens_tau_high=cli_args.aer_ens_tau_high,
     )
 
 

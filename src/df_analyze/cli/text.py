@@ -797,6 +797,123 @@ An integer specifies the number of samples to set aside for testing.
 
 """
 
+ADAPTIVE_ERROR_HELP = """
+Enable adaptive error analysis outputs.
+
+"""
+
+AER_OOF_FOLDS_HELP = """
+Number of out-of-fold splits used to fit adaptive error lookup tables.
+
+"""
+
+AER_BINS_HELP = """
+Number of bins used in adaptive error analysis.
+
+"""
+
+AER_TARGET_ERROR_HELP = """
+Target error level used by adaptive error risk-control summaries.
+
+"""
+
+AER_ALPHA_HELP = """
+Significance level used for one sided Clopper-Pearson upper bounds in
+risk controlled threshold selection (after adjustment across scanned thresholds).
+
+"""
+
+AER_MIN_BIN_COUNT_HELP = """
+Minimum count per bin for adaptive error analysis.
+
+"""
+
+AER_PRIOR_STRENGTH_HELP = """
+Strength of beta-prior shrinkage toward global error.
+
+"""
+
+AER_SMOOTH_HELP = """
+Disable smoothing of adaptive error bin estimates.
+
+"""
+
+AER_MONOTONIC_HELP = """
+Enforce monotonic expected error vs confidence mapping.
+
+"""
+
+AER_ADAPTIVE_BINNING_HELP = """
+Use quantile-based confidence bins instead of fixed-width bins.
+
+"""
+
+AER_CONFIDENCE_METRIC_HELP = """
+Confidence proxy for adaptive error mapping (or "auto").
+
+"""
+
+AER_NMIN_HELP = """
+Minimum accepted sample count in threshold selection. Candidate thresholds must
+satisfy n_A(t) >= nmin.
+
+"""
+
+AER_TOP_K_HELP = """
+If > 0, run adaptive error only on top-k tuned base models.
+
+"""
+
+AER_ENSEMBLE_HELP = """
+Enable adaptive-error ensemble analysis.
+
+"""
+
+AER_ENSEMBLE_STRATEGIES_HELP = """
+Optional subset of adaptive-error ensemble strategy names to run.
+
+"""
+
+AER_ENS_TOP_N_HELP = """
+Top-N models used by adaptive-error ensemble strategies.
+
+"""
+
+AER_ENS_BETA_HELP = """
+Beta weight for adaptive-error ensemble confidence weighting.
+
+"""
+
+AER_ENS_TAU0_HELP = """
+Base confidence threshold used by adaptive-error ensembles.
+
+"""
+
+AER_ENS_LAMBDA_HELP = """
+Regularization mixing factor used by adaptive-error ensembles.
+
+"""
+
+AER_ENS_ALPHA_HELP = """
+Support exponent used in adaptive-error ensemble scoring.
+
+"""
+
+AER_ENS_TRIM_Q_HELP = """
+Trim quantile used to suppress low-confidence ensemble members.
+
+"""
+
+AER_ENS_TAU_LOW_HELP = """
+Lower confidence cutoff for adaptive-error ensembles.
+
+"""
+
+AER_ENS_TAU_HIGH_HELP = """
+Upper confidence cutoff for adaptive-error ensembles.
+
+"""
+
 OUTDIR_HELP = f"""
 Specifies location of all results, as well as cache files for slow
 computations (e.g. stepwise feature selection). If unspecified, will attempt
