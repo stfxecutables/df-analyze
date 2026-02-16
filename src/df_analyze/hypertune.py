@@ -31,7 +31,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame, Index, Series
+from pandas import DataFrame, Series
 from scipy.special import softmax
 from sklearn.metrics import (
     accuracy_score,
@@ -65,6 +65,16 @@ if TYPE_CHECKING:
 import jsonpickle
 
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer
+from df_analyze.hypertune_io import (
+    PredArray,
+    ProbArray,
+    _deserialize_preds,
+    _deserialize_probs,
+    _preds_equal,
+    _probs_equal,
+    _serialize_preds,
+    _serialize_probs,
+)
 from df_analyze.models.gandalf import GandalfEstimator
 from df_analyze.models.mlp import MLPEstimator
 from df_analyze.preprocessing.prepare import PreparedData
@@ -95,39 +105,20 @@ class HtuneResult:
     params: dict[str, Any]  # optuna best_params
     metric: Union[ClassifierScorer, RegressorScorer]
     score: float
-    preds_test: Union[Series, ndarray]
-    preds_train: Union[Series, ndarray]
-    probs_test: Optional[ndarray]
-    probs_train: Optional[ndarray]
+    preds_test: PredArray
+    preds_train: PredArray
+    probs_test: ProbArray
+    probs_train: ProbArray
+    target: Optional[str] = None
 
     @no_type_check  # Pyright mucks up the conditionals here...
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HtuneResult):
             return False
-
-        if (self.probs_test is None) and (other.probs_test is None):
-            probs_test_equal = True
-        elif isinstance(self.probs_test, ndarray) and isinstance(
-            other.probs_test, ndarray
-        ):
-            probs_test_equal = np.all(
-                (self.probs_test.round(8) == other.probs_test.round(8))
-            ).item()
-        else:
-            probs_test_equal = False
-
-        if (self.probs_train is None) and (other.probs_train is None):
-            probs_train_equal = True
-        elif isinstance(self.probs_train, ndarray) and isinstance(
-            other.probs_train, ndarray
-        ):
-            probs_train_equal = np.all(
-                (self.probs_train.round(8) == other.probs_train.round(8))
-            ).item()
-        else:
-            probs_train_equal = False
-
-        probs_equal = probs_test_equal and probs_train_equal
+        preds_test_equal = _preds_equal(self.preds_test, other.preds_test)
+        preds_train_equal = _preds_equal(self.preds_train, other.preds_train)
+        probs_test_equal = _probs_equal(self.probs_test, other.probs_test)
+        probs_train_equal = _probs_equal(self.probs_train, other.probs_train)
 
         ret = (
             self.selection == other.selection
@@ -139,18 +130,18 @@ class HtuneResult:
             self.params == other.params
             and round(self.score, 8) == round(other.score, 8)
             and self.metric == other.metric
-            and np.all((self.preds_test.round(8) == other.preds_test.round(8)).to_numpy())
-            and np.all(
-                (self.preds_train.round(8) == other.preds_train.round(8)).to_numpy()
-            )
-            and probs_equal
+            and preds_test_equal
+            and preds_train_equal
+            and probs_test_equal
+            and probs_train_equal
+            and self.target == other.target
         )
         return bool(ret)
 
     def to_row(self) -> DataFrame:
         selector = self.embed_select_model
         embed = "none" if selector is None else selector.value
-        return DataFrame(
+        row = DataFrame(
             {
                 "selection": self.selection,
                 "embed_selector": embed,
@@ -161,28 +152,36 @@ class HtuneResult:
             },
             index=[0],
         )
+        if self.target is not None:
+            row["target"] = self.target
+        return row
 
     def to_preds_json(self) -> str:
-        if self.probs_test is None:
-            probs_test = None
-            probs_dtype = None
-        else:
-            probs_test = self.probs_test.tolist()
-            probs_dtype = str(self.probs_test.dtype)
+        preds_kind_test, preds_test, _, preds_columns = _serialize_preds(self.preds_test)
+        preds_kind_train, preds_train, preds_dtype, _ = _serialize_preds(self.preds_train)
+        if preds_kind_test != preds_kind_train:
+            raise ValueError(
+                "Expected preds_test and preds_train to share container type."
+            )
+        preds_kind = preds_kind_test
+        if (
+            preds_kind == "dataframe"
+            and isinstance(self.preds_test, DataFrame)
+            and isinstance(self.preds_train, DataFrame)
+            and [str(col) for col in self.preds_test.columns]
+            != [str(col) for col in self.preds_train.columns]
+        ):
+            raise ValueError(
+                "Expected DataFrame predictions to use matching train/test columns."
+            )
 
-        if self.probs_train is None:
-            probs_train = None
-        else:
-            probs_train = self.probs_train.tolist()
-        preds_dtype = str(self.preds_train.dtype)
-        if isinstance(self.preds_test, Series):
-            preds_test = self.preds_test.to_list()
-        else:
-            preds_test = self.preds_test.tolist()
-        if isinstance(self.preds_train, Series):
-            preds_train = self.preds_train.to_list()
-        else:
-            preds_train = self.preds_train.tolist()
+        probs_kind_test, probs_test, probs_dtype = _serialize_probs(self.probs_test)
+        probs_kind_train, probs_train, _ = _serialize_probs(self.probs_train)
+        if probs_kind_test != probs_kind_train:
+            raise ValueError(
+                "Expected probs_test and probs_train to share container type."
+            )
+        probs_kind = probs_kind_test
         selector = (
             None if self.embed_select_model is None else self.embed_select_model.value
         )
@@ -199,7 +198,11 @@ class HtuneResult:
             "probs_test": probs_test,
             "probs_train": probs_train,
             "preds_dtype": preds_dtype,
+            "preds_kind": preds_kind,
+            "preds_columns": preds_columns,
             "probs_dtype": probs_dtype,
+            "probs_kind": probs_kind,
+            "target": self.target,
         }
         return json.dumps(obj)
 
@@ -221,6 +224,7 @@ class HtuneResult:
             preds_train=self.preds_train,
             probs_test=self.probs_test,
             probs_train=self.probs_train,
+            target=self.target,
         )
 
     @staticmethod
@@ -303,10 +307,11 @@ class PredResult:
     params: str  # optuna best_params
     metric: str
     score: float
-    preds_test: Union[Series, ndarray]
-    preds_train: Union[Series, ndarray]
-    probs_test: Optional[ndarray]
-    probs_train: Optional[ndarray]
+    preds_test: PredArray
+    preds_train: PredArray
+    probs_test: ProbArray
+    probs_train: ProbArray
+    target: Optional[str] = None
 
 
 @dataclass
@@ -318,11 +323,12 @@ class EvaluationResults:
 
     df: DataFrame
     X_train: DataFrame
-    y_train: Series
+    y_train: Union[Series, DataFrame]
     X_test: DataFrame
-    y_test: Series
+    y_test: Union[Series, DataFrame]
     results: list[HtuneResult]
     is_classification: bool
+    per_target_df: Optional[DataFrame] = None
 
     @staticmethod
     def random(ds: TestDataset, options: ProgramOptions) -> EvaluationResults:
@@ -390,21 +396,25 @@ class EvaluationResults:
         cols.remove(valset)
         col = valset
         idx = ~self.df.mean(axis=1, numeric_only=True).isna()
+        index_cols = ["model", "selection", "embed_selector"]
+        if "target" in self.df.columns:
+            index_cols.append("target")
         df = (
             self.df.loc[idx]
             .drop(columns=cols)
-            .pivot(
+            .pivot_table(
                 columns="metric",
                 values=col,
-                index=["model", "selection", "embed_selector"],
+                index=index_cols,
+                aggfunc="mean",
             )
             .reset_index()
         )
         sorter = "acc" if self.is_classification else "mae"
         ascending = not self.is_classification
-        if "embed_selector" in df.columns:
-            df.drop(columns="embed_selector")
-        return df.sort_values(by=sorter, ascending=ascending)
+        if sorter in df.columns:
+            return df.sort_values(by=sorter, ascending=ascending)
+        return df
 
     def to_markdown(self) -> str:
         df_train = self.wide_table("trainset")
@@ -424,6 +434,13 @@ class EvaluationResults:
         )
         return text
 
+    def per_target_long_table(self) -> Optional[DataFrame]:
+        if self.per_target_df is not None and len(self.per_target_df) > 0:
+            return self.per_target_df.copy()
+        if "target" in self.df.columns:
+            return self.df.copy()
+        return None
+
     def to_json(self) -> str:
         # obj = {
         #     "df": self.df.to_json()
@@ -440,10 +457,21 @@ class EvaluationResults:
     def save(self, root: Path, fold_idx: Optional[int]) -> None:
         fix = partial(add_fold_idx, fold_idx=fold_idx)
         self.df.to_csv(fix(root / "performance_long_table.csv"), index=False)
+        if self.per_target_df is not None and len(self.per_target_df) > 0:
+            self.per_target_df.to_csv(
+                fix(root / "performance_long_table_per_target.csv"),
+                index=False,
+            )
         self.X_train.to_csv(fix(root / "X_train.csv"), index=False)
         self.X_test.to_csv(fix(root / "X_test.csv"), index=False)
-        self.y_train.to_frame().to_csv(fix(root / "y_train.csv"), index=True)
-        self.y_test.to_frame().to_csv(fix(root / "y_test.csv"), index=True)
+        if isinstance(self.y_train, DataFrame):
+            self.y_train.to_csv(fix(root / "y_train.csv"), index=True)
+        else:
+            self.y_train.to_frame().to_csv(fix(root / "y_train.csv"), index=True)
+        if isinstance(self.y_test, DataFrame):
+            self.y_test.to_csv(fix(root / "y_test.csv"), index=True)
+        else:
+            self.y_test.to_frame().to_csv(fix(root / "y_test.csv"), index=True)
         results_json = ", ".join([result.to_preds_json() for result in self.results])
         results_json = "{" + '"predictions": [' + results_json + "]}"
         remain = {
@@ -469,15 +497,29 @@ class EvaluationResults:
     def load(cls, root: Path) -> EvaluationResults:
         # TODO: handle fold_idx
         df = pd.read_csv(root / "performance_long_table.csv")
+        per_target_path = root / "performance_long_table_per_target.csv"
+        per_target_df = (
+            pd.read_csv(per_target_path) if per_target_path.exists() else None
+        )
         X_train = pd.read_csv(root / "X_train.csv", engine="python")
         X_test = pd.read_csv(root / "X_test.csv", engine="python")
         df_y_tr = pd.read_csv(root / "y_train.csv", index_col=0)
         df_y_test = pd.read_csv(root / "y_test.csv", index_col=0)
 
-        y_train = Series(data=df_y_tr.values.ravel(), name=df_y_tr.columns.to_list()[0])
-        y_test = Series(
-            data=df_y_test.values.ravel(), name=df_y_test.columns.to_list()[0]
-        )
+        if df_y_tr.shape[1] == 1:
+            y_train: Union[Series, DataFrame] = Series(
+                data=df_y_tr.values.ravel(),
+                name=df_y_tr.columns.to_list()[0],
+            )
+        else:
+            y_train = df_y_tr.reset_index(drop=True)
+        if df_y_test.shape[1] == 1:
+            y_test: Union[Series, DataFrame] = Series(
+                data=df_y_test.values.ravel(),
+                name=df_y_test.columns.to_list()[0],
+            )
+        else:
+            y_test = df_y_test.reset_index(drop=True)
         enc = (root / "eval_htune_results_jsonpickle.json").read_text()
         remain = cast(dict[str, Any], jsonpickle.decode(enc))
         return EvaluationResults(
@@ -488,6 +530,7 @@ class EvaluationResults:
             y_test=y_test,
             results=remain["results"],
             is_classification=remain["is_classification"],
+            per_target_df=per_target_df,
         )
 
     @classmethod
@@ -498,16 +541,13 @@ class EvaluationResults:
         )
         pred_results = []
         for result in results["predictions"]:
-            preds_dtype = result["preds_dtype"]
-            probs_dtype = result["probs_dtype"]
-            if result["probs_test"] is None:
+            preds_test = _deserialize_preds(result, "preds_test")
+            preds_train = _deserialize_preds(result, "preds_train")
+            probs_test = _deserialize_probs(result, "probs_test")
+            probs_train = _deserialize_probs(result, "probs_train")
+            if (probs_test is None) != (probs_train is None):
                 probs_test = None
-            else:
-                probs_test = np.array(result["probs_test"], dtype=probs_dtype)
-            if result["probs_train"] is None:
                 probs_train = None
-            else:
-                probs_train = np.array(result["probs_train"], dtype=probs_dtype)
 
             pred_result = PredResult(
                 selection=result["selection"],
@@ -517,10 +557,11 @@ class EvaluationResults:
                 params=result["params"],
                 metric=result["metric"],
                 score=result["score"],
-                preds_test=Series(result["preds_test"], dtype=preds_dtype),
-                preds_train=Series(result["preds_train"], dtype=preds_dtype),
+                preds_test=preds_test,
+                preds_train=preds_train,
                 probs_test=probs_test,
                 probs_train=probs_train,
+                target=result.get("target"),
             )
             pred_results.append(pred_result)
         return pred_results
@@ -581,6 +622,7 @@ def evaluate_tuned(
     model_cls: Union[Type[DfAnalyzeModel], Type[MLPEstimator]]
     results: list[HtuneResult]
     dfs: list[DataFrame]
+    per_target_dfs: list[DataFrame]
 
     selections: dict[str, Optional[list[str]]] = {
         "none": None,
@@ -602,7 +644,7 @@ def evaluate_tuned(
     else:
         metric = options.htune_reg_metric
 
-    dfs, results = [], []
+    dfs, results, per_target_dfs = [], [], []
     for model_cls in options.models:
         for selection, cols in selections.items():
             selected_cols = _get_cols(selection=selection, selected=cols)
@@ -627,6 +669,8 @@ def evaluate_tuned(
             else:
                 model = model_cls()  # type: ignore
 
+            is_embed = "embed" in selection
+            embed_model = embed_models[selection] if is_embed else None
             print(f"Tuning {model.longname} for selection={selection}")
             try:
                 study = model.htune_optuna(
@@ -638,7 +682,14 @@ def evaluate_tuned(
                     n_jobs=-1,
                     verbosity=optuna.logging.ERROR,
                 )
-                df, preds_train, preds_test, probs_train, probs_test = model.htune_eval(
+                (
+                    df,
+                    preds_train,
+                    preds_test,
+                    probs_train,
+                    probs_test,
+                    df_target,
+                ) = model.htune_eval(
                     X_train=X_train,
                     y_train=prep_train.y,
                     g_train=prep_train.groups,
@@ -647,8 +698,6 @@ def evaluate_tuned(
                     g_test=prep_test.groups,
                     seed=options.seed,
                 )
-                is_embed = "embed" in selection
-                embed_model = embed_models[selection] if is_embed else None
                 result = HtuneResult(
                     selection="embed" if is_embed else selection,  # type: ignore
                     selected_cols=X_train.columns.to_list(),
@@ -664,6 +713,14 @@ def evaluate_tuned(
                     probs_test=probs_test,
                 )
                 results.append(result)
+                if df_target is not None and len(df_target) > 0:
+                    df_target = df_target.copy()
+                    df_target["model"] = model.shortname
+                    df_target["selection"] = selection
+                    df_target["embed_selector"] = (
+                        embed_model.value if embed_model is not None else "none"
+                    )
+                    per_target_dfs.append(df_target)
             except Exception as e:
                 if prepared.is_classification:
                     nulls = Series(ClassifierScorer.null_scores(), name="metric")
@@ -674,11 +731,10 @@ def evaluate_tuned(
                     f"{traceback.format_exc()}"
                 )
                 df = DataFrame(
-                    {"trainset": nulls, "holdout": nulls, "5-fold": nulls},
-                    index=Index(data=nulls.values, name=nulls.name),
-                )
-                is_embed = "embed" in selection
-                embed_model = embed_models[selection] if is_embed else None
+                    {"trainset": nulls, "holdout": nulls, "5-fold": nulls}
+                ).reset_index()
+                if "index" in df.columns:
+                    df = df.rename(columns={"index": "metric"})
                 result = HtuneResult(
                     selection="embed" if is_embed else selection,  # type: ignore
                     selected_cols=X_train.columns.to_list(),
@@ -694,6 +750,28 @@ def evaluate_tuned(
                     probs_test=None,
                 )
                 results.append(result)
+                if isinstance(prep_test.y, DataFrame):
+                    rows = []
+                    for target_name in prep_test.y.columns:
+                        for metric_name, null_val in nulls.items():
+                            rows.append(
+                                {
+                                    "target": str(target_name),
+                                    "metric": str(metric_name),
+                                    "trainset": float(null_val),
+                                    "holdout": float(null_val),
+                                    "5-fold": float(null_val),
+                                    "model": model.shortname,
+                                    "selection": selection,
+                                    "embed_selector": (
+                                        embed_model.value
+                                        if embed_model is not None
+                                        else "none"
+                                    ),
+                                }
+                            )
+                    if len(rows) > 0:
+                        per_target_dfs.append(DataFrame(rows))
             df["model"] = model.shortname
             df["selection"] = selection
             df["embed_selector"] = (
@@ -701,6 +779,11 @@ def evaluate_tuned(
             )
             dfs.append(df)
     df = pd.concat(dfs, axis=0, ignore_index=True)
+    per_target_df = (
+        pd.concat(per_target_dfs, axis=0, ignore_index=True)
+        if len(per_target_dfs) > 0
+        else None
+    )
     return EvaluationResults(
         df=df,
         X_train=prep_train.X,
@@ -709,6 +792,7 @@ def evaluate_tuned(
         y_test=prep_test.y,
         results=results,
         is_classification=prepared.is_classification,
+        per_target_df=per_target_df,
     )
 
 

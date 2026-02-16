@@ -5,6 +5,7 @@ import secrets
 from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum, EnumMeta
+from importlib.util import find_spec
 from math import isnan
 from random import choice, randint
 from typing import (
@@ -42,6 +43,10 @@ if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
 
 T = TypeVar("T", bound="RandEnum")
+
+
+def is_catboost_available() -> bool:
+    return find_spec("catboost") is not None
 
 
 class RandEnum(Generic[T]):
@@ -148,6 +153,7 @@ class Scorer:
 
 
 class DfAnalyzeClassifier(RandEnum, Enum):
+    CatBoost = "catboost"
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
@@ -159,6 +165,10 @@ class DfAnalyzeClassifier(RandEnum, Enum):
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
+        if self is DfAnalyzeClassifier.CatBoost:
+            from df_analyze.models.catboost import CatBoostClassifier
+
+            return CatBoostClassifier
         from df_analyze.models.dummy import DummyClassifier
         from df_analyze.models.gandalf import GandalfEstimator
         from df_analyze.models.knn import KNNClassifier
@@ -194,6 +204,7 @@ class DfAnalyzeClassifier(RandEnum, Enum):
 
 
 class DfAnalyzeRegressor(RandEnum, Enum):
+    CatBoost = "catboost"
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
@@ -205,6 +216,10 @@ class DfAnalyzeRegressor(RandEnum, Enum):
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
+        if self is DfAnalyzeRegressor.CatBoost:
+            from df_analyze.models.catboost import CatBoostRegressor
+
+            return CatBoostRegressor
         from df_analyze.models.dummy import DummyRegressor
         from df_analyze.models.gandalf import GandalfEstimator
         from df_analyze.models.knn import KNNRegressor

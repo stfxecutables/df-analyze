@@ -151,6 +151,11 @@ classification.
 
 """
 
+TARGETS_HELP_STR = """
+Comma-separated target columns for multi-target runs.
+
+"""
+
 GROUP_HELP_STR = """
 The (string) name of the grouping variable (if one is present) which will be
 used to ensure samples within the same group do not end up in both train and
@@ -212,10 +217,27 @@ If "classify", do classification. If "regress", do regression.
 
 """
 
+CLASSIFIER_CHOICES = (
+    DfAnalyzeClassifier.choices()
+)
+
+CLASSIFIER_DEFAULTS = (
+    DfAnalyzeClassifier.defaults()
+)
+
+REGRESSOR_CHOICES = (
+    DfAnalyzeRegressor.choices()
+)
+
+REGRESSOR_DEFAULTS = (
+    DfAnalyzeRegressor.defaults()
+)
+
 
 CLS_HELP_STR = f"""
 The list of classifiers to use when comparing classification performance.
-Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeClassifier]))}].
+Can be a list of elements from: [{" ".join(sorted(CLASSIFIER_CHOICES))}].
+Defaults are: [{" ".join(CLASSIFIER_DEFAULTS)}].
 
   knn         scikit-learn KNeighborsClassifier.
 
@@ -255,7 +277,8 @@ Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeCla
 
 REG_HELP_STR = f"""
 The list of regressors to use when comparing regression model performance.
-Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeRegressor]))}].
+Can be a list of elements from: [{" ".join(sorted(REGRESSOR_CHOICES))}].
+Defaults are: [{" ".join(REGRESSOR_DEFAULTS)}].
 
   knn         scikit-learn KNeighborsRegressor.
 
@@ -794,6 +817,17 @@ input spreadsheet or table to set aside for evaluating during hyperparameter
 tuning.
 
 An integer specifies the number of samples to set aside for testing.
+
+"""
+
+MT_AGG_STRATEGY_HELP_STR = """
+How to combine feature selection results from each target into a single final ranking.
+
+"""
+
+MT_TOP_K_HELP_STR = """
+After combining results across targets, keep only the top K features.
+Leave unset to keep all selected features.
 
 """
 

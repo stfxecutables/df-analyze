@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import traceback
 from dataclasses import dataclass
 from enum import Enum
@@ -225,6 +226,204 @@ class ProgramDirs(Debug):
                 "Got exception when attempting to save final evaluation report. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
+        self.save_multitarget_outputs(results, fold_idx=fold_idx)
+
+    @staticmethod
+    def _safe_target_name(target: str) -> str:
+        safe = re.sub(r"[^\w\.-]+", "_", str(target).strip())
+        safe = safe.strip("._")
+        return safe if safe else "target"
+
+    @staticmethod
+    def _natural_target_sort_key(target: Any) -> tuple[tuple[int, Any], ...]:
+        parts = re.split(r"(\d+)", str(target))
+        key: list[tuple[int, Any]] = []
+        for part in parts:
+            if part == "":
+                continue
+            if part.isdigit():
+                key.append((0, int(part)))
+            else:
+                key.append((1, part.casefold()))
+        return tuple(key)
+
+    def _target_output_dir(
+        self, base: Optional[Path], target: Optional[str]
+    ) -> Optional[Path]:
+        if base is None:
+            return None
+        if target is None:
+            return base
+        target_dir = base / self._safe_target_name(target)
+        target_dir.mkdir(exist_ok=True, parents=True)
+        return target_dir
+
+    @staticmethod
+    def _wide_eval_table(
+        df: DataFrame,
+        valset: str,
+        is_classification: bool,
+    ) -> DataFrame:
+        drop_cols = [col for col in ["trainset", "holdout", "5-fold"] if col != valset]
+        idx_cols = ["model", "selection"]
+        if "embed_selector" in df.columns:
+            idx_cols.append("embed_selector")
+        wide = (
+            df.drop(columns=drop_cols, errors="ignore")
+            .pivot_table(index=idx_cols, columns="metric", values=valset, aggfunc="mean")
+            .reset_index()
+        )
+        sorter = "acc" if is_classification else "mae"
+        ascending = not is_classification
+        if sorter in wide.columns:
+            wide = wide.sort_values(by=sorter, ascending=ascending)
+        return wide.reset_index(drop=True)
+
+    def _target_markdown(
+        self,
+        df_target: DataFrame,
+        target_name: str,
+        is_classification: bool,
+    ) -> str:
+        train = self._wide_eval_table(
+            df_target,
+            valset="trainset",
+            is_classification=is_classification,
+        )
+        hold = self._wide_eval_table(
+            df_target,
+            valset="holdout",
+            is_classification=is_classification,
+        )
+        fold = self._wide_eval_table(
+            df_target,
+            valset="5-fold",
+            is_classification=is_classification,
+        )
+        tab_train = train.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        tab_hold = hold.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        tab_fold = fold.to_markdown(tablefmt="simple", floatfmt="0.3f", index=False)
+        return (
+            f"# Final Model Performances For Target `{target_name}`\n\n"
+            "## Training set performance\n\n"
+            f"{tab_train}\n\n"
+            "## Holdout set performance\n\n"
+            f"{tab_hold}\n\n"
+            "## 5-fold performance on holdout set\n\n"
+            f"{tab_fold}\n\n"
+        )
+
+    @staticmethod
+    def _main_metric_target_table(
+        df: DataFrame, metric: str, is_classification: bool
+    ) -> Optional[DataFrame]:
+        needed = {"model", "selection", "target", "metric", "holdout"}
+        if not needed.issubset(set(df.columns)):
+            return None
+
+        idx_cols = ["model", "selection"]
+        if "embed_selector" in df.columns:
+            idx_cols.append("embed_selector")
+
+        subset = df.loc[df["metric"].astype(str) == metric].copy()
+        subset = subset.dropna(subset=["holdout"])
+        if subset.empty:
+            return None
+
+        subset["target"] = subset["target"].astype(str)
+        grouped = (
+            subset.groupby(idx_cols + ["target"], as_index=False)["holdout"]
+            .mean()
+            .reset_index(drop=True)
+        )
+        wide = (
+            grouped.pivot_table(
+                index=idx_cols,
+                columns="target",
+                values="holdout",
+                aggfunc="mean",
+            )
+            .reset_index()
+            .reset_index(drop=True)
+        )
+        target_cols = [col for col in wide.columns if col not in idx_cols]
+        target_cols = sorted(target_cols, key=ProgramDirs._natural_target_sort_key)
+        if len(target_cols) > 0:
+            wide = wide[idx_cols + target_cols]
+            wide["row_mean"] = wide[target_cols].mean(axis=1)
+            wide = (
+                wide.sort_values(by="row_mean", ascending=not is_classification)
+                .drop(columns=["row_mean"])
+                .reset_index(drop=True)
+            )
+        return wide
+
+    def save_multitarget_outputs(
+        self, results: Optional[EvaluationResults], fold_idx: Optional[int] = None
+    ) -> None:
+        if self.results is None or results is None:
+            return
+
+        long_df = results.per_target_long_table()
+        if long_df is None or "target" not in long_df.columns:
+            return
+
+        try:
+            out = add_fold_idx(
+                self.results / "final_performances_per_target.csv", fold_idx=fold_idx
+            )
+            long_df.to_csv(out, index=False)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save per-target final "
+                f"performances csv. Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+        try:
+            target_names = sorted(
+                long_df["target"].dropna().astype(str).unique().tolist(),
+                key=self._natural_target_sort_key,
+            )
+            for target_name in target_names:
+                df_target = long_df[long_df["target"].astype(str) == target_name].copy()
+                if len(df_target) == 0:
+                    continue
+                text = self._target_markdown(
+                    df_target=df_target,
+                    target_name=target_name,
+                    is_classification=results.is_classification,
+                )
+                safe_target = self._safe_target_name(target_name)
+                out = add_fold_idx(
+                    self.results / f"results_report_target_{safe_target}.md",
+                    fold_idx=fold_idx,
+                )
+                out.write_text(text, encoding="utf-8")
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save per-target markdown "
+                f"reports. Details:\n{e}\n{traceback.format_exc()}"
+            )
+
+        try:
+            metric = "acc" if results.is_classification else "mae"
+            wide = self._main_metric_target_table(
+                df=long_df,
+                metric=metric,
+                is_classification=results.is_classification,
+            )
+            if wide is None:
+                return
+            out = add_fold_idx(
+                self.results / f"main_metric_by_target_{metric}.csv",
+                fold_idx=fold_idx,
+            )
+            wide.to_csv(out, index=False)
+        except Exception as e:
+            warn(
+                "Got exception when attempting to save per-target main-metric "
+                f"spreadsheet output. Details:\n{e}\n{traceback.format_exc()}"
+            )
 
     def save_eval_data(
         self, results: Optional[EvaluationResults], fold_idx: Optional[int] = None
@@ -360,11 +559,15 @@ class ProgramDirs(Debug):
             )
 
     def save_pred_report(
-        self, report: Optional[str], fold_idx: Optional[int] = None
+        self,
+        report: Optional[str],
+        fold_idx: Optional[int] = None,
+        target: Optional[str] = None,
     ) -> None:
-        if (self.predictions is None) or (report is None):
+        out_dir = self._target_output_dir(self.predictions, target)
+        if (out_dir is None) or (report is None):
             return
-        out = add_fold_idx(self.predictions / "predictions_report.md", fold_idx=fold_idx)
+        out = add_fold_idx(out_dir / "predictions_report.md", fold_idx=fold_idx)
         try:
             out.write_text(report, encoding="utf-8")
         except Exception as e:
@@ -374,13 +577,15 @@ class ProgramDirs(Debug):
             )
 
     def save_assoc_report(
-        self, report: Optional[str], fold_idx: Optional[int] = None
+        self,
+        report: Optional[str],
+        fold_idx: Optional[int] = None,
+        target: Optional[str] = None,
     ) -> None:
-        if (self.associations is None) or (report is None):
+        out_dir = self._target_output_dir(self.associations, target)
+        if (out_dir is None) or (report is None):
             return
-        out = add_fold_idx(
-            self.associations / "associations_report.md", fold_idx=fold_idx
-        )
+        out = add_fold_idx(out_dir / "associations_report.md", fold_idx=fold_idx)
         try:
             out.write_text(report, encoding="utf-8")
         except Exception as e:
@@ -390,19 +595,23 @@ class ProgramDirs(Debug):
             )
 
     def save_univariate_preds(
-        self, preds: PredResults, fold_idx: Optional[int] = None
+        self,
+        preds: PredResults,
+        fold_idx: Optional[int] = None,
+        target: Optional[str] = None,
     ) -> None:
-        if self.predictions is None:
+        out_dir = self._target_output_dir(self.predictions, target)
+        if out_dir is None:
             return
         try:
-            preds.save_raw(self.predictions, fold_idx=fold_idx)
+            preds.save_raw(out_dir, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save raw predictions. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
         try:
-            preds.save_tables(self.predictions, fold_idx=fold_idx)
+            preds.save_tables(out_dir, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save prediction csv tables. "
@@ -410,19 +619,23 @@ class ProgramDirs(Debug):
             )
 
     def save_univariate_assocs(
-        self, assocs: AssocResults, fold_idx: Optional[int] = None
+        self,
+        assocs: AssocResults,
+        fold_idx: Optional[int] = None,
+        target: Optional[str] = None,
     ) -> None:
-        if self.associations is None:
+        out_dir = self._target_output_dir(self.associations, target)
+        if out_dir is None:
             return
         try:
-            assocs.save_raw(self.associations, fold_idx=fold_idx)
+            assocs.save_raw(out_dir, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save raw associations. "
                 f"Details:\n{e}\n{traceback.format_exc()}"
             )
         try:
-            assocs.save_tables(self.associations, fold_idx=fold_idx)
+            assocs.save_tables(out_dir, fold_idx=fold_idx)
         except Exception as e:
             warn(
                 "Got exception when attempting to save association csv tables. "
@@ -526,26 +739,46 @@ class ProgramDirs(Debug):
         if self.results is None:
             raise ValueError("Missing results directory.")
 
-        tables = sorted(self.results.rglob("*final_performances*.csv"))
+        tables = sorted(
+            table
+            for table in self.results.rglob("*final_performances*.csv")
+            if "_per_target" not in table.stem
+        )
+        if len(tables) == 0:
+            raise ValueError("Missing final performance tables for summary report.")
         if len(tables) == 1:
             return tables[0]
 
-        dfs = [pd.read_csv(table, index_col=0) for table in tables]
+        dfs = []
+        for table in tables:
+            df_i = pd.read_csv(table)
+            unnamed = [col for col in df_i.columns if str(col).startswith("Unnamed:")]
+            if len(unnamed) > 0:
+                df_i = df_i.drop(columns=unnamed, errors="ignore")
+            dfs.append(df_i)
         df = pd.concat(dfs, axis=0, ignore_index=True)
 
         sorter = "acc" if "acc" in df["metric"].values else "mae"
         ascending = sorter != "acc"
+        has_target = "target" in df.columns
         pivot_index = ["model", "selection", "test_idx"]
+        if has_target:
+            pivot_index = ["model", "selection", "target", "test_idx"]
 
         cols = ["holdout", "5-fold", "trainset"]
         final_tables = {}
         for valset in cols:
+            drop_cols = ["embed_selector"] if "embed_selector" in df.columns else []
             g = (
-                df.drop(columns=["embed_selector"])
+                df.drop(columns=drop_cols)
                 .pivot(columns="metric", values=valset, index=pivot_index)
                 .reset_index()
                 .drop(columns="test_idx")
-                .groupby(["model", "selection"])
+                .groupby(
+                    ["model", "selection", "target"]
+                    if has_target
+                    else ["model", "selection"]
+                )
             )
             means = g.mean()
             mins = g.min()

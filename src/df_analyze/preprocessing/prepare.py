@@ -1,3 +1,5 @@
+# ref: Multiclass & multioutput learning in scikit-learn: https://scikit-learn.org/stable/modules/multiclass.html
+
 from __future__ import annotations
 
 import json
@@ -19,7 +21,7 @@ from numpy.random import Generator
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
 from sklearn.model_selection import ShuffleSplit, StratifiedShuffleSplit
-from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.preprocessing import KBinsDiscretizer, RobustScaler
 
 from df_analyze._constants import (
     N_CAT_LEVEL_MIN,
@@ -36,8 +38,10 @@ from df_analyze.preprocessing.cleaning import (
     drop_unusable,
     encode_categoricals,
     encode_target,
+    encode_targets,
     handle_continuous_nans,
     normalize_continuous,
+    reindex,
 )
 from df_analyze.preprocessing.inspection.inspection import (
     ClsTargetInfo,
@@ -47,7 +51,8 @@ from df_analyze.preprocessing.inspection.inspection import (
     inspect_target,
     unify_nans,
 )
-from df_analyze.splitting import ApproximateStratifiedGroupSplit
+from df_analyze.preprocessing.targets import TargetSpec, as_target_list
+from df_analyze.splitting import ApproximateStratifiedGroupSplit, y_split_label
 from df_analyze.timing import timed
 
 
@@ -93,7 +98,7 @@ class PreparationInfo:
     final_shape: Tuple[int, int]
     n_samples_dropped_via_target_NaNs: int
     n_cont_indicator_added: int
-    target_info: Union[RegTargetInfo, ClsTargetInfo]
+    target_info: Optional[Union[RegTargetInfo, ClsTargetInfo]]
     runtimes: dict[str, float]
 
     def to_markdown(self) -> str:
@@ -111,7 +116,8 @@ class PreparationInfo:
         sections.append(f"Task:                   {task}\n")
         sections.append(f"Data original shape:    {orig_shape}\n")
         sections.append(f"Data final shape:       {final_shape}\n")
-        sections.append(f"Target feature:         {self.target_info.name}\n")
+        if self.target_info is not None:
+            sections.append(f"Target feature:         {self.target_info.name}\n")
         sections.append("\n")
         sections.append(f"Samples dropped due to NaN target: {n_drop}\n")
         sections.append(f"Indicator variables added for continuous NaNs: {n_ind}\n\n")
@@ -225,12 +231,12 @@ class PreparedData:
     def __init__(
         self,
         X: DataFrame,
-        y: Series,
+        y: Union[Series, DataFrame],
         groups: Optional[Series],
         is_classification: Optional[bool] = None,
         X_cont: Optional[DataFrame] = None,
         X_cat: Optional[DataFrame] = None,
-        labels: Optional[dict[int, str]] = None,
+        labels: Optional[Union[dict[int, str], dict[str, dict[int, str]]]] = None,
         ix_train: Optional[ndarray] = None,
         ix_tests: Optional[list[ndarray]] = None,
         tests_method: Optional[ValidationMethod] = ValidationMethod.List,
@@ -242,14 +248,13 @@ class PreparedData:
         # Attempt to automatically infer classification problem based on y.dtype
         # https://numpy.org/doc/stable/reference/generated/numpy.dtype.kind.html
         if is_classification is None:
-            kind = y.dtype.kind
-            kinds = {"f": False, "i": True, "b": True, "u": True}
-            if kind not in kinds:
-                raise ValueError(
-                    f"Got argument for parameter `y` with unsupported data type: {y.dtype}"
-                )
+            kind = y.dtypes.iloc[0].kind if isinstance(y, DataFrame) else y.dtype.kind
             if kind == "O":
-                ...
+                if isinstance(y, DataFrame):
+                    raise ValueError(
+                        "Got object dtype for multi-target y. Please encode targets "
+                        "before constructing PreparedData."
+                    )
                 # run cleaning.encode_target with X, y
                 warn(
                     f"Found 'object' dtype for argument y (name='{y.name}'). Attempting to "
@@ -260,6 +265,11 @@ class PreparedData:
                 X, y, labels, _, _ = encode_target(X, y, ix_train, ix_tests, _warn=True)
                 self.is_classification = True
             else:
+                kinds = {"f": False, "i": True, "b": True, "u": True}
+                if kind not in kinds:
+                    raise ValueError(
+                        f"Got argument for parameter `y` with unsupported data type: {y.dtype}"
+                    )
                 tname = (
                     "floating point"
                     if kind == "f"
@@ -299,10 +309,24 @@ class PreparedData:
         self.X_cat: Optional[DataFrame] = (
             None if X_cat is None else self.rename_cols(X_cat)
         )
-        self.y: Series = y
-        self.target = self.y.name
+        if isinstance(y, DataFrame):
+            self.y: Union[Series, DataFrame] = y
+            self.target_cols = y.columns.tolist()
+            self.target = self.target_cols[0] if len(self.target_cols) > 0 else ""
+        else:
+            name = "target" if y.name is None else str(y.name)
+            if y.name != name:
+                y = y.rename(name)
+            self.y = y
+            self.target_cols = [name]
+            self.target = name
         self.labels = labels or {}
-        self.split_labels = labels
+        self.split_labels = (
+            self.labels
+            if isinstance(self.labels, dict)
+            and all(isinstance(k, int) for k in self.labels.keys())
+            else None
+        )
         self.groups: Optional[Series] = groups
 
         self.ix_train: Optional[ndarray] = ix_train
@@ -313,6 +337,8 @@ class PreparedData:
     def num_classes(self) -> int:
         if not self.is_classification:
             return 1
+        if isinstance(self.y, DataFrame):
+            return int(max(self.y[col].nunique() for col in self.y.columns))
         return len(np.unique(self.y))
 
     def get_splits(
@@ -363,10 +389,14 @@ class PreparedData:
                 ss = StratifiedShuffleSplit(
                     train_size=train_size, n_splits=1, random_state=seed
                 )
+                if isinstance(y, DataFrame):
+                    split_y = y_split_label(y)
+                    idx_train, idx_test = next(ss.split(split_y.to_frame(), split_y))
+                else:
+                    idx_train, idx_test = next(ss.split(y.to_frame(), y))
             else:
                 ss = ShuffleSplit(train_size=train_size, n_splits=1, random_state=seed)
-
-            idx_train, idx_test = next(ss.split(y.to_frame(), y))
+                idx_train, idx_test = next(ss.split(self.X))
         else:
             ss = ApproximateStratifiedGroupSplit(
                 train_size=train_size,
@@ -378,7 +408,16 @@ class PreparedData:
                 warn_on_large_size_diff=True,
                 df_analyze_phase="Initial holdout splitting",
             )
-            (idx_train, idx_test), group_fail = ss.split(y.to_frame(), y, self.groups)
+            if self.is_classification and isinstance(y, DataFrame):
+                split_y = y_split_label(y)
+                (idx_train, idx_test), group_fail = ss.split(
+                    split_y.to_frame(), split_y, self.groups
+                )
+            else:
+                split_y = y.mean(axis=1) if isinstance(y, DataFrame) else y
+                (idx_train, idx_test), group_fail = ss.split(
+                    split_y.to_frame(), split_y, self.groups
+                )
 
         prep_train = self.subsample(idx_train)
         prep_train.phase = "train"
@@ -416,6 +455,46 @@ class PreparedData:
             validate=True,
         )
 
+    def for_target(self, target: str) -> PreparedData:
+        if not isinstance(self.y, DataFrame):
+            if self.y.name != target:
+                raise ValueError(
+                    f"Single-target PreparedData has y.name={self.y.name}, "
+                    f"requested={target}"
+                )
+            return self
+
+        if target not in self.y.columns:
+            raise ValueError(f"Target '{target}' not found in PreparedData.y.")
+
+        y_col = self.y[target].copy()
+        labels: Optional[dict[int, str]]
+        if (
+            isinstance(self.labels, dict)
+            and target in self.labels
+            and isinstance(self.labels[target], dict)
+        ):
+            labels = cast(dict[int, str], self.labels[target])
+        else:
+            labels = None
+
+        return PreparedData(
+            X=self.X,
+            X_cont=self.X_cont,
+            X_cat=self.X_cat,
+            y=y_col,
+            groups=self.groups,
+            labels=labels,
+            ix_train=self.ix_train,
+            ix_tests=self.ix_tests,
+            tests_method=self.tests_method,
+            inspection=self.inspection,
+            info=self.info,
+            is_classification=self.is_classification,
+            phase=self.phase,
+            validate=True,
+        )
+
     def representative_subsample(
         self,
         n_sub: int = UNIVARIATE_PRED_MAX_N_SAMPLES,
@@ -441,8 +520,12 @@ class PreparedData:
             return self, np.arange(len(X), dtype=np.int64)
 
         if self.is_classification:
-            strat = y
-            idx = viable_subsample(df=X, target=y, n_sub=n_sub, rng=rng)
+            if isinstance(y, DataFrame):
+                split_y = y_split_label(y)
+                split_codes = split_y.astype("category").cat.codes
+                idx = viable_subsample(df=X, target=split_codes, n_sub=n_sub, rng=rng)
+            else:
+                idx = viable_subsample(df=X, target=y, n_sub=n_sub, rng=rng)
             X = X.iloc[idx]
             if X_cont is not None:
                 X_cont = X_cont.iloc[idx]
@@ -453,7 +536,11 @@ class PreparedData:
             y = y.iloc[idx]
         else:
             kb = KBinsDiscretizer(n_bins=5, encode="ordinal")
-            strat = kb.fit_transform(self.y.to_numpy().reshape(-1, 1))
+            if isinstance(y, DataFrame):
+                y_vals = y.mean(axis=1)
+            else:
+                y_vals = y
+            strat = kb.fit_transform(y_vals.to_numpy().reshape(-1, 1))
             n_train = UNIVARIATE_PRED_MAX_N_SAMPLES
             ss = StratifiedShuffleSplit(n_splits=1, train_size=n_train)
             idx = next(ss.split(strat, strat))[0]
@@ -483,8 +570,13 @@ class PreparedData:
         X: DataFrame,
         X_cont: Optional[DataFrame],
         X_cat: Optional[DataFrame],
-        y: Series,
-    ) -> tuple[DataFrame, Optional[DataFrame], Optional[DataFrame], Series]:
+        y: Union[Series, DataFrame],
+    ) -> tuple[
+        DataFrame,
+        Optional[DataFrame],
+        Optional[DataFrame],
+        Union[Series, DataFrame],
+    ]:
         n_samples = len(X)
         if X_cont is not None and len(X_cont) != n_samples:
             raise ValueError(
@@ -502,24 +594,46 @@ class PreparedData:
                 f"match number of samples in processed data ({n_samples})"
             )
 
-        if self.is_classification and np.bincount(y).min() < N_TARG_LEVEL_MIN:
-            unqs, cnts = np.unique(y.to_numpy(), return_counts=True)
-            df = DataFrame(
-                index=pd.Index(data=unqs, name="Target Level"),
-                columns=["Count"],
-                data=cnts,
-            )
-            info = df.to_markdown(tablefmt="simple")
-            raise ValueError(
-                f"Target '{y.name}' has undersampled levels. This means that one or "
-                f"more of the target levels (classes) has less than {N_TARG_LEVEL_MIN} "
-                "samples, either before or after splitting into a holdout set. This is "
-                "simply far too few samples for meaningful generalization or stable "
-                "performance estimates, and means your data is far too small to use for "
-                "automated machine learning via df-analyze.\n\n"
-                "Observed target level counts:\n\n"
-                f"{info}"
-            )
+        if self.is_classification:
+            if isinstance(y, DataFrame):
+                for col in y.columns:
+                    cnts = y[col].value_counts()
+                    if cnts.empty or cnts.min() < N_TARG_LEVEL_MIN:
+                        df = DataFrame(
+                            index=pd.Index(data=cnts.index, name="Target Level"),
+                            columns=["Count"],
+                            data=cnts.values,
+                        )
+                        info = df.to_markdown(tablefmt="simple")
+                        raise ValueError(
+                            f"Target '{col}' has undersampled levels. This means that one "
+                            f"or more of the target levels (classes) has less than "
+                            f"{N_TARG_LEVEL_MIN} samples, either before or after splitting "
+                            "into a holdout set. This is simply far too few samples for "
+                            "meaningful generalization or stable performance estimates, and "
+                            "means your data is far too small to use for automated machine "
+                            "learning via df-analyze.\n\n"
+                            "Observed target level counts:\n\n"
+                            f"{info}"
+                        )
+            elif np.bincount(y).min() < N_TARG_LEVEL_MIN:
+                unqs, cnts = np.unique(y.to_numpy(), return_counts=True)
+                df = DataFrame(
+                    index=pd.Index(data=unqs, name="Target Level"),
+                    columns=["Count"],
+                    data=cnts,
+                )
+                info = df.to_markdown(tablefmt="simple")
+                raise ValueError(
+                    f"Target '{y.name}' has undersampled levels. This means that one or "
+                    f"more of the target levels (classes) has less than {N_TARG_LEVEL_MIN} "
+                    "samples, either before or after splitting into a holdout set. This is "
+                    "simply far too few samples for meaningful generalization or stable "
+                    "performance estimates, and means your data is far too small to use for "
+                    "automated machine learning via df-analyze.\n\n"
+                    "Observed target level counts:\n\n"
+                    f"{info}"
+                )
 
         # Handle some BS due to stupid Pandas index behaviour
         X.reset_index(drop=True, inplace=True)
@@ -554,6 +668,11 @@ class PreparedData:
     def describe_features(
         self,
     ) -> tuple[Optional[DataFrame], Optional[DataFrame], DataFrame]:
+        if isinstance(self.y, DataFrame):
+            raise ValueError(
+                "describe_features does not support multi-target data. "
+                "Call for_target(...) first."
+            )
         return describe_all_features(
             continuous=self.X_cont,
             categoricals=self.X_cat,
@@ -573,11 +692,17 @@ class PreparedData:
                 self.X_cont.to_parquet(root / self.files.X_cont_raw)
             if self.X_cat is not None:
                 self.X_cat.to_parquet(root / self.files.X_cat_raw)
-            self.y.to_frame().to_parquet(root / self.files.y_raw)
+            if isinstance(self.y, DataFrame):
+                self.y.to_parquet(root / self.files.y_raw)
+            else:
+                self.y.to_frame().to_parquet(root / self.files.y_raw)
             if self.groups is not None:
                 self.groups.to_frame().to_parquet(root / self.files.g_raw)
             if self.labels is not None:
-                Series(self.labels).to_frame().to_parquet(root / self.files.labels)
+                if all(isinstance(v, dict) for v in self.labels.values()):
+                    DataFrame(self.labels).to_parquet(root / self.files.labels)
+                else:
+                    Series(self.labels).to_frame().to_parquet(root / self.files.labels)
             if self.info is not None:
                 self.info.to_json(root / self.files.info)
             if self.ix_train is not None:
@@ -602,16 +727,27 @@ class PreparedData:
         y_raw = pd.read_parquet(root / files.y_raw)
         gfile = root / files.g_raw
         g_raw = pd.read_parquet(gfile) if gfile.exists() else None
-        y = Series(name=y_raw.columns[0], data=y_raw.values.ravel(), index=y_raw.index)
+        y: Union[Series, DataFrame]
+        if y_raw.shape[1] == 1:
+            y = Series(name=y_raw.columns[0], data=y_raw.values.ravel(), index=y_raw.index)
+        else:
+            y = y_raw
         g = (
             Series(name=g_raw.columns[0], data=g_raw.values.ravel(), index=g_raw.index)
             if g_raw is not None
             else None
         )
         labelpath = root / files.labels
-        labels: Optional[dict[int, str]]
+        labels: Optional[Union[dict[int, str], dict[str, dict[int, str]]]]
         if labelpath.exists():
-            labels = pd.read_parquet(labelpath).to_dict()  # type: ignore
+            labels_raw = pd.read_parquet(labelpath)
+            if labels_raw.shape[1] == 1:
+                labels = cast(dict[int, str], labels_raw.iloc[:, 0].dropna().to_dict())
+            else:
+                labels = {
+                    str(col): cast(dict[int, str], labels_raw[col].dropna().to_dict())
+                    for col in labels_raw.columns
+                }
         else:
             labels = None
         info = PreparationInfo.from_json(root / files.info)
@@ -677,13 +813,13 @@ def prepare_target(
 
 def prepare_data(
     df: DataFrame,
-    target: str,
+    target: TargetSpec,
     grouper: Optional[str],
     results: InspectionResults,
     is_classification: bool,
-    ix_train: Optional[ndarray],
-    ix_tests: Optional[list[ndarray]],
-    tests_method: Optional[ValidationMethod],
+    ix_train: Optional[ndarray] = None,
+    ix_tests: Optional[list[ndarray]] = None,
+    tests_method: Optional[ValidationMethod] = ValidationMethod.List,
     _warn: bool = True,
 ) -> PreparedData:
     """
@@ -709,36 +845,81 @@ def prepare_data(
     """
     times: dict[str, float] = {}
     timer = partial(timed, times=times)
-    orig_shape = (df.shape[0], df.shape[1] - 1)
+    target_cols = as_target_list(target)
+    orig_shape = (df.shape[0], df.shape[1] - len(target_cols))
 
     df = timer(unify_nans)(df)
-    df = timer(convert_categoricals)(df=df, target=target, grouper=grouper)
-    info = timer(inspect_target)(df, target, is_classification=is_classification)
-    df, n_targ_drop, ix_train, ix_tests = timer(drop_target_nans)(
-        df, target, ix_train, ix_tests
-    )
+    df = timer(convert_categoricals)(df=df, target=target_cols, grouper=grouper)
+    info: Optional[Union[RegTargetInfo, ClsTargetInfo]] = None
+    n_targ_drop = 0
+    labels: Optional[Union[dict[int, str], dict[str, dict[int, str]]]]
     if is_classification:
-        df, y, labels, ix_train, ix_tests = timer(encode_target)(
-            df, df[target], ix_train, ix_tests
-        )
+        if len(target_cols) > 1:
+            orig_n = df.shape[0]
+            df_no_y, y, labels, ix_train, ix_tests = timer(encode_targets)(
+                df, target_cols, ix_train, ix_tests, _warn=_warn
+            )
+            n_targ_drop = orig_n - df_no_y.shape[0]
+            df = pd.concat([df_no_y, y], axis=1)
+        else:
+            df, n_targ_drop, ix_train, ix_tests = timer(drop_target_nans)(
+                df, target_cols[0], ix_train, ix_tests
+            )
+            df, y, labels, ix_train, ix_tests = timer(encode_target)(
+                df, df[target_cols[0]], ix_train, ix_tests
+            )
     else:
-        df, y, ix_train, ix_tests = timer(clean_regression_target)(
-            df, df[target], ix_train, ix_tests
-        )
+        if len(target_cols) > 1:
+            y_df_raw = df[target_cols].copy()
+            keep_mask = ~y_df_raw.isna().any(axis=1)
+            n_targ_drop = int((~keep_mask).sum())
+            ix_train, ix_tests = reindex(keep_mask, ix_train, ix_tests)
+            df = df.loc[keep_mask].reset_index(drop=True)
+            y_df_raw = y_df_raw.loc[keep_mask].reset_index(drop=True)
+            y = DataFrame(index=y_df_raw.index)
+            for col in target_cols:
+                scaled = (
+                    RobustScaler(quantile_range=(2.5, 97.5))
+                    .fit_transform(y_df_raw[[col]])
+                    .ravel()
+                )
+                y[col] = scaled
+            df[target_cols] = y
+        else:
+            df, n_targ_drop, ix_train, ix_tests = timer(drop_target_nans)(
+                df, target_cols[0], ix_train, ix_tests
+            )
+            df, y, ix_train, ix_tests = timer(clean_regression_target)(
+                df, df[target_cols[0]], ix_train, ix_tests
+            )
         labels = None
 
-    df = timer(drop_unusable)(df, results, _warn=_warn)
+    for i, target_col in enumerate(target_cols):
+        target_info = timer(inspect_target)(
+            df, target_col, is_classification=is_classification
+        )
+        if len(target_cols) == 1 and i == 0:
+            info = target_info
+    df = timer(drop_unusable)(df, results, target=target_cols, _warn=_warn)
     df, X_cont, n_ind_added = handle_continuous_nans(
-        df=df, target=target, grouper=grouper, results=results, nans=NanHandling.Median
+        df=df,
+        target=target_cols,
+        grouper=grouper,
+        results=results,
+        nans=NanHandling.Median,
     )
     X_cont = normalize_continuous(X_cont, robust=True)
 
     df = timer(deflate_categoricals)(df, grouper, results, _warn=_warn)
     df, X_cat = timer(encode_categoricals)(
-        df=df, target=target, grouper=grouper, results=results, warn_explosion=_warn
+        df=df,
+        target=target_cols,
+        grouper=grouper,
+        results=results,
+        warn_explosion=_warn,
     )
 
-    X = df.drop(columns=target).reset_index(drop=True)
+    X = df.drop(columns=target_cols).reset_index(drop=True)
     if grouper is not None:
         g = X[grouper]
         X = X.drop(columns=grouper)
