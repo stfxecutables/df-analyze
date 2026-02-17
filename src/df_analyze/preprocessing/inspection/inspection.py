@@ -6,6 +6,7 @@ from shutil import get_terminal_size
 from typing import TYPE_CHECKING, Optional, Union, overload
 
 import numpy as np
+import pandas as pd
 from joblib import Memory, Parallel, delayed
 from pandas import DataFrame, Series
 from sklearn.experimental import enable_iterative_imputer  # noqa
@@ -16,6 +17,7 @@ from df_analyze._constants import N_CAT_LEVEL_MIN, NAN_STRINGS
 if TYPE_CHECKING:
     from df_analyze.cli.cli import ProgramOptions
 
+from df_analyze.preprocessing.targets import TargetSpec, as_target_list
 from df_analyze.preprocessing.inspection.containers import (
     ClsTargetInfo,
     ColumnDescriptions,
@@ -53,20 +55,25 @@ def messy_inform(message: str) -> str:
     return message
 
 
-def get_str_cols(df: DataFrame, target: str) -> list[str]:
-    X = df.drop(columns=target, errors="ignore")
+def get_str_cols(df: DataFrame, target: TargetSpec) -> list[str]:
+    target_cols = as_target_list(target)
+    X = df.drop(columns=target_cols, errors="ignore")
     return X.select_dtypes(
         include=["object", "string[python]", "category"]
     ).columns.tolist()
 
 
-def get_int_cols(df: DataFrame, target: str) -> list[str]:
-    X = df.drop(columns=target, errors="ignore")
+def get_int_cols(df: DataFrame, target: TargetSpec) -> list[str]:
+    target_cols = as_target_list(target)
+    X = df.drop(columns=target_cols, errors="ignore")
     return X.select_dtypes(include="int").columns.tolist()
 
 
-def get_unq_counts(df: DataFrame, target: str) -> tuple[dict[str, int], dict[str, int]]:
-    X = df.drop(columns=target, errors="ignore").infer_objects().convert_dtypes()
+def get_unq_counts(
+    df: DataFrame, target: TargetSpec
+) -> tuple[dict[str, int], dict[str, int]]:
+    target_cols = as_target_list(target)
+    X = df.drop(columns=target_cols, errors="ignore").infer_objects().convert_dtypes()
     unique_counts = {}
     nanless_counts = {}
     for colname in X.columns:
@@ -548,12 +555,15 @@ def convert_categorical(series: Series) -> Series:
     return series
 
 
-def convert_categoricals(df: DataFrame, target: str, grouper: Optional[str]) -> DataFrame:
+def convert_categoricals(
+    df: DataFrame, target: TargetSpec, grouper: Optional[str]
+) -> DataFrame:
     # convert screwy categorical columns which can have all sorts of
     # annoying behaviours when incorrectly labeled as such
+    target_cols = as_target_list(target)
     df = df.copy()
     for col in df.columns:
-        if str(col) == target:
+        if str(col) in target_cols:
             continue
         if (grouper is not None) and str(col) == grouper:
             continue
@@ -579,7 +589,7 @@ def unify_nans(df: Union[DataFrame, Series]) -> Union[DataFrame, Series]:
 
 def inspect_data(
     df: DataFrame,
-    target: str,
+    target: TargetSpec,
     grouper: Optional[str] = None,
     categoricals: Optional[list[str]] = None,
     ordinals: Optional[list[str]] = None,
@@ -589,10 +599,11 @@ def inspect_data(
     """Attempt to infer column types"""
     categoricals = categoricals or []
     ordinals = ordinals or []
-    y = df[target]
+    target_cols = as_target_list(target)
+    y_df = df[target_cols].copy()
     g = df[grouper] if (grouper is not None) else None
 
-    df = df.drop(columns=target, errors="ignore")
+    df = df.drop(columns=target_cols, errors="ignore")
     if g is not None:
         df = df.drop(columns=grouper, errors="ignore")
 
@@ -671,7 +682,7 @@ def inspect_data(
 
     all_cats = [col for col, info in final_types.items() if info.is_cat()]
 
-    unique_counts, nanless_cnts = get_unq_counts(df=df, target=target)
+    unique_counts, nanless_cnts = get_unq_counts(df=df, target=target_cols)
     bigs, inflation = detect_big_cats(df, unique_counts, all_cats, _warn=_warn)[:-1]
 
     multi_cats = {col for col, cnt in nanless_cnts.items() if cnt > 2}
@@ -687,7 +698,7 @@ def inspect_data(
     final_bins   = {col: info for col, info in final_types.items() if info.is_bin()}
     # fmt: on
 
-    df[target] = y
+    df = pd.concat([df, y_df], axis=1)
     df[grouper] = g
     df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
 
@@ -712,10 +723,11 @@ def inspect_data_cached(
     options: ProgramOptions,
     memory: Memory,
 ) -> tuple[DataFrame, InspectionResults]:
+    target: TargetSpec = options.targets
     if options.program_dirs.root is None:  # can't write files, no cache
         return inspect_data(
             df=options.load_df(),
-            target=options.target,
+            target=target,
             grouper=None,
             categoricals=options.categoricals,
             ordinals=options.ordinals,

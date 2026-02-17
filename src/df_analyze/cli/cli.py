@@ -104,6 +104,8 @@ from df_analyze.cli.text import (
     GROUP_HELP_STR,
     HTUNE_TRIALS_HELP,
     MODE_HELP_STR,
+    MT_AGG_STRATEGY_HELP_STR,
+    MT_TOP_K_HELP_STR,
     N_FEAT_CAT_FILTER_HELP,
     N_FEAT_CONT_FILTER_HELP,
     N_FEAT_TOTAL_FILTER_HELP,
@@ -124,6 +126,7 @@ from df_analyze.cli.text import (
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
+    TARGETS_HELP_STR,
     TEST_VALSIZES_HELP,
     USAGE_EXAMPLES,
     USAGE_STRING,
@@ -247,6 +250,9 @@ class ProgramOptions(Debug):
         verbosity: Verbosity,
         no_warn_explosion: bool,
         no_preds: bool,
+        targets: Optional[list[str]] = None,
+        mt_agg_strategy: str = "borda",
+        mt_top_k: Optional[int] = None,
         adaptive_error: bool = False,
         aer_oof_folds: int = 5,
         aer_bins: int = 20,
@@ -286,7 +292,11 @@ class ProgramOptions(Debug):
         self.datapath: Optional[Path] = self.validate_datapath(datapath)
         self.test_paths: list[Path] = [self.validate_test_path(p) for p in test_paths]
         self.tests_method = tests_method
-        self.target: str = target
+        self.targets: list[str] = targets if targets is not None else [target]
+        self.targets = [str(t).strip() for t in self.targets if str(t).strip() != ""]
+        if len(self.targets) == 0:
+            raise ValueError("Expected at least one target column name.")
+        self.target: str = self.targets[0]
         self.grouper: Optional[str] = grouper
         self.categoricals: list[str] = categoricals
         self.ordinals: list[str] = ordinals
@@ -315,11 +325,16 @@ class ProgramOptions(Debug):
         # absolute Pearson correlation with the highest-scoring feature is
         # above this threshold
         self.redundant_corr_threshold: float = abs(redundant_corr_threshold)
+        self.mt_agg_strategy: str = mt_agg_strategy
+        self.mt_top_k: Optional[int] = int(mt_top_k) if mt_top_k is not None else None
+        if self.mt_top_k is not None and self.mt_top_k <= 0:
+            self.mt_top_k = None
         self.is_classification: bool = is_classification
         self.classifiers: Tuple[DfAnalyzeClassifier, ...] = tuple(
             sorted(set(classifiers))
         )
         self.regressors: Tuple[DfAnalyzeRegressor, ...] = tuple(sorted(set(regressors)))
+        self._validate_optional_model_dependencies()
         # self.htune: bool = htune
         # self.htune_val: ValMethod = htune_val
         # self.htune_val_size: Size = htune_val_size
@@ -386,6 +401,56 @@ class ProgramOptions(Debug):
         sources = self.classifiers if self.is_classification else self.regressors
         clses = [source.get_model() for source in sources]
         return clses
+
+    def _validate_optional_model_dependencies(self) -> None:
+        cls_catboost = getattr(DfAnalyzeClassifier, "CatBoost", None)
+        reg_catboost = getattr(DfAnalyzeRegressor, "CatBoost", None)
+
+        requested_cls = cls_catboost is not None and cls_catboost in self.classifiers
+        requested_reg = reg_catboost is not None and reg_catboost in self.regressors
+        if not requested_cls and not requested_reg:
+            return
+
+        from df_analyze.enumerables import is_catboost_available
+
+        catboost_available = bool(is_catboost_available())
+
+        if catboost_available:
+            return
+
+        if requested_cls and cls_catboost is not None:
+            self.classifiers = tuple(
+                model for model in self.classifiers if model is not cls_catboost
+            )
+        if requested_reg and reg_catboost is not None:
+            self.regressors = tuple(
+                model for model in self.regressors if model is not reg_catboost
+            )
+
+        removed = []
+        if requested_cls:
+            removed.append("--classifiers catboost")
+        if requested_reg:
+            removed.append("--regressors catboost")
+        removed_args = ", ".join(sorted(removed))
+        warn(
+            "CatBoost was requested but the optional dependency `catboost` is not "
+            "installed. Continuing after removing it from "
+            f"{removed_args}. Install it with `pip install catboost` to enable it."
+        )
+
+        if self.is_classification and len(self.classifiers) == 0:
+            raise ArgumentError(
+                "No classifiers remain after removing CatBoost because `catboost` is not "
+                "installed. Install it with `pip install catboost` or choose a "
+                "different value for `--classifiers`."
+            )
+        if not self.is_classification and len(self.regressors) == 0:
+            raise ArgumentError(
+                "No regressors remain after removing CatBoost because `catboost` is not "
+                "installed. Install it with `pip install catboost` or choose a "
+                "different value for `--regressors`."
+            )
 
     @staticmethod
     def random(
@@ -837,8 +902,15 @@ def make_parser() -> ArgumentParser:
         action="store",
         nargs="+",  # allow spaces: https://stackoverflow.com/a/26990349,
         type=str,
-        default="target",
+        default=["target"],
         help=TARGET_HELP_STR,
+    )
+    parser.add_argument(
+        "--targets",
+        action="store",
+        type=column_parser,
+        default=[],
+        help=TARGETS_HELP_STR,
     )
     parser.add_argument(
         "--grouper",
@@ -1132,6 +1204,19 @@ def make_parser() -> ArgumentParser:
         help=TEST_VALSIZES_HELP,
     )
     parser.add_argument(
+        "--mt-agg-strategy",
+        type=str,
+        choices=["borda", "freq"],
+        default="borda",
+        help=MT_AGG_STRATEGY_HELP_STR,
+    )
+    parser.add_argument(
+        "--mt-top-k",
+        type=int,
+        default=None,
+        help=MT_TOP_K_HELP_STR,
+    )
+    parser.add_argument(
         "--adaptive-error",
         action="store_true",
         default=False,
@@ -1357,8 +1442,14 @@ def get_parser_dict() -> ArgsDict:
         "--ordinals": (RandKind.Columns, None),
         "--drops": (RandKind.Columns, None),
         "--mode": (RandKind.ChooseOne, ["classify", "regress"]),
-        "--classifiers": (RandKind.ChooseN, DfAnalyzeClassifier.choices()),
-        "--regressors": (RandKind.ChooseN, DfAnalyzeRegressor.choices()),
+        "--classifiers": (
+            RandKind.ChooseN,
+            DfAnalyzeClassifier.choices(),
+        ),
+        "--regressors": (
+            RandKind.ChooseN,
+            DfAnalyzeRegressor.choices(),
+        ),
         "--feat-select": (RandKind.ChooseNoneOrN, FeatureSelection.choices()),
         "--embed-select": (RandKind.ChooseNoneOrN, EmbedSelectionModel.choices()),
         "--wrapper-select": (RandKind.ChooseNoneOrN, WrapperSelection.choices()),
@@ -1671,11 +1762,20 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
     else:
         datapath = cli_args.df
 
+    parsed_target = " ".join(cli_args.target).strip()  # https://stackoverflow.com/a/26990349,
+    parsed_targets_raw = (
+        list(cli_args.targets) if len(cli_args.targets) > 0 else [parsed_target]
+    )
+    parsed_targets = [str(t).strip() for t in parsed_targets_raw if str(t).strip() != ""]
+    if len(parsed_targets) == 0:
+        raise ArgumentError("Argument `--targets` must include at least one non-empty value.")
+
     return ProgramOptions(
         datapath=datapath,
         test_paths=cli_args.df_tests,
         tests_method=cli_args.df_tests_method,
-        target=" ".join(cli_args.target),  # https://stackoverflow.com/a/26990349,
+        target=parsed_targets[0],
+        targets=parsed_targets,
         grouper=grouper,
         categoricals=sorted(cats),
         ordinals=sorted(ords),
@@ -1700,6 +1800,8 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         redundant_selection=cli_args.redundant_wrapper_selection,
         redundant_threshold=cli_args.redundant_threshold,
         redundant_corr_threshold=cli_args.redundant_corr_threshold,
+        mt_agg_strategy=cli_args.mt_agg_strategy,
+        mt_top_k=cli_args.mt_top_k,
         is_classification=is_cls,
         classifiers=classifiers,
         regressors=regressors,

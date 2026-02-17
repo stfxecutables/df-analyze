@@ -18,6 +18,7 @@ from sklearn.model_selection import (
 )
 
 from df_analyze._constants import (
+    N_TARG_LEVEL_MIN,
     N_TARG_LEVEL_MIN_TEST_INTERNAL,
     N_TARG_LEVEL_MIN_TRAIN_INTERNAL,
     SEED,
@@ -38,6 +39,33 @@ AnySplitter = Union[
 ]
 
 APPROXIMATE_GROUP_SPLIT_DIFF_WARN_THRESHOLD = 0.1
+
+
+def y_split_label(
+    y_df: DataFrame,
+    min_count: int = N_TARG_LEVEL_MIN,
+    warn_on_fallback: bool = True,
+) -> Series:
+    if y_df.shape[1] == 0:
+        raise ValueError("Cannot split with empty target columns.")
+    cols = list(y_df.columns)
+    while True:
+        label = y_df[cols].astype(str).agg("__".join, axis=1)
+        cnts = label.value_counts()
+        n_unique = cnts.shape[0]
+        max_unique = max(1, len(y_df) // min_count)
+        if (cnts.min() >= min_count) and (n_unique <= max_unique):
+            return label
+        if len(cols) == 1:
+            return label
+        nunique = y_df[cols].nunique(dropna=False)
+        drop_col = nunique.idxmax()
+        cols.remove(drop_col)
+        if warn_on_fallback:
+            warn(
+                "Multi-target stratification produced undersampled target combinations. "
+                f"Dropping target column '{drop_col}' to improve split feasibility."
+            )
 
 
 class OmniKFold:
@@ -112,6 +140,7 @@ class OmniKFold:
             )
         rng = np.random.default_rng(seed=self.seed)
         y: Series
+        ix_shuf: Optional[ndarray] = None
         if self.shuffle:
             n = len(X_train)
             ix_shuf = rng.permutation(n)
@@ -120,6 +149,11 @@ class OmniKFold:
             g = None if g_train is None else g_train.iloc[ix_shuf]
         else:
             X, y, g = X_train, y_train, g_train
+
+        def to_original(ix: ndarray) -> ndarray:
+            if ix_shuf is None:
+                return ix
+            return ix_shuf[ix]
 
         # First attempt: try doing grouped stratified and check target level counts
         kf_args = self._kf_args(kf=self.kf)
@@ -147,7 +181,7 @@ class OmniKFold:
                         "if samples within groups are high in similarity."
                     )
                 break
-            splits.append((ix_tr, ix_t))
+            splits.append((to_original(ix_tr), to_original(ix_t)))
         if not initial_split_fail:
             return splits, initial_split_fail
 
@@ -168,7 +202,7 @@ class OmniKFold:
             if self.is_cls and self._split_fail(y, ix_tr=ix_tr, ix_t=ix_t):
                 # not worried about the regression fallback case
                 raise self._informative_error(y_train)
-            splits.append((ix_tr, ix_t))
+            splits.append((to_original(ix_tr), to_original(ix_t)))
 
         return splits, initial_split_fail
 

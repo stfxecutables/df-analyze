@@ -8,8 +8,9 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import platform
-from typing import Any, Mapping, Optional, Type
+from typing import Any, Mapping, Optional, Type, Union
 
+import numpy as np
 import optuna
 from optuna import Study, Trial
 from pandas import DataFrame, Series
@@ -29,6 +30,7 @@ class KNNEstimator(DfAnalyzeModel):
         n_jobs = 1 if platform.system().lower() == "darwin" else -1
         self.is_classifier = False
         self.needs_calibration = False
+        self.target_cols: list[str] = []
         self.fixed_args = dict(n_jobs=n_jobs)
         self.model_cls: Type[Any] = type(None)
         self.grid = {
@@ -38,7 +40,7 @@ class KNNEstimator(DfAnalyzeModel):
         }
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
-        return self.model_cls, {}
+        return self.model_cls, full_args
 
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
@@ -52,7 +54,7 @@ class KNNEstimator(DfAnalyzeModel):
     def htune_optuna(
         self,
         X_train: DataFrame,
-        y_train: Series,
+        y_train: Union[Series, DataFrame],
         g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
@@ -75,6 +77,36 @@ class KNNEstimator(DfAnalyzeModel):
             verbosity=verbosity,
         )
 
+    def _target_cols_for_output(self, n_targets: int) -> list[str]:
+        if len(self.target_cols) == n_targets:
+            return self.target_cols
+        return [f"target_{i}" for i in range(n_targets)]
+
+    def refit_tuned(
+        self,
+        X: DataFrame,
+        y: Union[Series, DataFrame],
+        g: Optional[Series] = None,
+        tuned_args: Optional[Mapping] = None,
+    ) -> None:
+        if isinstance(y, DataFrame):
+            self.target_cols = [str(col) for col in y.columns]
+        else:
+            name = y.name if y.name is not None else "target"
+            self.target_cols = [str(name)]
+        super().refit_tuned(X=X, y=y, g=g, tuned_args=tuned_args)
+
+    def tuned_predict(self, X: DataFrame) -> Union[Series, DataFrame, np.ndarray]:
+        preds = super().tuned_predict(X)
+        if (
+            isinstance(preds, np.ndarray)
+            and preds.ndim == 2
+            and preds.shape[1] > 1
+        ):
+            cols = self._target_cols_for_output(preds.shape[1])
+            return DataFrame(preds, index=X.index, columns=cols)
+        return preds
+
 
 class KNNClassifier(KNNEstimator):
     shortname = "knn"
@@ -85,6 +117,24 @@ class KNNClassifier(KNNEstimator):
         super().__init__(model_args)
         self.is_classifier = True
         self.model_cls = KNeighborsClassifier
+
+    def predict_proba(
+        self, X: DataFrame
+    ) -> Union[np.ndarray, dict[str, np.ndarray]]:
+        probs = super().predict_proba(X)
+        if isinstance(probs, (list, tuple)):
+            if len(probs) == 1:
+                return np.asarray(probs[0])
+            cols = self._target_cols_for_output(len(probs))
+            return {col: np.asarray(arr) for col, arr in zip(cols, probs)}
+        if (
+            isinstance(probs, np.ndarray)
+            and probs.ndim == 3
+            and probs.shape[1] > 1
+        ):
+            cols = self._target_cols_for_output(probs.shape[1])
+            return {col: np.asarray(probs[:, i, :]) for i, col in enumerate(cols)}
+        return probs
 
 
 class KNNRegressor(KNNEstimator):

@@ -29,6 +29,7 @@ from df_analyze.preprocessing.inspection.inspection import (
     messy_inform,
     unify_nans,
 )
+from df_analyze.preprocessing.targets import TargetSpec, as_target_list
 
 
 class DataCleaningWarning(UserWarning):
@@ -84,9 +85,12 @@ class RenameInfo:
         return renamed
 
 
-def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, str]]]:
-    y = df[target]
-    df = df.drop(columns=target)
+def dedup_names(
+    df: DataFrame, target: TargetSpec
+) -> tuple[DataFrame, list[tuple[str, str]]]:
+    target_cols = as_target_list(target)
+    y_df = df[target_cols].copy()
+    df = df.drop(columns=target_cols, errors="ignore")
     dupe_cols = set(df.columns[df.columns.duplicated()])
     counts = {col: 0 for col in dupe_cols}
     renames: list[tuple[str, str]] = []
@@ -104,13 +108,13 @@ def dedup_names(df: DataFrame, target: str) -> tuple[DataFrame, list[tuple[str, 
         counts[col] += 1
     newnames = [new for old, new in renames]
     df.columns = newnames
-    df[target] = y
+    df = pd.concat([df, y_df], axis=1)
     df.columns = df.columns.astype(str)  # type: ignore
     df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
     return df, renames
 
 
-def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
+def sanitize_names(df: DataFrame, target: TargetSpec) -> tuple[DataFrame, RenameInfo]:
     """Rename trashy feature names (e.g. with regex characters, spaces)
     to be less problematic
 
@@ -123,22 +127,23 @@ def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
         Container holding tuples of renamed columns. Does NOT include target
         (which is never renamed).
     """
-
+    target_cols = as_target_list(target)
     names = df.columns.to_series().apply(str).to_list()
     # https://docs.python.org/3/library/re.html
-    if target not in names:
-        raise RuntimeError(
-            f"Unrecoverable error. Specified target: `{target}` not found in "
-            f"data with feature names: {names}."
-        )
-    names.remove(target)
+    for target_col in target_cols:
+        if target_col not in names:
+            raise RuntimeError(
+                f"Unrecoverable error. Specified target: `{target_col}` not found in "
+                f"data with feature names: {names}."
+            )
+        names.remove(target_col)
 
-    # if `target` still in names, there was a dupe
-    if target in names:
-        raise RuntimeError(
-            f"Unrecoverable error. Specified target: `{target}` appears "
-            f"multiple times as a column name. Column names: {names}."
-        )
+        # if `target` still in names, there was a dupe
+        if target_col in names:
+            raise RuntimeError(
+                f"Unrecoverable error. Specified target: `{target_col}` appears "
+                f"multiple times as a column name. Column names: {names}."
+            )
 
     trash = r"[\\\.\^\$\*\+\?\{\}\[\]\(\)\| ]"
     lgbm = r"[,:\"]"
@@ -155,16 +160,16 @@ def sanitize_names(df: DataFrame, target: str) -> tuple[DataFrame, RenameInfo]:
     # At this point we have a serious problem if any features have the same
     # name as the target. We have to decide between renaming the target or
     # renaming the conflicting features. Obviously we rename the features.
-    if target in renames.values():
+    if any(target_col in renames.values() for target_col in target_cols):
         for original, renamed in renames.items():
-            if renamed != target:
+            if renamed not in target_cols:
                 continue
             renames[original] = f"feat_{renamed}"
 
     df = df.rename(columns=renames)
     df.columns = df.columns.astype(str)  # double assurance needed, apparently
     df = df.rename(str, axis="columns")  # https://stackoverflow.com/a/77046151
-    df, renames = dedup_names(df, target=target)
+    df, renames = dedup_names(df, target=target_cols)
     info = RenameInfo(renames)
     return df, info
 
@@ -327,7 +332,7 @@ def drop_target_nans(
 
 def handle_continuous_nans(
     df: DataFrame,
-    target: str,
+    target: TargetSpec,
     grouper: Optional[str],
     results: InspectionResults,
     nans: NanHandling,
@@ -349,12 +354,13 @@ def handle_continuous_nans(
     """
     # drop rows where target is NaN: meaningless
     # NaNs in categoricals are handled as another dummy indicator
+    target_cols = as_target_list(target)
     cats = [*results.cats.infos.keys(), *results.binaries.infos.keys()]
     cats = sorted(set(cats).intersection(df.columns.to_list()))
     X_cat = df[cats].copy(deep=True)
-    y = df[target]
+    y = df[target_cols].copy()
     g = None if grouper is None else df[grouper]
-    df = df.drop(columns=target)
+    df = df.drop(columns=target_cols, errors="ignore")
     if g is not None:
         df = df.drop(columns=grouper)
 
@@ -471,6 +477,68 @@ def encode_target(
     )
 
 
+def encode_targets(
+    df: DataFrame,
+    targets: TargetSpec,
+    ix_train: Optional[ndarray],
+    ix_tests: Optional[list[ndarray]],
+    _warn: bool = False,
+) -> tuple[
+    DataFrame,
+    DataFrame,
+    dict[str, dict[int, str]],
+    Optional[ndarray],
+    Optional[list[ndarray]],
+]:
+    target_cols = as_target_list(targets)
+    keep_mask = Series(True, index=df.index)
+    for col in target_cols:
+        series = unify_nans(df[col])
+        unqs, cnts = np.unique(series.astype(str), return_counts=True)
+        if len(unqs) <= 1:
+            raise ValueError(f"Target variable {col} is constant.")
+        idx = cnts <= N_TARG_LEVEL_MIN
+        n_cls = len(unqs)
+        if np.sum(idx).item() > 0:
+            if _warn:
+                cleaning_inform(
+                    "The target variable has a number of class labels "
+                    f"({unqs[idx]}) with less than {N_TARG_LEVEL_MIN} members. This "
+                    "will cause problems with splitting in various nested k-fold "
+                    "procedures used in `df-analyze`. In addition, any estimates "
+                    "or metrics produced for such a class will not be "
+                    "statistically meaningful (i.e. the uncertainty on those "
+                    "metrics or estimates will be exceedingly large). We thus "
+                    "remove all samples that belong to these labels, bringing the "
+                    f"total number of classes down to {n_cls - np.sum(idx).item()}."
+                    "\n\nFor multi-target data, row filtering is applied as the "
+                    "intersection across all targets: if a sample is missing "
+                    "or rare in any target, it is removed from the full dataset."
+                )
+            rare_labels = set(unqs[idx].tolist())
+        else:
+            rare_labels = set()
+        keep_mask &= (~series.isna()) & (~series.astype(str).isin(rare_labels))
+
+    ix_train, ix_tests = reindex(keep_mask, ix_train, ix_tests)
+    df = df.loc[keep_mask].reset_index(drop=True)
+    y_df_raw = df[target_cols].copy()
+    df = df.drop(columns=target_cols, errors="ignore")
+
+    labels_map: dict[str, dict[int, str]] = {}
+    y_encoded = DataFrame(index=y_df_raw.index)
+    for col in target_cols:
+        series = unify_nans(y_df_raw[col]).astype(str)
+        enc = LabelEncoder()
+        encoded = np.array(enc.fit_transform(series))
+        classes = enc.classes_.tolist()
+        ints = np.asarray(enc.transform(classes)).tolist()
+        labels_map[col] = {i: cls for i, cls in zip(ints, classes)}
+        y_encoded[col] = encoded
+
+    return df, y_encoded, labels_map, ix_train, ix_tests
+
+
 def clean_regression_target(
     df: DataFrame,
     target: Series,
@@ -543,15 +611,20 @@ def floatify(df: DataFrame) -> DataFrame:
 
 
 def drop_unusable(
-    df: DataFrame, results: InspectionResults, _warn: bool = False
+    df: DataFrame,
+    results: InspectionResults,
+    target: Optional[TargetSpec] = None,
+    _warn: bool = False,
 ) -> DataFrame:
     """Drops identifiers, datetime, constants"""
+    target_cols = set(as_target_list(target)) if target is not None else set()
     df = drop_cols(df, "identifiers", results.ids, _warn=_warn)
     df = drop_cols(df, "datetime data", results.times, _warn=_warn)
     df = drop_cols(df, "constant", results.consts, _warn=_warn)
     const_drops = df[
         df.columns[df.map(str).apply(lambda col: len(np.unique(col)) <= 1)]
     ].columns.to_list()
+    const_drops = [col for col in const_drops if str(col) not in target_cols]
     if len(const_drops) > 0:
         df = df.drop(columns=const_drops, errors="ignore")
     return df
@@ -624,7 +697,7 @@ def deflate_categoricals(
 
 def encode_categoricals(
     df: DataFrame,
-    target: str,
+    target: TargetSpec,
     grouper: Optional[str],
     results: InspectionResults,
     warn_explosion: bool = True,
@@ -639,10 +712,10 @@ def encode_categoricals(
     unencoded: DataFrame
         Pandas DataFrame with original categorical variables
     """
-
-    y = df[target]
-    df = df.drop(columns=target)
-    df = convert_categoricals(df, target, grouper=grouper)
+    target_cols = as_target_list(target)
+    y = df[target_cols].copy()
+    df = df.drop(columns=target_cols, errors="ignore")
+    df = convert_categoricals(df, target_cols, grouper=grouper)
     df = unify_nans(df)
     df = drop_unusable(df, results, _warn=False)
     df = deflate_categoricals(df, grouper, results, _warn=warn_explosion)
@@ -698,7 +771,7 @@ def encode_categoricals(
         #
         # but likely this will be claimed as intended design.
 
-        new = convert_categoricals(new, target=target, grouper=grouper)
+        new = convert_categoricals(new, target=target_cols, grouper=grouper)
         new = new.astype(float)
     except (TypeError, ValueError) as e:
         raise RuntimeError(

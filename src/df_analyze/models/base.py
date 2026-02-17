@@ -1,3 +1,5 @@
+# # ref: Multiclass & multioutput algorithms: https://scikit-learn.org/stable/modules/multiclass.html
+
 from __future__ import annotations
 
 # fmt: off
@@ -47,7 +49,7 @@ from df_analyze.enumerables import (
     Scorer,
     WrapperSelection,
 )
-from df_analyze.splitting import OmniKFold
+from df_analyze.splitting import OmniKFold, y_split_label
 
 NEG_MAE = "neg_mean_absolute_error"
 
@@ -123,16 +125,177 @@ class DfAnalyzeModel(ABC):
         """
         ...
 
+    def _split_target_for_cv(self, y: Union[Series, DataFrame]) -> Series:
+        if isinstance(y, DataFrame):
+            if self.is_classifier:
+                return y_split_label(y, warn_on_fallback=False)
+            for col in y.columns:
+                if y[col].nunique(dropna=False) > 1:
+                    return y[col]
+            return y.iloc[:, 0]
+        return y
+
+    @staticmethod
+    def _preds_to_df(
+        preds: Union[Series, DataFrame, ndarray],
+        y_true_df: DataFrame,
+        index: pd.Index,
+    ) -> DataFrame:
+        if isinstance(preds, DataFrame):
+            out = preds.copy()
+            if out.shape[1] == y_true_df.shape[1]:
+                out.columns = y_true_df.columns
+            return out.reindex(index=index)
+        if isinstance(preds, Series):
+            col = y_true_df.columns[0]
+            return DataFrame({col: preds.to_numpy()}, index=index)
+
+        arr = np.asarray(preds)
+        if arr.ndim == 1:
+            col = y_true_df.columns[0]
+            return DataFrame({col: arr}, index=index)
+        if arr.ndim == 2:
+            cols = (
+                list(y_true_df.columns)
+                if arr.shape[1] == y_true_df.shape[1]
+                else [f"target_{i}" for i in range(arr.shape[1])]
+            )
+            return DataFrame(arr, index=index, columns=cols)
+        raise ValueError("Unsupported prediction output shape for multi-target scoring.")
+
+    @staticmethod
+    def _probs_by_target(
+        probs: Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ],
+        target_cols: list[str],
+    ) -> dict[str, ndarray]:
+        if probs is None:
+            return {}
+        if isinstance(probs, dict):
+            return {str(key): np.asarray(value) for key, value in probs.items()}
+        if isinstance(probs, (list, tuple)):
+            return {
+                str(col): np.asarray(probs[i])
+                for i, col in enumerate(target_cols)
+                if i < len(probs)
+            }
+        arr = np.asarray(probs)
+        if arr.ndim == 3:
+            return {
+                str(col): np.asarray(arr[:, i, :])
+                for i, col in enumerate(target_cols)
+                if i < arr.shape[1]
+            }
+        if arr.ndim == 2 and len(target_cols) == 1:
+            return {str(target_cols[0]): arr}
+        return {}
+
+    @staticmethod
+    def _mean_scores(per_target: list[dict[str, float]]) -> dict[str, float]:
+        if len(per_target) == 0:
+            return {}
+        keys = list(per_target[0].keys())
+        out: dict[str, float] = {}
+        for key in keys:
+            vals = [float(scores.get(key, np.nan)) for scores in per_target]
+            out[key] = float(np.nanmean(vals))
+        return out
+
+    def _score_outputs(
+        self,
+        y_true: Union[Series, DataFrame],
+        y_pred: Union[Series, DataFrame, ndarray],
+        y_prob: Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ] = None,
+    ) -> dict[str, float]:
+        by_target = self._score_outputs_by_target(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
+        if len(by_target) == 0:
+            return {}
+        if len(by_target) == 1:
+            return list(by_target.values())[0]
+        return self._mean_scores(list(by_target.values()))
+
+    def _score_outputs_by_target(
+        self,
+        y_true: Union[Series, DataFrame],
+        y_pred: Union[Series, DataFrame, ndarray],
+        y_prob: Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ] = None,
+    ) -> dict[str, dict[str, float]]:
+        from df_analyze.hypertune import (
+            ClassifierScorer,
+            RegressorScorer,
+        )
+
+        if isinstance(y_true, DataFrame):
+            y_true_df = y_true.copy()
+        else:
+            name = str(y_true.name) if y_true.name is not None else "target"
+            y_true_df = y_true.to_frame(name=name)
+
+        y_pred_df = self._preds_to_df(y_pred, y_true_df, y_true_df.index)
+        if (
+            y_pred_df.shape[1] == y_true_df.shape[1]
+            and list(y_pred_df.columns) != list(y_true_df.columns)
+        ):
+            y_pred_df = y_pred_df.copy()
+            y_pred_df.columns = y_true_df.columns
+
+        out: dict[str, dict[str, float]] = {}
+        target_cols = [str(col) for col in y_true_df.columns]
+        if self.is_classifier:
+            probs_by_target = self._probs_by_target(y_prob, target_cols)
+            for col in y_true_df.columns:
+                key = str(col)
+                out[key] = ClassifierScorer.get_scores(
+                    y_true=y_true_df[col].to_numpy(),
+                    y_pred=y_pred_df[col].to_numpy(),
+                    y_prob=probs_by_target.get(key),
+                )
+            return out
+
+        for col in y_true_df.columns:
+            key = str(col)
+            out[key] = RegressorScorer.get_scores(
+                y_true=y_true_df[col].to_numpy(),
+                y_pred=y_pred_df[col].to_numpy(),
+            )
+        return out
+
+    def _mean_tuning_score(
+        self, metric: Scorer, y_true_df: DataFrame, y_pred_df: DataFrame
+    ) -> float:
+        if (
+            y_pred_df.shape[1] == y_true_df.shape[1]
+            and list(y_pred_df.columns) != list(y_true_df.columns)
+        ):
+            y_pred_df = y_pred_df.copy()
+            y_pred_df.columns = y_true_df.columns
+        scores = []
+        for col in y_true_df.columns:
+            if col not in y_pred_df.columns:
+                continue
+            score = metric.tuning_score(y_true_df[col].to_numpy(), y_pred_df[col].to_numpy())
+            scores.append(float(score))
+        if len(scores) == 0:
+            raise ValueError("No valid target columns were available for tuning score.")
+        score = float(np.nanmean(scores))
+        if np.isnan(score):
+            raise ValueError("All per-target tuning scores were NaN.")
+        return score
+
     def optuna_objective(
         self,
         X_train: DataFrame,
-        y_train: Series,
+        y_train: Union[Series, DataFrame],
         g_train: Optional[Series],
         metric: Scorer,
         n_folds: int = 5,
     ) -> Callable[[Trial], float]:
-        X = np.asarray(X_train)
-        y = np.asarray(y_train)
+        y_split = self._split_target_for_cv(y_train)
 
         def objective(trial: Trial) -> float:
             # if self.is_classifier:
@@ -148,7 +311,7 @@ class DfAnalyzeModel(ABC):
                 df_analyze_phase="Tuning internal splits",
             )
             splits, group_fail = kf.split(
-                X_train=X_train, y_train=y_train, g_train=g_train
+                X_train=X_train, y_train=y_split, g_train=g_train
             )
 
             # if g_train is None:
@@ -174,13 +337,19 @@ class DfAnalyzeModel(ABC):
             #     splits = [split for split in enumerate(_cv.split(X_train, y_train))]
 
             for step, (idx_train, idx_test) in enumerate(splits):
-                X_tr, y_tr = X[idx_train], y[idx_train]
-                X_test, y_test = X[idx_test], y[idx_test]
+                X_tr = X_train.iloc[idx_train]
+                X_test = X_train.iloc[idx_test]
+                y_tr = y_train.iloc[idx_train]
+                y_test = y_train.iloc[idx_test]
                 model_cls, clean_args = self.model_cls_args(full_args)
                 estimator = model_cls(**clean_args)
                 estimator.fit(X_tr, y_tr)
                 preds = estimator.predict(X_test)
-                score = metric.tuning_score(y_test, preds)
+                if isinstance(y_test, DataFrame):
+                    pred_df = self._preds_to_df(preds, y_test, y_test.index)
+                    score = self._mean_tuning_score(metric, y_test, pred_df)
+                else:
+                    score = float(metric.tuning_score(y_test, preds))
                 scores.append(score)
                 # allows pruning
                 trial.report(float(np.mean(scores)), step=step)
@@ -197,7 +366,7 @@ class DfAnalyzeModel(ABC):
     def htune_optuna(
         self,
         X_train: DataFrame,
-        y_train: Series,
+        y_train: Union[Series, DataFrame],
         g_train: Optional[Series],
         metric: Scorer,
         n_trials: int = 100,
@@ -238,7 +407,7 @@ class DfAnalyzeModel(ABC):
 
         return study
 
-    def fit(self, X_train: DataFrame, y_train: Series) -> None:
+    def fit(self, X_train: DataFrame, y_train: Union[Series, DataFrame]) -> None:
         if self.model is None:
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
             model_cls, clean_args = self.model_cls_args(kwargs)
@@ -248,7 +417,7 @@ class DfAnalyzeModel(ABC):
     def refit_tuned(
         self,
         X: DataFrame,
-        y: Series,
+        y: Union[Series, DataFrame],
         g: Optional[Series] = None,
         tuned_args: Optional[Mapping] = None,
     ) -> None:
@@ -272,24 +441,24 @@ class DfAnalyzeModel(ABC):
     def htune_eval(
         self,
         X_train: DataFrame,
-        y_train: Series,
+        y_train: Union[Series, DataFrame],
         g_train: Optional[Series],
         X_test: DataFrame,
-        y_test: Series,
+        y_test: Union[Series, DataFrame],
         g_test: Optional[Series],
         seed: int,
     ) -> tuple[
         DataFrame,
-        Union[Series, ndarray],
-        Union[Series, ndarray],
-        Optional[ndarray],
-        Optional[ndarray],
+        Union[Series, DataFrame, ndarray],
+        Union[Series, DataFrame, ndarray],
+        Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ],
+        Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ],
+        Optional[DataFrame],
     ]:
-        from df_analyze.hypertune import (
-            ClassifierScorer,
-            RegressorScorer,
-        )
-
         """
         Returns
         -------
@@ -307,23 +476,31 @@ class DfAnalyzeModel(ABC):
         if self.is_classifier:
             holdout_probs_test = self.predict_proba(X_test)
             probs_train = self.predict_proba(X_train)
-
-            scorer = ClassifierScorer
-            holdout_scores = scorer.get_scores(
-                y_true=y_test, y_pred=holdout_preds_test, y_prob=holdout_probs_test
-            )
-            train_scores = scorer.get_scores(
-                y_true=y_train, y_pred=preds_train, y_prob=probs_train
-            )
-        else:
-            scorer = RegressorScorer
-            holdout_scores = scorer.get_scores(y_true=y_test, y_pred=holdout_preds_test)
-            train_scores = scorer.get_scores(y_true=y_train, y_pred=preds_train)
+        holdout_scores = self._score_outputs(
+            y_true=y_test,
+            y_pred=holdout_preds_test,
+            y_prob=holdout_probs_test,
+        )
+        holdout_scores_by_target = self._score_outputs_by_target(
+            y_true=y_test,
+            y_pred=holdout_preds_test,
+            y_prob=holdout_probs_test,
+        )
+        train_scores = self._score_outputs(
+            y_true=y_train,
+            y_pred=preds_train,
+            y_prob=probs_train,
+        )
+        train_scores_by_target = self._score_outputs_by_target(
+            y_true=y_train,
+            y_pred=preds_train,
+            y_prob=probs_train,
+        )
 
         kf = OmniKFold(
             n_splits=5,
             is_classification=self.is_classifier,
-            grouped=g_train is not None,
+            grouped=g_test is not None,
             labels=None,
             warn_on_fallback=True,
             df_analyze_phase="Final k-fold on holdout set",
@@ -332,33 +509,42 @@ class DfAnalyzeModel(ABC):
 
         tuned_model_orig = self.tuned_model
         scores = []
+        fold_scores_by_target: dict[str, list[dict[str, float]]] = {}
+        y_cv = self._split_target_for_cv(y_test)
         try:
-            for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
-                try:
-                    df_train = X_test.loc[idx_train]
-                    df_test = X_test.loc[idx_test]
-                    targ_train = y_test.loc[idx_train]
-                    targ_test = y_test.loc[idx_test]
-                except KeyError as e:
-                    raise IndexError("Couldn't use .loc in internal k-fold") from e
-
+            for idx_train, idx_test in kf.split(y_cv.to_frame(), y_cv, g_test)[0]:
+                df_train = X_test.iloc[idx_train]
+                df_test = X_test.iloc[idx_test]
+                targ_train = y_test.iloc[idx_train]
+                targ_test = y_test.iloc[idx_test]
                 self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
                 inner_preds_test = self.tuned_predict(X=df_test)
                 if self.is_classifier:
                     inner_probs_test = self.predict_proba(X=df_test)
-                    scorer = ClassifierScorer
-                    scores.append(
-                        scorer.get_scores(
-                            y_true=targ_test,
-                            y_pred=inner_preds_test,
-                            y_prob=inner_probs_test,
-                        )
+                    fold_score = self._score_outputs(
+                        y_true=targ_test,
+                        y_pred=inner_preds_test,
+                        y_prob=inner_probs_test,
+                    )
+                    fold_score_by_target = self._score_outputs_by_target(
+                        y_true=targ_test,
+                        y_pred=inner_preds_test,
+                        y_prob=inner_probs_test,
                     )
                 else:
-                    scorer = RegressorScorer
-                    scores.append(
-                        scorer.get_scores(y_true=targ_test, y_pred=inner_preds_test)
+                    fold_score = self._score_outputs(
+                        y_true=targ_test,
+                        y_pred=inner_preds_test,
+                        y_prob=None,
                     )
+                    fold_score_by_target = self._score_outputs_by_target(
+                        y_true=targ_test,
+                        y_pred=inner_preds_test,
+                        y_prob=None,
+                    )
+                scores.append(fold_score)
+                for target_name, target_scores in fold_score_by_target.items():
+                    fold_scores_by_target.setdefault(target_name, []).append(target_scores)
         finally:
             self.tuned_model = tuned_model_orig
 
@@ -370,9 +556,49 @@ class DfAnalyzeModel(ABC):
         df = pd.concat([train, holdout, means], axis=1)
         df.index.name = "metric"
         df = df.reset_index()
-        return df, preds_train, holdout_preds_test, probs_train, holdout_probs_test
+        df_target: Optional[DataFrame] = None
+        if isinstance(y_test, DataFrame):
+            rows = []
+            target_names = [str(col) for col in y_test.columns]
+            for target_name in target_names:
+                tr_scores = train_scores_by_target.get(target_name, {})
+                ho_scores = holdout_scores_by_target.get(target_name, {})
+                fold_target_scores = fold_scores_by_target.get(target_name, [])
+                fold_means: dict[str, float] = {}
+                if len(fold_target_scores) > 0:
+                    fold_means = (
+                        DataFrame(fold_target_scores)
+                        .mean(axis=0, numeric_only=True)
+                        .to_dict()
+                    )
+                metric_names = sorted(
+                    set(tr_scores.keys())
+                    | set(ho_scores.keys())
+                    | set(fold_means.keys())
+                )
+                for metric_name in metric_names:
+                    rows.append(
+                        {
+                            "target": target_name,
+                            "metric": metric_name,
+                            "trainset": tr_scores.get(metric_name, np.nan),
+                            "holdout": ho_scores.get(metric_name, np.nan),
+                            "5-fold": fold_means.get(metric_name, np.nan),
+                        }
+                    )
+            if len(rows) > 0:
+                df_target = DataFrame(rows)
 
-    def tuned_scores(self, X: DataFrame, y: Series) -> float:
+        return (
+            df,
+            preds_train,
+            holdout_preds_test,
+            probs_train,
+            holdout_probs_test,
+            df_target,
+        )
+
+    def tuned_scores(self, X: DataFrame, y: Union[Series, DataFrame]) -> float:
         if self.tuned_model is None:
             raise RuntimeError("Need to tune model before calling `.tuned_scores()`")
 
@@ -459,11 +685,13 @@ class DfAnalyzeModel(ABC):
 
         raise NotImplementedError()
 
-    def predict_proba(self, X: DataFrame) -> ndarray:
+    def predict_proba(
+        self, X: DataFrame
+    ) -> Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]:
         if not self.is_classifier:
             raise ValueError("Cannot get probabilities for a regression model.")
 
-        if self.tuned_args is None or self.tuned_model is None:
+        if self.tuned_model is None:
             raise RuntimeError("Need to tune estimator before calling `.predict_proba()`")
 
         return self.tuned_model.predict_proba(X)

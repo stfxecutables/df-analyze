@@ -205,7 +205,7 @@ class TestDataset:
         with catch_warnings():
             filterwarnings("ignore", category=UserWarning)
             results = self.inspect(load_cached=True)
-            df = drop_unusable(df, results)
+            df = drop_unusable(df, results, target="target")
             df, X_cont, nan_ind = handle_continuous_nans(
                 df,
                 target="target",
