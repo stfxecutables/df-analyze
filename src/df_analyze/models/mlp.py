@@ -255,7 +255,7 @@ class MLPEstimator(DfAnalyzeModel):
         split = 0.2 if val_split else None
         n_epochs = 8 if restarts else 50  # "period" of the annealing
         period = get_T0(X_train, n_epochs=n_epochs, val_split=split)[0]
-        shared: Mapping = dict(eta_min=0, verbose=False, step_every="step")
+        shared: Mapping = dict(eta_min=0, step_every="step")
         return (
             LRScheduler(policy=cls, T_0=period, T_mult=2, **shared)  # type: ignore
             if restarts

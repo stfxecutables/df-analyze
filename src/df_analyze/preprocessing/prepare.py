@@ -25,6 +25,7 @@ from sklearn.preprocessing import KBinsDiscretizer, RobustScaler
 
 from df_analyze._constants import (
     N_CAT_LEVEL_MIN,
+    N_MULTITARGET_LEVEL_MIN,
     N_TARG_LEVEL_MIN,
     SEED,
     UNIVARIATE_PRED_MAX_N_SAMPLES,
@@ -596,26 +597,34 @@ class PreparedData:
 
         if self.is_classification:
             if isinstance(y, DataFrame):
+                undersampled_counts: list[str] = []
                 for col in y.columns:
                     cnts = y[col].value_counts()
-                    if cnts.empty or cnts.min() < N_TARG_LEVEL_MIN:
+                    if cnts.empty:
+                        raise ValueError(
+                            f"Target '{col}' has no valid (non-missing) samples."
+                        )
+                    if cnts.min() <= N_MULTITARGET_LEVEL_MIN:
                         df = DataFrame(
                             index=pd.Index(data=cnts.index, name="Target Level"),
                             columns=["Count"],
                             data=cnts.values,
                         )
                         info = df.to_markdown(tablefmt="simple")
-                        raise ValueError(
-                            f"Target '{col}' has undersampled levels. This means that one "
-                            f"or more of the target levels (classes) has less than "
-                            f"{N_TARG_LEVEL_MIN} samples, either before or after splitting "
-                            "into a holdout set. This is simply far too few samples for "
-                            "meaningful generalization or stable performance estimates, and "
-                            "means your data is far too small to use for automated machine "
-                            "learning via df-analyze.\n\n"
-                            "Observed target level counts:\n\n"
-                            f"{info}"
-                        )
+                        undersampled_counts.append(f"Target '{col}' counts:\n\n{info}")
+                if len(undersampled_counts) > 0:
+                    info = "\n\n".join(undersampled_counts)
+                    warn(
+                        "One or more multi-target classification targets have "
+                        "undersampled levels. This means that one or more target levels "
+                        f"(classes) have fewer than or equal to {N_MULTITARGET_LEVEL_MIN} samples. "
+                        "Preprocessing will continue, but splitting and classification "
+                        "metrics for these levels may be unstable. This may also cause "
+                        "downstream CV splitting to fail (especially when class counts "
+                        "are below the number of folds).\n\n"
+                        "Observed target level counts:\n\n"
+                        f"{info}"
+                    )
             elif np.bincount(y).min() < N_TARG_LEVEL_MIN:
                 unqs, cnts = np.unique(y.to_numpy(), return_counts=True)
                 df = DataFrame(

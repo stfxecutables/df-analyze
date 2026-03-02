@@ -658,7 +658,10 @@ class ProgramOptions(Debug):
             return Path(d["_raw_paths"][0])
 
         options = root / "options.json"
-        obj = cast(dict, jsonpickle.decode(options.read_text()))
+        obj = jsonpickle.decode(options.read_text())
+        if isinstance(obj, ProgramOptions):
+            obj = vars(obj)
+        obj = cast(dict, obj)
         obj.pop("version", None)
         obj.pop("cli_args", None)
         obj.pop("comparables", None)

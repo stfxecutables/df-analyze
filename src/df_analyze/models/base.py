@@ -27,6 +27,7 @@ from typing import (
     Union,
     overload,
 )
+from warnings import warn
 
 if TYPE_CHECKING:
     from df_analyze.testing.datasets import TestDataset
@@ -136,16 +137,44 @@ class DfAnalyzeModel(ABC):
         return y
 
     @staticmethod
+    def _prepare_score_frames(
+        y_true: Union[Series, DataFrame],
+        y_pred: Union[Series, DataFrame, ndarray],
+    ) -> tuple[DataFrame, DataFrame]:
+        if isinstance(y_true, DataFrame):
+            y_true_df = y_true.copy()
+        else:
+            name = str(y_true.name) if y_true.name is not None else "target"
+            y_true_df = y_true.to_frame(name=name)
+
+        y_pred_df = DfAnalyzeModel._preds_to_df(y_pred, y_true_df, y_true_df.index)
+        y_pred_df = DfAnalyzeModel._align_pred_columns(y_pred_df, y_true_df)
+        return y_true_df, y_pred_df
+
+    @staticmethod
+    def _align_pred_columns(y_pred_df: DataFrame, y_true_df: DataFrame) -> DataFrame:
+        if y_pred_df.shape[1] != y_true_df.shape[1]:
+            return y_pred_df
+        if list(y_pred_df.columns) == list(y_true_df.columns):
+            return y_pred_df
+        out = y_pred_df.copy()
+        if set(out.columns) == set(y_true_df.columns):
+            return out.reindex(columns=y_true_df.columns)
+        warn("Prediction columns mismatch; aligned by position.")
+        out.columns = y_true_df.columns
+        return out
+
+    @staticmethod
     def _preds_to_df(
         preds: Union[Series, DataFrame, ndarray],
         y_true_df: DataFrame,
         index: pd.Index,
     ) -> DataFrame:
         if isinstance(preds, DataFrame):
-            out = preds.copy()
+            out = preds.copy().reindex(index=index)
             if out.shape[1] == y_true_df.shape[1]:
-                out.columns = y_true_df.columns
-            return out.reindex(index=index)
+                out = DfAnalyzeModel._align_pred_columns(out, y_true_df)
+            return out
         if isinstance(preds, Series):
             col = y_true_df.columns[0]
             return DataFrame({col: preds.to_numpy()}, index=index)
@@ -187,6 +216,11 @@ class DfAnalyzeModel(ABC):
                 for i, col in enumerate(target_cols)
                 if i < arr.shape[1]
             }
+        if arr.ndim == 2 and len(target_cols) > 1 and arr.shape[1] == len(target_cols):
+            return {
+                str(col): np.stack([1.0 - arr[:, i], arr[:, i]], axis=1)
+                for i, col in enumerate(target_cols)
+            }
         if arr.ndim == 2 and len(target_cols) == 1:
             return {str(target_cols[0]): arr}
         return {}
@@ -210,12 +244,45 @@ class DfAnalyzeModel(ABC):
             Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
         ] = None,
     ) -> dict[str, float]:
-        by_target = self._score_outputs_by_target(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
+        y_true_df, y_pred_df = self._prepare_score_frames(y_true=y_true, y_pred=y_pred)
+        by_target = self._score_outputs_by_target_df(
+            y_true_df=y_true_df, y_pred_df=y_pred_df, y_prob=y_prob
+        )
         if len(by_target) == 0:
             return {}
         if len(by_target) == 1:
             return list(by_target.values())[0]
-        return self._mean_scores(list(by_target.values()))
+        scores = self._mean_scores(list(by_target.values()))
+        joint_scores = self._score_outputs_joint(
+            y_true_df=y_true_df, y_pred_df=y_pred_df, y_prob=y_prob
+        )
+        if len(joint_scores) > 0:
+            scores = {**scores, **joint_scores}
+        return scores
+
+    def _score_outputs_joint(
+        self,
+        y_true_df: DataFrame,
+        y_pred_df: DataFrame,
+        y_prob: Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ] = None,
+    ) -> dict[str, float]:
+        if y_true_df.shape[1] <= 1:
+            return {}
+
+        if self.is_classifier:
+            y_true = np.asarray(y_true_df.to_numpy())
+            y_pred = np.asarray(y_pred_df.to_numpy())
+            subset_acc = float(np.mean(np.all(y_true == y_pred, axis=1)))
+            ham_loss = float(np.mean(y_true != y_pred))
+            return {"subset-acc": subset_acc, "hamming-loss": ham_loss}
+
+        y_true = np.asarray(y_true_df.to_numpy(), dtype=float)
+        y_pred = np.asarray(y_pred_df.to_numpy(), dtype=float)
+        residual = y_true - y_pred
+        sq_norm = np.sum(np.square(residual), axis=1)
+        return {"multi-rmse": float(np.sqrt(np.mean(sq_norm)))}
 
     def _score_outputs_by_target(
         self,
@@ -225,24 +292,23 @@ class DfAnalyzeModel(ABC):
             Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
         ] = None,
     ) -> dict[str, dict[str, float]]:
+        y_true_df, y_pred_df = self._prepare_score_frames(y_true=y_true, y_pred=y_pred)
+        return self._score_outputs_by_target_df(
+            y_true_df=y_true_df, y_pred_df=y_pred_df, y_prob=y_prob
+        )
+
+    def _score_outputs_by_target_df(
+        self,
+        y_true_df: DataFrame,
+        y_pred_df: DataFrame,
+        y_prob: Optional[
+            Union[ndarray, dict[str, ndarray], list[ndarray], tuple[ndarray, ...]]
+        ] = None,
+    ) -> dict[str, dict[str, float]]:
         from df_analyze.hypertune import (
             ClassifierScorer,
             RegressorScorer,
         )
-
-        if isinstance(y_true, DataFrame):
-            y_true_df = y_true.copy()
-        else:
-            name = str(y_true.name) if y_true.name is not None else "target"
-            y_true_df = y_true.to_frame(name=name)
-
-        y_pred_df = self._preds_to_df(y_pred, y_true_df, y_true_df.index)
-        if (
-            y_pred_df.shape[1] == y_true_df.shape[1]
-            and list(y_pred_df.columns) != list(y_true_df.columns)
-        ):
-            y_pred_df = y_pred_df.copy()
-            y_pred_df.columns = y_true_df.columns
 
         out: dict[str, dict[str, float]] = {}
         target_cols = [str(col) for col in y_true_df.columns]
@@ -268,16 +334,9 @@ class DfAnalyzeModel(ABC):
     def _mean_tuning_score(
         self, metric: Scorer, y_true_df: DataFrame, y_pred_df: DataFrame
     ) -> float:
-        if (
-            y_pred_df.shape[1] == y_true_df.shape[1]
-            and list(y_pred_df.columns) != list(y_true_df.columns)
-        ):
-            y_pred_df = y_pred_df.copy()
-            y_pred_df.columns = y_true_df.columns
+        y_pred_df = self._align_pred_columns(y_pred_df, y_true_df)
         scores = []
         for col in y_true_df.columns:
-            if col not in y_pred_df.columns:
-                continue
             score = metric.tuning_score(y_true_df[col].to_numpy(), y_pred_df[col].to_numpy())
             scores.append(float(score))
         if len(scores) == 0:
