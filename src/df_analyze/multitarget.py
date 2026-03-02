@@ -75,6 +75,7 @@ def _slice_probs(
     ],
     target: str,
     target_index: Optional[int] = None,
+    target_cols: Optional[list[str]] = None,
 ) -> Optional[np.ndarray]:
     if isinstance(probs, dict):
         key = _match_target_key(probs.keys(), target)
@@ -99,6 +100,15 @@ def _slice_probs(
             if target_index < 0 or target_index >= arr.shape[1]:
                 return None
             return arr[:, target_index, :]
+        if (
+            arr.ndim == 2
+            and target_cols is not None
+            and len(target_cols) > 1
+            and arr.shape[1] == len(target_cols)
+        ):
+            if target_index is None:
+                return None
+            return arr[:, target_index]
         return arr
     return None
 
@@ -176,8 +186,18 @@ def _eval_results_for_target(
             target_index=target_index,
             target_cols=target_names,
         )
-        probs_test = _slice_probs(res.probs_test, target, target_index)
-        probs_train = _slice_probs(res.probs_train, target, target_index)
+        probs_test = _slice_probs(
+            res.probs_test,
+            target,
+            target_index,
+            target_cols=target_names,
+        )
+        probs_train = _slice_probs(
+            res.probs_train,
+            target,
+            target_index,
+            target_cols=target_names,
+        )
 
         model = _init_model_for_target(res.model_cls, prep_train_t.y)
 
