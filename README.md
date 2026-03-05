@@ -60,15 +60,15 @@
   - [Inappropriate Tasks](#inappropriate-tasks)
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
-    - [Automated Data Preproccesing](#automated-data-preproccesing)
-    - [Feature Descriptive Statisics](#feature-descriptive-statisics)
+    - [Automated Data Preprocessing](#automated-data-preprocessing)
+    - [Feature Descriptive Statistics](#feature-descriptive-statistics)
     - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
     - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
 
 
 # Overview
 
-`df-analyze` is a command-line tool for perfoming
+`df-analyze` is a command-line tool for performing
 [AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
 on small to medium-sized tabular datasets (less than about 200 000 samples,
 and less than about 50 to 100 features). `df-analyze` attempts to automate:
@@ -90,7 +90,7 @@ formatted](#supported-dataset-formats) image and text datasets into tabular
 data that can be handled by the standard `df-analyze` tabular prediction
 tools.
 
-Currently, siginifcant efforts have been made to make `df-analyze` robust to
+Currently, significant efforts have been made to make `df-analyze` robust to
 a wide variety of tabular datasets. However, there are some significant
 [limitations](#limitations).
 
@@ -118,7 +118,7 @@ README](https://github.com/stfxecutables/df-analyze/blob/experimental/docs/stude
 [WIP!] in this repo. The student README contains some descriptions and tips
 that are helpful for those just starting to learn about the CLI, containers,
 AutoML tools, and also some explanations and tips for running `df-analyze` on
-SLURM High-Performance Computing (HPC) clusters, particularly the [Digitial
+SLURM High-Performance Computing (HPC) clusters, particularly the [Digital
 Research Alliance of Canada (formerly Compute Canada)
 clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
@@ -1487,11 +1487,11 @@ are simply beyond the scope of `df-analyze`.
 
 ## Completed Features
 
-### Automated Data Preproccesing
+### Automated Data Preprocessing
 
 - **NaN Removal and Handling**
   - samples with NaN target are dropped (see Target Handling below)
-  - for continous features, NaNs can be either dropped, mean, median, or
+  - for continuous features, NaNs can be either dropped, mean, median, or
     multiply imputed (default: mean imputation)
   - categorical features encode NaNs as an additional class / level
 
@@ -1547,7 +1547,7 @@ are simply beyond the scope of `df-analyze`.
 
 
 
-### Feature Descriptive Statisics
+### Feature Descriptive Statistics
 
 - **Continuous and ordinal features**:
   - Non-robust:
