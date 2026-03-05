@@ -652,9 +652,19 @@ class GandalfContLightningModel(LightningModule):
         target = batch[1]  # target.shape (B,)
         self.log("val/loss", loss)
         if self.is_cls:
-            self.log("val/metric", self.metric(preds, target), on_step=True)
+            self.log(
+                "val/metric",
+                self.metric(preds, target),
+                on_step=False,
+                on_epoch=True,
+            )
         else:
-            self.log("val/metric", self.metric(preds.squeeze(1), target), on_step=True)
+            self.log(
+                "val/metric",
+                self.metric(preds.squeeze(1), target),
+                on_step=False,
+                on_epoch=True,
+            )
 
     def configure_optimizers(
         self,
@@ -767,6 +777,18 @@ class GandalfEstimator(DfAnalyzeModel):
         )
         return train_loader, val_loader
 
+    def _trainer_hardware(self) -> tuple[str, int | str]:
+        if torch.cuda.is_available():
+            return "gpu", 1
+        mps_backend = getattr(torch.backends, "mps", None)
+        if (mps_backend is not None) and mps_backend.is_available():
+            return "mps", 1
+        return "cpu", "auto"
+
+    def _uses_accelerator(self) -> bool:
+        accelerator, _ = self._trainer_hardware()
+        return accelerator in {"gpu", "mps"}
+
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
 
@@ -784,7 +806,7 @@ class GandalfEstimator(DfAnalyzeModel):
         # ckpt_metric = "val/loss"
         cbs = [
             # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
-            ModelCheckpoint(monitor=stop, every_n_epochs=1),
+            ModelCheckpoint(monitor=stop, mode=mode, every_n_epochs=1),
             LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
         ]
         # ensure we get at least one ckpt file...
@@ -805,9 +827,10 @@ class GandalfEstimator(DfAnalyzeModel):
         log_freq_train = max(1, min(len(train.dataset) // train.batch_size, 4))
         log_freq_val = max(1, min(len(val.dataset) // val.batch_size, 4))
         log_freq = min(log_freq_train, log_freq_val)
+        accelerator, devices = self._trainer_hardware()
         trainer = Trainer(
-            accelerator="cpu",
-            devices="auto",
+            accelerator=accelerator,
+            devices=devices,
             logger=logger,
             plugins=[DisabledSLURMEnvironment(auto_requeue=False)],
             max_epochs=50,
@@ -878,31 +901,50 @@ class GandalfEstimator(DfAnalyzeModel):
             model=self.tuned_model, train_dataloaders=train, val_dataloaders=val
         )
 
+    def _predict_logits(
+        self,
+        *,
+        trainer: Trainer,
+        model: LightningModule,
+        loader: DataLoader,
+    ) -> Tensor:
+        ckpt_cb = getattr(trainer, "checkpoint_callback", None)
+        best_path = getattr(ckpt_cb, "best_model_path", "")
+        if isinstance(best_path, str) and (len(best_path) > 0) and Path(best_path).exists():
+            all_logits = trainer.predict(
+                model=model, dataloaders=loader, ckpt_path="best"
+            )
+        else:
+            all_logits = trainer.predict(model=model, dataloaders=loader)
+        return torch.concatenate(all_logits, dim=0)  # type: ignore
+
     def predict(self, X: DataFrame) -> ndarray:
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
+        logits = self._predict_logits(
+            trainer=self.trainer,
+            model=self.model,
+            loader=loader,
         )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         if self.is_classifier:
-            probs = torch.softmax(logits, dim=1).numpy()
+            probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
             return probs.argmax(axis=1)
-        return logits.numpy()
+        return logits.detach().cpu().numpy()
 
     def tuned_predict(self, X: DataFrame) -> ndarray:
         if self.tuned_trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.tuned_trainer.predict(
-            model=self.tuned_model, dataloaders=loader, ckpt_path="best"
+        logits = self._predict_logits(
+            trainer=self.tuned_trainer,
+            model=self.tuned_model,
+            loader=loader,
         )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
         if self.is_classifier:
-            probs = torch.softmax(logits, dim=1).numpy()
+            probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
             return probs.argmax(axis=1)
-        return logits.numpy()
+        return logits.detach().cpu().numpy()
 
     def predict_proba_untuned(self, X: DataFrame) -> ndarray:
         if not self.is_classifier:
@@ -910,11 +952,12 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
+        logits = self._predict_logits(
+            trainer=self.trainer,
+            model=self.model,
+            loader=loader,
         )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
-        probs = torch.softmax(logits, dim=1).numpy()
+        probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
         return probs
 
     def predict_proba(self, X: DataFrame) -> ndarray:
@@ -923,11 +966,12 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.tuned_trainer is None:
             raise RuntimeError("Model has not been tuned yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.tuned_trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
+        logits = self._predict_logits(
+            trainer=self.tuned_trainer,
+            model=self.tuned_model,
+            loader=loader,
         )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
-        probs = torch.softmax(logits, dim=1).numpy()
+        probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
         return probs
 
     def _to_model_args(self, optuna_args: Mapping, X_train: DataFrame) -> Mapping:
@@ -971,15 +1015,20 @@ class GandalfEstimator(DfAnalyzeModel):
                 all_preds = trainer.predict(
                     model=model, dataloaders=pred, ckpt_path="best"
                 )
-                preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
+                preds = torch.concatenate(all_preds, dim=0).detach().cpu().numpy()  # type: ignore
                 if not hasattr(val.dataset, "y"):
                     raise AttributeError(
                         "Validation dataset missing target attribute `y`"
                     )
-                y_true = Series(data=val.dataset.y.numpy())  # type: ignore
+                y_true = Series(data=val.dataset.y.detach().cpu().numpy())  # type: ignore
                 if self.is_classifier:
                     y_pred = Series(data=preds.argmax(axis=1))
-                    y_prob = preds
+                    y_prob = (
+                        torch.softmax(torch.from_numpy(preds), dim=1)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
                     score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
                     return score[metric.value]  # type: ignore
                     # and (metric is not ClassifierScorer.AUROC):
@@ -1013,7 +1062,7 @@ class GandalfEstimator(DfAnalyzeModel):
     ) -> Study:
         # completely arbitrary...
         n_cpu = multiprocessing.cpu_count()
-        n_jobs = n_cpu // 2
+        n_jobs = 1 if self._uses_accelerator() else max(1, n_cpu // 2)
         # n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
         return super().htune_optuna(
             X_train=X_train,

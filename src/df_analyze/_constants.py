@@ -132,6 +132,28 @@ So far we use only 5-fold, so to guarantee one sample of each level in an
 internal fold, we need floor(N/25) > 1 ==> N > 25.
 """
 
+N_MULTITARGET_LEVEL_MIN = N_TARG_LEVEL_MIN
+"""
+Minimum required number of samples for level of a categorical target variable
+when running multi-target classification.
+
+Notes
+-----
+Kept separate from N_TARG_LEVEL_MIN so multi-target filtering heuristics can be
+tuned independently without changing single-target behavior.
+"""
+
+MULTITARGET_MAX_RARE_LEVEL_FRAC = 1.0 / 3.0
+"""
+Maximum fraction of multi-target dimensions in a row that may belong to
+undersampled target levels before that row is dropped.
+
+Notes
+-----
+Using one third means, for example, that a 3-target problem can retain rows
+with up to one rare label while still discarding rows dominated by rare labels.
+"""
+
 N_TARG_LEVEL_MIN_INTERNAL = N_TARG_LEVEL_MIN // 2
 """
 Minimum required number of samples for level of a categorical target variable

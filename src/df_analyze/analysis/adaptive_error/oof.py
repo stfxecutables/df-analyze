@@ -29,7 +29,7 @@ def _init_model(model_cls: type, y_train: pd.Series) -> Any:
     try:
         return model_cls()
     except TypeError:
-        n_classes = len(np.unique(y_train))
+        n_classes = len(np.unique(np.asarray(y_train)))
         return model_cls(num_classes=n_classes)
 
 
@@ -66,10 +66,11 @@ def build_oof_for_result(
     for idx_train, idx_val in splits:
         X_tr = X_train.iloc[idx_train]
         y_tr = y_train.iloc[idx_train]
+        g_tr = groups.iloc[idx_train] if groups is not None else None
         X_val = X_train.iloc[idx_val]
 
         model = _init_model(result.model_cls, y_train)
-        model.refit_tuned(X_tr, y_tr, tuned_args=result.params)
+        model.refit_tuned(X_tr, y_tr, g=g_tr, tuned_args=result.params)
         tuned_model = getattr(model, "tuned_model", None)
         if tuned_model is None:
             raise RuntimeError(
@@ -78,6 +79,8 @@ def build_oof_for_result(
 
         y_pred = np.asarray(model.tuned_predict(X_val)).ravel()
         proba, scores = predict_proba_or_scores(tuned_model, X_val)
+        if proba is None and scores is None:
+            proba, scores = predict_proba_or_scores(model, X_val)
         if proba is None and scores is not None:
             proba = scores_to_proba(scores)
         if proba is None:
@@ -86,6 +89,8 @@ def build_oof_for_result(
             )
         if scores is None:
             scores = predict_scores(tuned_model, X_val)
+            if scores is None:
+                scores = predict_scores(model, X_val)
 
         proba = align_proba_with_predictions(proba, y_pred, scores)
         # universal probability-margin confidence

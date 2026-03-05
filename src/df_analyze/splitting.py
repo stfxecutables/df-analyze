@@ -18,7 +18,7 @@ from sklearn.model_selection import (
 )
 
 from df_analyze._constants import (
-    N_TARG_LEVEL_MIN,
+    N_MULTITARGET_LEVEL_MIN,
     N_TARG_LEVEL_MIN_TEST_INTERNAL,
     N_TARG_LEVEL_MIN_TRAIN_INTERNAL,
     SEED,
@@ -43,7 +43,7 @@ APPROXIMATE_GROUP_SPLIT_DIFF_WARN_THRESHOLD = 0.1
 
 def y_split_label(
     y_df: DataFrame,
-    min_count: int = N_TARG_LEVEL_MIN,
+    min_count: int = N_MULTITARGET_LEVEL_MIN,
     warn_on_fallback: bool = True,
 ) -> Series:
     if y_df.shape[1] == 0:

@@ -1,5 +1,6 @@
 import re
 import sys
+from math import ceil
 from pathlib import Path
 from shutil import get_terminal_size
 from typing import Optional
@@ -16,7 +17,9 @@ from tqdm import tqdm
 
 from df_analyze._constants import (
     MAX_PERF_N_FEATURES,
+    MULTITARGET_MAX_RARE_LEVEL_FRAC,
     N_CAT_LEVEL_MIN,
+    N_MULTITARGET_LEVEL_MIN,
     N_TARG_LEVEL_MIN,
     NAN_STRINGS,
 )
@@ -54,6 +57,9 @@ class RenameInfo:
         for original, renamed in self.renames:
             if original != renamed:
                 self.changed.append((original, renamed))
+        self.changed_map: dict[str, str] = {
+            original: renamed for original, renamed in self.changed
+        }
 
     def to_markdown(self) -> Optional[str]:
         if len(self.changed) == 0:
@@ -78,8 +84,8 @@ class RenameInfo:
     def rename_columns(self, cols: list[str]) -> list[str]:
         renamed = []
         for col in cols:
-            if col in self.changed:
-                renamed.append(self.changed[col])
+            if col in self.changed_map:
+                renamed.append(self.changed_map[col])
             else:
                 renamed.append(col)
         return renamed
@@ -300,10 +306,12 @@ def reindex(
     lengths = [len(ix) for ix in ix_tests]
     ix_train = np.arange(len(ix_train))
     ix_tests = []
-    last = ix_train[-1]
+    last = int(ix_train[-1]) if len(ix_train) > 0 else -1
     for length in lengths:
-        ix_tests.append(np.arange(last + 1, last + 1 + length))
-        last = ix_tests[-1][-1]
+        ix_next = np.arange(last + 1, last + 1 + length)
+        ix_tests.append(ix_next)
+        if len(ix_next) > 0:
+            last = int(ix_next[-1])
 
     return ix_train, ix_tests
 
@@ -441,7 +449,7 @@ def encode_target(
         if _warn:
             cleaning_inform(
                 "The target variable has a number of class labels "
-                f"({unqs[idx]}) with less than {N_TARG_LEVEL_MIN} members. This "
+                f"({unqs[idx]}) with less than or equal to {N_TARG_LEVEL_MIN} members. This "
                 "will cause problems with splitting in various nested k-fold "
                 "procedures used in `df-analyze`. In addition, any estimates "
                 "or metrics produced for such a class will not be "
@@ -491,34 +499,50 @@ def encode_targets(
     Optional[list[ndarray]],
 ]:
     target_cols = as_target_list(targets)
-    keep_mask = Series(True, index=df.index)
+    n_targ_level_min_mt = N_MULTITARGET_LEVEL_MIN
+    max_rare_targets_per_row = max(
+        1, ceil(len(target_cols) * MULTITARGET_MAX_RARE_LEVEL_FRAC)
+    )
+    has_missing_target = Series(False, index=df.index, dtype=bool)
+    rare_target_counts = Series(0, index=df.index, dtype=np.int64)
     for col in target_cols:
         series = unify_nans(df[col])
-        unqs, cnts = np.unique(series.astype(str), return_counts=True)
+        vals = series.dropna()
+        if vals.empty:
+            raise ValueError(f"Target '{col}' has no valid (non-missing) samples.")
+
+        unqs, cnts = np.unique(vals.astype(str), return_counts=True)
         if len(unqs) <= 1:
-            raise ValueError(f"Target variable {col} is constant.")
-        idx = cnts <= N_TARG_LEVEL_MIN
-        n_cls = len(unqs)
+            msg = f"Target variable {col} is constant."
+            if len(target_cols) > 1:
+                msg += " Remove this target column and re-run df-analyze."
+            raise ValueError(msg)
+        idx = cnts <= n_targ_level_min_mt
         if np.sum(idx).item() > 0:
             if _warn:
                 cleaning_inform(
                     "The target variable has a number of class labels "
-                    f"({unqs[idx]}) with less than {N_TARG_LEVEL_MIN} members. This "
+                    f"({unqs[idx]}) with less than or equal to {n_targ_level_min_mt} members. This "
                     "will cause problems with splitting in various nested k-fold "
                     "procedures used in `df-analyze`. In addition, any estimates "
                     "or metrics produced for such a class will not be "
                     "statistically meaningful (i.e. the uncertainty on those "
                     "metrics or estimates will be exceedingly large). We thus "
-                    "remove all samples that belong to these labels, bringing the "
-                    f"total number of classes down to {n_cls - np.sum(idx).item()}."
-                    "\n\nFor multi-target data, row filtering is applied as the "
-                    "intersection across all targets: if a sample is missing "
-                    "or rare in any target, it is removed from the full dataset."
+                    "treat samples in these labels as low-support for this target."
+                    f"\n\nFor multi-target data, rows with missing target values are "
+                    "always removed. Rows are also removed when more than "
+                    f"{max_rare_targets_per_row} target values belong to labels with "
+                    f"fewer than or equal to {n_targ_level_min_mt} samples."
                 )
             rare_labels = set(unqs[idx].tolist())
         else:
             rare_labels = set()
-        keep_mask &= (~series.isna()) & (~series.astype(str).isin(rare_labels))
+        is_missing = series.isna()
+        has_missing_target |= is_missing
+        is_rare = (~is_missing) & series.astype(str).isin(rare_labels)
+        rare_target_counts += is_rare.astype(np.int64)
+
+    keep_mask = (~has_missing_target) & (rare_target_counts <= max_rare_targets_per_row)
 
     ix_train, ix_tests = reindex(keep_mask, ix_train, ix_tests)
     df = df.loc[keep_mask].reset_index(drop=True)
