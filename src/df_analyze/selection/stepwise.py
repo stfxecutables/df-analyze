@@ -16,12 +16,29 @@ from tqdm import tqdm
 
 from df_analyze._constants import DEFAULT_N_STEPWISE_SELECT
 from df_analyze.cli.cli import ProgramOptions
+from df_analyze.device import DeviceInfo, device_info_from_resolved
 from df_analyze.enumerables import Scorer, WrapperSelectionModel
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.models.knn import KNNClassifier, KNNRegressor
 from df_analyze.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from df_analyze.models.linear import ElasticNetRegressor, SGDClassifierSelector
 from df_analyze.preprocessing.prepare import PreparedData
+
+
+GPU_SERIAL_WRAPPER_MODELS = {
+    WrapperSelectionModel.LGBM,
+    WrapperSelectionModel.KNN,
+}
+
+
+def _cpu_score_device_info(device_info: DeviceInfo) -> DeviceInfo:
+    return device_info_from_resolved(
+        device_info.requested,
+        "cpu",
+        torch_cuda_available=device_info.torch_cuda_available,
+        cuda_driver_available=device_info.cuda_driver_available,
+        mps_is_available=device_info.mps_available,
+    )
 
 
 @dataclass
@@ -86,6 +103,7 @@ def get_dfanalyze_score(
     candidate: str,
     is_forward: bool,
     test: bool,
+    device_info: DeviceInfo,
 ) -> float:
     includes = selected.copy()
     includes.add(candidate)
@@ -94,6 +112,7 @@ def get_dfanalyze_score(
     X_new = X_new.copy()
     g = None if g is None else g.copy()
     model = model_cls()
+    model.set_device_info(device_info)
 
     return model.cv_score(X_new, y.copy(), g, test=test, metric=metric)
 
@@ -138,6 +157,39 @@ class StepwiseSelector:
         self.n_iterations = (
             self.n_features if self.is_forward else self.total_feats - self.n_features
         )
+
+    def _options_device_info(self) -> DeviceInfo:
+        device_info = getattr(self.options, "device_info", None)
+        if isinstance(device_info, DeviceInfo):
+            return device_info
+        resolved = getattr(self.options, "device", "cpu")
+        requested = getattr(self.options, "device_requested", resolved)
+        return device_info_from_resolved(
+            requested,
+            resolved,
+            torch_cuda_available=resolved == "cuda",
+            cuda_driver_available=resolved == "cuda",
+            mps_is_available=resolved == "mps",
+        )
+
+    def _score_device_info(self) -> DeviceInfo:
+        device_info = self._options_device_info()
+        if self.options.wrapper_model is WrapperSelectionModel.Linear:
+            # Linear stepwise scoring runs many small CV fits across candidate
+            # features. CPU joblib parallelism is usually faster and more
+            # stable than serializing those tiny fits through cuML/GPU setup and
+            # host-device transfer overhead. This affects wrapper selection
+            # only; final linear learners can still use CUDA-capable backends.
+            return _cpu_score_device_info(device_info)
+        return device_info
+
+    def _parallel_n_jobs(self) -> int:
+        device_info = self._score_device_info()
+        if not device_info.cuda_backends_enabled:
+            return -1
+        if self.options.wrapper_model in GPU_SERIAL_WRAPPER_MODELS:
+            return 1
+        return -1
 
     def fit(self) -> None:
         ddesc = "Forward" if self.is_forward else "Backward"
@@ -206,7 +258,8 @@ class StepwiseSelector:
 
         # loop only over un-flagged features
         candidates = list(self.to_consider.copy())
-        all_scores: list[float] = Parallel(n_jobs=-1)(
+        device_info = self._score_device_info()
+        all_scores: list[float] = Parallel(n_jobs=self._parallel_n_jobs())(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
@@ -217,6 +270,7 @@ class StepwiseSelector:
                 candidate=candidate,
                 is_forward=self.is_forward,
                 test=self.test,
+                device_info=device_info,
             )
             for candidate in tqdm(
                 candidates,
@@ -267,7 +321,8 @@ class StepwiseSelector:
             model_cls = SGDClassifierSelector if is_cls else ElasticNetRegressor
 
         candidates = list(self.to_consider.copy())
-        scores: list[float] = Parallel(n_jobs=-1)(
+        device_info = self._score_device_info()
+        scores: list[float] = Parallel(n_jobs=self._parallel_n_jobs())(
             delayed(get_dfanalyze_score)(  # type: ignore
                 model_cls=model_cls,
                 X=self.prepared.X,
@@ -278,6 +333,7 @@ class StepwiseSelector:
                 candidate=candidate,
                 is_forward=self.is_forward,
                 test=self.test,
+                device_info=device_info,
             )
             for candidate in tqdm(
                 candidates,

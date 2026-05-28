@@ -38,6 +38,21 @@ logger.addHandler(handler)
 logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
 
 
+@pytest.mark.fast
+def test_predresults_save_raw_writes_empty_cats_to_cats_file(tmp_path: Path) -> None:
+    conts = DataFrame({"feature": ["age"], "acc": [0.75]})
+    preds = PredResults(conts=conts, cats=None, is_classification=True)
+
+    preds.save_raw(tmp_path, fold_idx=None)
+    loaded = PredResults.load(tmp_path, is_classification=True)
+
+    assert (tmp_path / preds.files.conts_raw).exists()
+    assert (tmp_path / preds.files.cats_raw).exists()
+    assert loaded.conts is not None
+    assert loaded.cats is None
+    assert list(loaded.conts["feature"]) == ["age"]
+
+
 def will_work(n_min_cls: int, n_sub: int, n_max: int) -> bool:
     return (n_sub / n_max) * n_min_cls > 1.5
 

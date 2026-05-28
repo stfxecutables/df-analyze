@@ -56,6 +56,10 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
+from df_analyze.device import (
+    DeviceInfo,
+    configure_torch_cuda_performance,
+)
 from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.splitting import OmniKFold
@@ -135,7 +139,6 @@ BATCH_SIZE = 128
 
 # silence_spam()
 warnings.filterwarnings("ignore", category=UserWarning, message="Lazy modules")
-
 
 class SkorchMLP(Module):
     def __init__(
@@ -227,6 +230,30 @@ class MLPEstimator(DfAnalyzeModel):
             verbose=0,
         )
 
+    def set_device_info(self, device_info: DeviceInfo) -> None:
+        super().set_device_info(device_info)
+        self.fixed_args["device"] = device_info.skorch_device
+        if device_info.skorch_device == "cuda":
+            configure_torch_cuda_performance(device_info)
+            self.fixed_args["iterator_train__pin_memory"] = True
+            self.fixed_args["iterator_valid__pin_memory"] = True
+        else:
+            self.fixed_args.pop("iterator_train__pin_memory", None)
+            self.fixed_args.pop("iterator_valid__pin_memory", None)
+
+    def backend_name(self, tuned_args: Optional[Mapping[str, Any]] = None) -> str:
+        return f"skorch-{self.device_info.skorch_device}"
+
+    def uses_accelerated_backend(
+        self, tuned_args: Optional[Mapping[str, Any]] = None
+    ) -> bool:
+        return self.device_info.skorch_device != "cpu"
+
+    def cuda_tuning_trial_budget(self) -> Optional[int]:
+        if self.device_info.skorch_device == "cuda":
+            return 75
+        return None
+
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
         return self.model_cls, full_args
 
@@ -255,7 +282,7 @@ class MLPEstimator(DfAnalyzeModel):
         split = 0.2 if val_split else None
         n_epochs = 8 if restarts else 50  # "period" of the annealing
         period = get_T0(X_train, n_epochs=n_epochs, val_split=split)[0]
-        shared: Mapping = dict(eta_min=0, verbose=False, step_every="step")
+        shared: Mapping = dict(eta_min=0, step_every="step")
         return (
             LRScheduler(policy=cls, T_0=period, T_mult=2, **shared)  # type: ignore
             if restarts
@@ -271,14 +298,14 @@ class MLPEstimator(DfAnalyzeModel):
     def _to_torch(
         self, X: DataFrame, y: Optional[Series] = None
     ) -> Union[tuple[Tensor, Tensor], Tensor]:
-        Xt = torch.from_numpy(X.to_numpy()).to(dtype=torch.float32)
+        Xt = torch.from_numpy(X.to_numpy(dtype=np.float32, copy=False))
         if y is None:
             return Xt
 
         if self.is_classifier:
-            yt = torch.from_numpy(y.to_numpy()).to(dtype=torch.int64)
+            yt = torch.from_numpy(y.to_numpy(dtype=np.int64, copy=False))
         else:
-            yt = torch.from_numpy(y.to_numpy()).to(dtype=torch.float32)
+            yt = torch.from_numpy(y.to_numpy(dtype=np.float32, copy=False))
         return Xt, yt
 
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
@@ -303,6 +330,7 @@ class MLPEstimator(DfAnalyzeModel):
         g: Optional[Series] = None,
         tuned_args: Optional[Mapping] = None,
     ) -> None:
+        self._reset_tuned_model_for_refit()
         tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
@@ -433,7 +461,9 @@ class MLPEstimator(DfAnalyzeModel):
         except Exception:
             plat = ""
 
-        if os.environ.get("CC_CLUSTER") == "niagara":
+        if self.device_info.skorch_device != "cpu":
+            override_jobs = 1
+        elif os.environ.get("CC_CLUSTER") == "niagara":
             # Niagara trials
             #
             # n_jobs    50 models   10      20 models    30 models   40 models
@@ -487,7 +517,6 @@ if __name__ == "__main__":
             T_0=T0,
             T_mult=2,
             eta_min=0,
-            verbose=False,
             step_every="step",
         )
         T0, n_batches = get_T0(X, n_epochs=50, val_split=0.2)
@@ -496,7 +525,6 @@ if __name__ == "__main__":
             # T_max=T0,
             T_max=T0,
             eta_min=0,
-            verbose=True,
             step_every="step",
         )
         # lrs = sched.simulate(steps=50 * n_batches, initial_lr=lr)

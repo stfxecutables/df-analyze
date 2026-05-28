@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import os
 import sys
 import traceback
 import warnings
@@ -44,6 +45,32 @@ from df_analyze.analysis.metrics import auroc, cohens_d, cramer_v
 from df_analyze.enumerables import RandEnum
 from df_analyze.preprocessing.prepare import PreparedData
 from df_analyze.saving import add_fold_idx
+
+
+DEFAULT_CPU_ASSOC_N_JOBS = -1
+ASSOC_N_JOBS_ENV = "DF_ANALYZE_UNIVARIATE_ASSOC_N_JOBS"
+
+
+def assoc_parallel_n_jobs() -> int:
+    raw = os.environ.get(ASSOC_N_JOBS_ENV)
+    if raw is not None:
+        try:
+            n_jobs = int(raw)
+        except ValueError:
+            warn(
+                f"Ignoring invalid {ASSOC_N_JOBS_ENV}={raw!r}; expected an integer.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        else:
+            if n_jobs != 0:
+                return n_jobs
+            warn(
+                f"Ignoring invalid {ASSOC_N_JOBS_ENV}=0; joblib n_jobs cannot be 0.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    return DEFAULT_CPU_ASSOC_N_JOBS
 
 
 class Association:
@@ -719,10 +746,11 @@ def target_associations(
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_cats = []
         df_conts = []
+        n_jobs = assoc_parallel_n_jobs()
 
         cont = prepared.X_cont
         if cont is not None:
-            df_conts: list[DataFrame] = Parallel(n_jobs=-1)(
+            df_conts: list[DataFrame] = Parallel(n_jobs=n_jobs)(
                 delayed(continuous_feature_target_stats)(
                     continuous=cont,
                     column=col,
@@ -740,7 +768,7 @@ def target_associations(
         # encoded.
         cats = prepared.X_cat
         if cats is not None:
-            df_cats: list[DataFrame] = Parallel(n_jobs=-1)(
+            df_cats: list[DataFrame] = Parallel(n_jobs=n_jobs)(
                 delayed(categorical_feature_target_stats)(
                     categoricals=cats,
                     column=col,

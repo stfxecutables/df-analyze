@@ -25,6 +25,9 @@ class DummyEstimator(DfAnalyzeModel):
     shortname = "dummy-est"
     longname = "Dummy Estimator"
 
+    def backend_name(self, tuned_args: Optional[Mapping[str, Any]] = None) -> str:
+        return "dummy-cpu"
+
     def htune_optuna(
         self,
         X_train: DataFrame,

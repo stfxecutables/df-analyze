@@ -155,6 +155,8 @@ def test_random_types(dataset: tuple[str, TestDataset]) -> None:
         "verbosity": (Verbosity,),
         "no_warn_explosion": (bool,),
         "no_preds": (bool,),
+        "device_requested": (str,),
+        "device": (str,),
     }
     comparables: dict[str, tuple[Union[EnumMeta, Type[None]], ...]] = {
         "feat_select": (FeatureSelection,),

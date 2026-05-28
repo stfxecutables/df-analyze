@@ -11,6 +11,7 @@ from functools import partial
 from pathlib import Path
 from pprint import pprint
 from random import choice, randint
+from time import perf_counter
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -18,6 +19,7 @@ from typing import (
     Dict,
     Iterable,
     Literal,
+    Mapping,
     Optional,
     Tuple,
     Type,
@@ -31,7 +33,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from numpy import ndarray
-from pandas import DataFrame, Index, Series
+from pandas import DataFrame, Series
 from scipy.special import softmax
 from sklearn.metrics import (
     accuracy_score,
@@ -50,6 +52,7 @@ from sklearn.model_selection import (
 from df_analyze._constants import SEED, VAL_SIZE
 from df_analyze._types import Classifier, CVMethod, EstimationMode, Estimator
 from df_analyze.cli.cli import ProgramOptions
+from df_analyze.device import cleanup_accelerator_memory, is_fatal_accelerator_error
 from df_analyze.legacy.src.objectives import (
     bagging_classifier_objective,
     dtree_classifier_objective,
@@ -64,9 +67,7 @@ if TYPE_CHECKING:
     from df_analyze.models.base import DfAnalyzeModel
 import jsonpickle
 
-from df_analyze.enumerables import ClassifierScorer, RegressorScorer
-from df_analyze.models.gandalf import GandalfEstimator
-from df_analyze.models.mlp import MLPEstimator
+from df_analyze.enumerables import ClassifierScorer, FeatureSelection, RegressorScorer
 from df_analyze.preprocessing.prepare import PreparedData
 from df_analyze.saving import add_fold_idx
 from df_analyze.scoring import (
@@ -83,6 +84,55 @@ LR_SOLVER = "liblinear"
 # MLP_LAYER_SIZES = [0, 8, 32, 64, 128, 256, 512]
 MLP_LAYER_SIZES = [4, 8, 16, 32]
 N_SPLITS = 5
+TABPFN_UNKNOWN_CATEGORY = "__df_analyze_unknown__"
+
+
+def _model_shortname(model_or_cls: Any) -> str:
+    name = getattr(model_or_cls, "shortname", None)
+    if name is None:
+        name = getattr(model_or_cls, "__name__", "")
+    return str(name).lower()
+
+
+def _is_tabpfn_weights_error(error: BaseException) -> bool:
+    return error.__class__.__name__ == "TabPFNLocalWeightsError"
+
+
+def _backend_looks_accelerated(backend: Any) -> bool:
+    text = str(backend).lower()
+    return any(marker in text for marker in ("cuda", "gpu", "cuml", "mps"))
+
+
+def _actual_backend_device(backend: Any, accelerated: bool) -> str:
+    if not accelerated:
+        return "cpu"
+
+    text = str(backend).lower()
+    if "mps" in text:
+        return "mps"
+    if any(marker in text for marker in ("cuda", "gpu", "cuml")):
+        return "cuda"
+    return "accelerated"
+
+
+def _device_result_fields(
+    model: DfAnalyzeModel,
+    params: Mapping[str, Any],
+) -> dict[str, Any]:
+    info = model.device_info
+    resolved = info.resolved
+    backend = model.backend_name(params)
+    accelerated = bool(model.uses_accelerated_backend(params))
+    # The backend string is the authoritative model implementation label; the
+    # device field is a compact grouping inferred from that backend.
+    return {
+        "device": _actual_backend_device(backend, accelerated),
+        "requested_device": info.requested,
+        "resolved_device": resolved,
+        "torch_device": info.torch_device,
+        "accelerated": accelerated,
+        "backend": backend,
+    }
 
 
 @dataclass
@@ -99,31 +149,41 @@ class HtuneResult:
     preds_train: Union[Series, ndarray]
     probs_test: Optional[ndarray]
     probs_train: Optional[ndarray]
+    device: str = "cpu"
+    requested_device: str = "cpu"
+    resolved_device: str = "cpu"
+    torch_device: str = "cpu"
+    accelerated: bool = False
+    backend: str = "sklearn-cpu"
+    model_version: str = ""
+    tune_seconds: float = 0.0
+    eval_seconds: float = 0.0
+    total_seconds: float = 0.0
 
     @no_type_check  # Pyright mucks up the conditionals here...
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HtuneResult):
             return False
 
+        def array_equal(left: Any, right: Any) -> bool:
+            return bool(
+                np.array_equal(
+                    np.asarray(left).round(8),
+                    np.asarray(right).round(8),
+                )
+            )
+
         if (self.probs_test is None) and (other.probs_test is None):
             probs_test_equal = True
-        elif isinstance(self.probs_test, ndarray) and isinstance(
-            other.probs_test, ndarray
-        ):
-            probs_test_equal = np.all(
-                (self.probs_test.round(8) == other.probs_test.round(8))
-            ).item()
+        elif self.probs_test is not None and other.probs_test is not None:
+            probs_test_equal = array_equal(self.probs_test, other.probs_test)
         else:
             probs_test_equal = False
 
         if (self.probs_train is None) and (other.probs_train is None):
             probs_train_equal = True
-        elif isinstance(self.probs_train, ndarray) and isinstance(
-            other.probs_train, ndarray
-        ):
-            probs_train_equal = np.all(
-                (self.probs_train.round(8) == other.probs_train.round(8))
-            ).item()
+        elif self.probs_train is not None and other.probs_train is not None:
+            probs_train_equal = array_equal(self.probs_train, other.probs_train)
         else:
             probs_train_equal = False
 
@@ -139,10 +199,9 @@ class HtuneResult:
             self.params == other.params
             and round(self.score, 8) == round(other.score, 8)
             and self.metric == other.metric
-            and np.all((self.preds_test.round(8) == other.preds_test.round(8)).to_numpy())
-            and np.all(
-                (self.preds_train.round(8) == other.preds_train.round(8)).to_numpy()
-            )
+            and self.model_version == other.model_version
+            and array_equal(self.preds_test, other.preds_test)
+            and array_equal(self.preds_train, other.preds_train)
             and probs_equal
         )
         return bool(ret)
@@ -155,9 +214,20 @@ class HtuneResult:
                 "selection": self.selection,
                 "embed_selector": embed,
                 "model": self.model.shortname,
+                "n_selected_features": len(self.selected_cols),
                 "params": str(jsonpickle.encode(self.params)),
                 "metric": self.metric.value,
                 "score": self.score,
+                "device": self.device,
+                "requested_device": self.requested_device,
+                "resolved_device": self.resolved_device,
+                "torch_device": self.torch_device,
+                "accelerated": self.accelerated,
+                "backend": self.backend,
+                "model_version": self.model_version,
+                "tune_seconds": self.tune_seconds,
+                "eval_seconds": self.eval_seconds,
+                "total_seconds": self.total_seconds,
             },
             index=[0],
         )
@@ -189,11 +259,22 @@ class HtuneResult:
         obj = {
             "selection": self.selection,
             "selected_cols": self.selected_cols,
+            "n_selected_features": len(self.selected_cols),
             "embed_select_model": selector,
             "model_cls": self.model_cls.__name__,
             "params": str(self.params),
             "metric": self.metric.name,
             "score": self.score,
+            "device": self.device,
+            "requested_device": self.requested_device,
+            "resolved_device": self.resolved_device,
+            "torch_device": self.torch_device,
+            "accelerated": self.accelerated,
+            "backend": self.backend,
+            "model_version": self.model_version,
+            "tune_seconds": self.tune_seconds,
+            "eval_seconds": self.eval_seconds,
+            "total_seconds": self.total_seconds,
             "preds_test": preds_test,
             "preds_train": preds_train,
             "probs_test": probs_test,
@@ -217,11 +298,47 @@ class HtuneResult:
             params=str(self.params),
             metric=self.metric.name,
             score=self.score,
+            device=self.device,
+            requested_device=self.requested_device,
+            resolved_device=self.resolved_device,
+            torch_device=self.torch_device,
+            accelerated=self.accelerated,
+            backend=self.backend,
+            model_version=self.model_version,
+            tune_seconds=self.tune_seconds,
+            eval_seconds=self.eval_seconds,
+            total_seconds=self.total_seconds,
             preds_test=self.preds_test,
             preds_train=self.preds_train,
             probs_test=self.probs_test,
             probs_train=self.probs_train,
         )
+
+    def to_summary_dict(self) -> dict[str, Any]:
+        selector = (
+            None if self.embed_select_model is None else self.embed_select_model.value
+        )
+        return {
+            "selection": self.selection,
+            "selected_cols": self.selected_cols,
+            "n_selected_features": len(self.selected_cols),
+            "embed_select_model": selector,
+            "model_cls": self.model_cls.__name__,
+            "model": self.model.shortname,
+            "params": str(self.params),
+            "metric": self.metric.name,
+            "score": self.score,
+            "device": self.device,
+            "requested_device": self.requested_device,
+            "resolved_device": self.resolved_device,
+            "torch_device": self.torch_device,
+            "accelerated": self.accelerated,
+            "backend": self.backend,
+            "model_version": self.model_version,
+            "tune_seconds": self.tune_seconds,
+            "eval_seconds": self.eval_seconds,
+            "total_seconds": self.total_seconds,
+        }
 
     @staticmethod
     def all_from_json(root: Path) -> HtuneResult:
@@ -238,7 +355,6 @@ class HtuneResult:
         model_cls: Optional[Type[DfAnalyzeModel]] = None,
     ) -> HtuneResult:
         from df_analyze.models.base import DfAnalyzeModel
-        from df_analyze.models.mlp import MLPEstimator
 
         n_cols = ds.shape[1]
         is_cls = ds.is_classification
@@ -252,7 +368,7 @@ class HtuneResult:
             or np.random.choice([f"f{i}" for i in range(n_cols)], size=n_sel).tolist()
         )
         model_cls = model_cls or DfAnalyzeModel.random(ds, n=1)
-        if model_cls is MLPEstimator:
+        if _model_shortname(model_cls) in {"mlp", "gandalf"}:
             prep = ds.prepared(load_cached=True)
             model = model_cls(num_classes=prep.num_classes)  # type: ignore
         else:
@@ -291,6 +407,11 @@ class HtuneResult:
             preds_train=preds_train,
             probs_test=probs_test,
             probs_train=probs_train,
+            **_device_result_fields(model, params),
+            model_version=model.model_version(),
+            tune_seconds=0.0,
+            eval_seconds=0.0,
+            total_seconds=0.0,
         )
 
 
@@ -307,6 +428,16 @@ class PredResult:
     preds_train: Union[Series, ndarray]
     probs_test: Optional[ndarray]
     probs_train: Optional[ndarray]
+    device: str = "cpu"
+    requested_device: str = "cpu"
+    resolved_device: str = "cpu"
+    torch_device: str = "cpu"
+    accelerated: bool = False
+    backend: str = "sklearn-cpu"
+    model_version: str = ""
+    tune_seconds: float = 0.0
+    eval_seconds: float = 0.0
+    total_seconds: float = 0.0
 
 
 @dataclass
@@ -390,6 +521,8 @@ class EvaluationResults:
         cols.remove(valset)
         col = valset
         idx = ~self.df.mean(axis=1, numeric_only=True).isna()
+        if "metric" in self.df.columns:
+            idx = idx & self.df["metric"].notna()
         df = (
             self.df.loc[idx]
             .drop(columns=cols)
@@ -444,18 +577,13 @@ class EvaluationResults:
         self.X_test.to_csv(fix(root / "X_test.csv"), index=False)
         self.y_train.to_frame().to_csv(fix(root / "y_train.csv"), index=True)
         self.y_test.to_frame().to_csv(fix(root / "y_test.csv"), index=True)
-        results_json = ", ".join([result.to_preds_json() for result in self.results])
-        results_json = "{" + '"predictions": [' + results_json + "]}"
-        remain = {
-            "results": self.results,
-            "is_classification": self.is_classification,
+
+        prediction_payload = {
+            "predictions": [
+                json.loads(result.to_preds_json()) for result in self.results
+            ]
         }
-        try:
-            enc = str(jsonpickle.encode(remain, unpicklable=True))
-            fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
-        except TypeError:
-            enc = str(jsonpickle.encode(remain, unpicklable=True, fail_safe=str))
-            fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
+        results_json = json.dumps(prediction_payload)
         try:
             fix(root / "prediction_results.json").write_text(results_json)
         except Exception as e:
@@ -464,6 +592,39 @@ class EvaluationResults:
             print(
                 "Error saving manual results .json. Information above.", file=sys.stderr
             )
+
+        remain = {
+            "results": [result.to_summary_dict() for result in self.results],
+            "is_classification": self.is_classification,
+        }
+        try:
+            enc = str(jsonpickle.encode(remain, unpicklable=True))
+            fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
+        except Exception as e:
+            try:
+                enc = str(
+                    jsonpickle.encode(
+                        remain,
+                        unpicklable=False,
+                        fail_safe=str,
+                    )
+                )
+                fix(root / "eval_htune_results_jsonpickle.json").write_text(enc)
+            except Exception as fallback_error:
+                traceback.print_exc()
+                print(fallback_error)
+                print(
+                    "Error saving lightweight evaluation metadata. "
+                    "Prediction JSON was written first when possible.",
+                    file=sys.stderr,
+                )
+            else:
+                print(e, file=sys.stderr)
+
+        for result in self.results:
+            result.model.model = None
+            result.model.tuned_model = None
+            cleanup_accelerator_memory(result.model.device_info)
 
     @classmethod
     def load(cls, root: Path) -> EvaluationResults:
@@ -500,6 +661,12 @@ class EvaluationResults:
         for result in results["predictions"]:
             preds_dtype = result["preds_dtype"]
             probs_dtype = result["probs_dtype"]
+            backend = result.get("backend", "sklearn-cpu")
+            resolved_device = str(
+                result.get("resolved_device", result.get("device", "cpu"))
+            )
+            requested_device = str(result.get("requested_device", resolved_device))
+            torch_device = str(result.get("torch_device", result.get("device", "cpu")))
             if result["probs_test"] is None:
                 probs_test = None
             else:
@@ -521,6 +688,18 @@ class EvaluationResults:
                 preds_train=Series(result["preds_train"], dtype=preds_dtype),
                 probs_test=probs_test,
                 probs_train=probs_train,
+                device=result.get("device", resolved_device),
+                requested_device=requested_device,
+                resolved_device=resolved_device,
+                torch_device=torch_device,
+                accelerated=bool(
+                    result.get("accelerated", _backend_looks_accelerated(backend))
+                ),
+                backend=backend,
+                model_version=str(result.get("model_version", "")),
+                tune_seconds=float(result.get("tune_seconds", 0.0)),
+                eval_seconds=float(result.get("eval_seconds", 0.0)),
+                total_seconds=float(result.get("total_seconds", 0.0)),
             )
             pred_results.append(pred_result)
         return pred_results
@@ -545,28 +724,153 @@ def _get_splits(
     selection: str,
     cols: Union[list[str], slice],
 ) -> tuple[DataFrame, DataFrame]:
+    return _subset_splits(prep_train.X, prep_test.X, selection, cols)
+
+
+def _subset_splits(
+    train: DataFrame,
+    test: DataFrame,
+    selection: str,
+    cols: Union[list[str], slice],
+) -> tuple[DataFrame, DataFrame]:
     if selection == "none" or isinstance(cols, slice):
-        X_train = prep_train.X
-        X_test = prep_test.X
+        X_train = train
+        X_test = test
     else:
         # clunky way to deal with renames and indicators
         # should be safe since we sanitize names
         try:
-            X_train = prep_train.X.filter(regex="|".join(cols))
-            X_test = prep_test.X.filter(regex="|".join(cols))
+            X_train = train.filter(regex="|".join(cols))
+            X_test = test.filter(regex="|".join(cols))
         except Exception:
-            to_drop = set()
+            matched = []
             for col in cols:  # may be e.g. colname__target.1
-                for c in prep_train.X.columns:
-                    cname = os.path.commonprefix([col, c])
+                col_name = str(col)
+                for c in train.columns:
+                    c_name = str(c)
+                    cname = os.path.commonprefix([col_name, c_name])
                     if cname == "":
                         continue
-                    if cname in [col, c]:  # handle e.g. car1, car2
-                        to_drop.add(c)
-            X_train = prep_train.X.drop(list(to_drop))
-            X_test = prep_test.X.drop(list(to_drop))
+                    if cname in [col_name, c_name] and c not in matched:
+                        matched.append(c)
+            X_train = train.loc[:, matched]
+            X_test = test.loc[:, [c for c in matched if c in test.columns]]
 
     return X_train, X_test
+
+
+def _tabpfn_continuous_features(prep: PreparedData) -> DataFrame:
+    empty = DataFrame(index=prep.X.index)
+    cont_cols = [] if prep.X_cont is None else prep.X_cont.columns.to_list()
+    indicator_cols = [
+        col
+        for col in prep.X.columns
+        if str(col).endswith("_NAN") and col not in cont_cols
+    ]
+    ordered_cols = [*cont_cols, *indicator_cols]
+    if len(ordered_cols) == 0:
+        return empty
+    # Prefer raw continuous columns from prep.X because prep.X_cont is normalized.
+    # TabPFN should not receive scaled continuous features when raw values exist.
+    raw_cols = [col for col in cont_cols if col in prep.X.columns]
+    missing_cols = [col for col in cont_cols if col not in prep.X.columns]
+    parts = []
+    if len(raw_cols) > 0:
+        parts.append(prep.X.loc[:, raw_cols].copy())
+    if len(missing_cols) > 0 and prep.X_cont is not None:
+        parts.append(prep.X_cont.loc[:, missing_cols].copy())
+    if len(indicator_cols) > 0:
+        parts.append(prep.X.loc[:, indicator_cols].copy())
+    if len(parts) == 0:
+        return empty
+    return pd.concat(parts, axis=1).loc[:, ordered_cols]
+
+
+def _tabpfn_feature_matrices(
+    prep_train: PreparedData, prep_test: PreparedData
+) -> tuple[DataFrame, DataFrame, list[str]]:
+    train_parts = [_tabpfn_continuous_features(prep_train)]
+    test_parts = [_tabpfn_continuous_features(prep_test)]
+    cat_cols: list[str] = []
+
+    if prep_train.X_cat is not None and prep_test.X_cat is not None:
+        cat_cols = [
+            col for col in prep_train.X_cat.columns if col in prep_test.X_cat.columns
+        ]
+        if len(cat_cols) > 0:
+            train_cat = prep_train.X_cat.loc[:, cat_cols].copy()
+            test_cat = prep_test.X_cat.loc[:, cat_cols].copy()
+            for col in cat_cols:
+                train_values = _tabpfn_categorical_values(train_cat[col])
+                test_values = _tabpfn_categorical_values(test_cat[col])
+
+                categories = list(pd.unique(train_values))
+                if TABPFN_UNKNOWN_CATEGORY not in categories:
+                    categories.append(TABPFN_UNKNOWN_CATEGORY)
+
+                unseen = ~test_values.isin(categories)
+                test_values.loc[unseen] = TABPFN_UNKNOWN_CATEGORY
+
+                train_cat[col] = pd.Categorical(
+                    train_values,
+                    categories=categories,
+                )
+                test_cat[col] = pd.Categorical(
+                    test_values,
+                    categories=categories,
+                )
+            train_parts.append(train_cat)
+            test_parts.append(test_cat)
+
+    X_train = pd.concat(train_parts, axis=1)
+    X_test = pd.concat(test_parts, axis=1)
+    return X_train, X_test, cat_cols
+
+
+def _tabpfn_categorical_values(values: Series) -> Series:
+    clean = values.astype("object")
+    clean = clean.where(~clean.isna(), TABPFN_UNKNOWN_CATEGORY)
+    return clean.map(
+        lambda value: TABPFN_UNKNOWN_CATEGORY if pd.isna(value) else str(value)
+    )
+
+
+def _tabpfn_selected_cols(
+    all_cols: list[str],
+    cat_cols: list[str],
+    cols: Union[list[str], slice],
+) -> Union[list[str], slice]:
+    if isinstance(cols, slice):
+        return cols
+
+    selected = set()
+    ordered_cats = sorted(cat_cols, key=len, reverse=True)
+    for col in cols:
+        col = str(col)
+        if col in all_cols:
+            selected.add(col)
+            continue
+        for cat in ordered_cats:
+            if col == cat or col.startswith(f"{cat}_"):
+                selected.add(cat)
+                break
+
+    return [col for col in all_cols if col in selected]
+
+
+def _get_tabpfn_splits(
+    prep_train: PreparedData,
+    prep_test: PreparedData,
+    selection: str,
+    cols: Union[list[str], slice],
+) -> tuple[DataFrame, DataFrame, list[int]]:
+    X_train, X_test, cat_cols = _tabpfn_feature_matrices(prep_train, prep_test)
+    selected = _tabpfn_selected_cols(X_train.columns.to_list(), cat_cols, cols)
+    if not isinstance(selected, slice):
+        X_train = X_train.loc[:, selected]
+        X_test = X_test.loc[:, selected]
+    cat_indices = [X_train.columns.get_loc(col) for col in cat_cols if col in X_train]
+    return X_train, X_test, [int(idx) for idx in cat_indices]
 
 
 def evaluate_tuned(
@@ -578,16 +882,15 @@ def evaluate_tuned(
     model_selected: ModelSelected,
     options: ProgramOptions,
 ) -> EvaluationResults:
-    model_cls: Union[Type[DfAnalyzeModel], Type[MLPEstimator]]
+    model_cls: Type[DfAnalyzeModel]
     results: list[HtuneResult]
     dfs: list[DataFrame]
 
-    selections: dict[str, Optional[list[str]]] = {
-        "none": None,
-        "assoc": assoc_filtered.selected,
-    }
-    if pred_filtered is not None:
-        selections["pred"] = pred_filtered.selected
+    selections: dict[str, Optional[list[str]]] = {"none": None}
+    if FeatureSelection.Filter in options.feat_select:
+        selections["assoc"] = assoc_filtered.selected
+        if pred_filtered is not None:
+            selections["pred"] = pred_filtered.selected
 
     embed_models: dict[str, EmbedSelectionModel] = {}
     if model_selected.embed_selected is not None:
@@ -603,10 +906,20 @@ def evaluate_tuned(
         metric = options.htune_reg_metric
 
     dfs, results = [], []
+    model_setup_failures: dict[Type[Any], Exception] = {}
     for model_cls in options.models:
+        model_name = _model_shortname(model_cls)
         for selection, cols in selections.items():
             selected_cols = _get_cols(selection=selection, selected=cols)
-            X_train, X_test = _get_splits(prep_train, prep_test, selection, selected_cols)
+            tabpfn_cat_indices: list[int] = []
+            if model_name == "tabpfn":
+                X_train, X_test, tabpfn_cat_indices = _get_tabpfn_splits(
+                    prep_train, prep_test, selection, selected_cols
+                )
+            else:
+                X_train, X_test = _get_splits(
+                    prep_train, prep_test, selection, selected_cols
+                )
             if X_train.empty or X_test.empty:
                 raise ValueError(
                     f"Error when subsetting features for model '{model_cls.shortname}'. Got:\n"
@@ -620,85 +933,174 @@ def evaluate_tuned(
                     f"selected_cols: {selected_cols}\n"
                 )
 
-            if model_cls is MLPEstimator:
-                model = model_cls(num_classes=prepared.num_classes)  # type: ignore
-            elif model_cls is GandalfEstimator:
+            if model_name in {"mlp", "gandalf"}:
                 model = model_cls(num_classes=prepared.num_classes)  # type: ignore
             else:
                 model = model_cls()  # type: ignore
+            if model_name == "tabpfn":
+                model.set_tabpfn_version(options.tabpfn_version)
+                model.set_tune_folds(options.tabpfn_tune_folds)
+                model.set_categorical_feature_indices(tabpfn_cat_indices)
+            model.set_device_info(options.device_info)
 
-            print(f"Tuning {model.longname} for selection={selection}")
-            try:
-                study = model.htune_optuna(
-                    X_train=X_train,
-                    y_train=prep_train.y,
-                    g_train=prep_train.groups,
-                    n_trials=options.htune_trials,
-                    metric=metric,  # type: ignore
-                    n_jobs=-1,
-                    verbosity=optuna.logging.ERROR,
+            is_embed = "embed" in selection
+            embed_model = embed_models[selection] if is_embed else None
+            tune_seconds = 0.0
+            eval_seconds = 0.0
+            params: dict[str, Any] = {}
+            setup_failure = model_setup_failures.get(model_cls)
+            if setup_failure is not None:
+                print(
+                    f"Skipping {model.longname} for selection={selection}: "
+                    f"{setup_failure}"
                 )
-                df, preds_train, preds_test, probs_train, probs_test = model.htune_eval(
-                    X_train=X_train,
-                    y_train=prep_train.y,
-                    g_train=prep_train.groups,
-                    X_test=X_test,
-                    y_test=prep_test.y,
-                    g_test=prep_test.groups,
-                    seed=options.seed,
-                )
-                is_embed = "embed" in selection
-                embed_model = embed_models[selection] if is_embed else None
-                result = HtuneResult(
-                    selection="embed" if is_embed else selection,  # type: ignore
-                    selected_cols=X_train.columns.to_list(),
-                    embed_select_model=embed_model,
-                    model_cls=model_cls,
-                    model=model,
-                    params=study.best_params,
-                    metric=metric,
-                    score=study.best_value,
-                    preds_train=preds_train,
-                    preds_test=preds_test,
-                    probs_train=probs_train,
-                    probs_test=probs_test,
-                )
-                results.append(result)
-            except Exception as e:
                 if prepared.is_classification:
                     nulls = Series(ClassifierScorer.null_scores(), name="metric")
                 else:
                     nulls = Series(RegressorScorer.null_scores(), name="metric")
-                warn(
-                    f"\nGot exception when trying to tune and evaluate {model.shortname}:\n{e}\n"
-                    f"{traceback.format_exc()}"
-                )
                 df = DataFrame(
-                    {"trainset": nulls, "holdout": nulls, "5-fold": nulls},
-                    index=Index(data=nulls.values, name=nulls.name),
+                    {
+                        "metric": nulls.index,
+                        "trainset": nulls.values,
+                        "holdout": nulls.values,
+                        "5-fold": nulls.values,
+                    }
                 )
-                is_embed = "embed" in selection
-                embed_model = embed_models[selection] if is_embed else None
                 result = HtuneResult(
                     selection="embed" if is_embed else selection,  # type: ignore
                     selected_cols=X_train.columns.to_list(),
                     embed_select_model=embed_model,
                     model_cls=model_cls,
                     model=model,
-                    params={},
+                    params=params,
                     score=np.nan,
                     metric=metric,
                     preds_train=Series(),
                     preds_test=Series(),
                     probs_train=None,
                     probs_test=None,
+                    **_device_result_fields(model, params),
+                    model_version=model.model_version(),
+                    tune_seconds=tune_seconds,
+                    eval_seconds=eval_seconds,
+                    total_seconds=tune_seconds + eval_seconds,
                 )
                 results.append(result)
+            else:
+                print(f"Tuning {model.longname} for selection={selection}")
+                phase = "tuning"
+                phase_start = perf_counter()
+                try:
+                    study = model.htune_optuna(
+                        X_train=X_train,
+                        y_train=prep_train.y,
+                        g_train=prep_train.groups,
+                        n_trials=options.htune_trials,
+                        metric=metric,  # type: ignore
+                        n_jobs=-1,
+                        verbosity=optuna.logging.ERROR,
+                    )
+                    tune_seconds = perf_counter() - phase_start
+                    params = dict(study.best_params)
+                    phase = "evaluation"
+                    phase_start = perf_counter()
+                    df, preds_train, preds_test, probs_train, probs_test = (
+                        model.htune_eval(
+                            X_train=X_train,
+                            y_train=prep_train.y,
+                            g_train=prep_train.groups,
+                            X_test=X_test,
+                            y_test=prep_test.y,
+                            g_test=prep_test.groups,
+                            seed=options.seed,
+                        )
+                    )
+                    eval_seconds = perf_counter() - phase_start
+                    result = HtuneResult(
+                        selection="embed" if is_embed else selection,  # type: ignore
+                        selected_cols=X_train.columns.to_list(),
+                        embed_select_model=embed_model,
+                        model_cls=model_cls,
+                        model=model,
+                        params=params,
+                        metric=metric,
+                        score=study.best_value,
+                        preds_train=preds_train,
+                        preds_test=preds_test,
+                        probs_train=probs_train,
+                        probs_test=probs_test,
+                        **_device_result_fields(model, params),
+                        model_version=model.model_version(),
+                        tune_seconds=tune_seconds,
+                        eval_seconds=eval_seconds,
+                        total_seconds=tune_seconds + eval_seconds,
+                    )
+                    results.append(result)
+                except Exception as e:
+                    if is_fatal_accelerator_error(e):
+                        raise
+                    elapsed = perf_counter() - phase_start
+                    if phase == "tuning":
+                        tune_seconds = elapsed
+                    else:
+                        eval_seconds = elapsed
+                    if prepared.is_classification:
+                        nulls = Series(ClassifierScorer.null_scores(), name="metric")
+                    else:
+                        nulls = Series(RegressorScorer.null_scores(), name="metric")
+                    is_tabpfn_weights_error = _is_tabpfn_weights_error(e)
+                    if is_tabpfn_weights_error:
+                        model_setup_failures[model_cls] = e
+                    message = (
+                        f"\nGot exception when trying to tune and evaluate "
+                        f"{model.shortname}:\n{e}"
+                    )
+                    if not is_tabpfn_weights_error:
+                        message = f"{message}\n{traceback.format_exc()}"
+                    warn(message)
+                    df = DataFrame(
+                        {
+                            "metric": nulls.index,
+                            "trainset": nulls.values,
+                            "holdout": nulls.values,
+                            "5-fold": nulls.values,
+                        }
+                    )
+                    result = HtuneResult(
+                        selection="embed" if is_embed else selection,  # type: ignore
+                        selected_cols=X_train.columns.to_list(),
+                        embed_select_model=embed_model,
+                        model_cls=model_cls,
+                        model=model,
+                        params=params,
+                        score=np.nan,
+                        metric=metric,
+                        preds_train=Series(),
+                        preds_test=Series(),
+                        probs_train=None,
+                        probs_test=None,
+                        **_device_result_fields(model, params),
+                        model_version=model.model_version(),
+                        tune_seconds=tune_seconds,
+                        eval_seconds=eval_seconds,
+                        total_seconds=tune_seconds + eval_seconds,
+                    )
+                    results.append(result)
             df["model"] = model.shortname
             df["selection"] = selection
             df["embed_selector"] = (
                 embed_model.value if embed_model is not None else "none"
             )
+            df["device"] = result.device
+            df["requested_device"] = result.requested_device
+            df["resolved_device"] = result.resolved_device
+            df["torch_device"] = result.torch_device
+            df["accelerated"] = result.accelerated
+            df["backend"] = result.backend
+            df["model_version"] = result.model_version
+            df["tune_seconds"] = result.tune_seconds
+            df["eval_seconds"] = result.eval_seconds
+            df["total_seconds"] = result.total_seconds
             dfs.append(df)
     df = pd.concat(dfs, axis=0, ignore_index=True)
     return EvaluationResults(

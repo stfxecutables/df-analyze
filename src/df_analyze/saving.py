@@ -48,6 +48,7 @@ class ProgramDirs(Debug):
     root: Optional[Path] = None
     terminal: Optional[Path] = None
     options: Optional[Path] = None
+    device_report: Optional[Path] = None
     joblib_cache: Optional[Path] = None
     renames: Optional[Path] = None
     inspection: Optional[Path] = None
@@ -75,6 +76,7 @@ class ProgramDirs(Debug):
         new = ProgramDirs(
             root=root,
             options=root / "options.json",
+            device_report=root / "device_report.json",
             terminal=root / "terminal_outputs.txt",
             joblib_cache=root / "__JOBLIB_CACHE__",
             renames=root / "feature_renamings.md",
@@ -96,7 +98,7 @@ class ProgramDirs(Debug):
             if isinstance(path, Path):
                 if "JOBLIB" in str(path):  # joblib handles creation
                     continue
-                if attr in ["options", "renames"]:
+                if attr in ["options", "device_report", "renames"]:
                     continue
                 if attr == "terminal":
                     path.touch()

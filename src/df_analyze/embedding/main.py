@@ -30,7 +30,7 @@ def main() -> None:
     if opts.any_download:
         return
     ds = dataset_from_opts(opts)
-    model, processor = get_model(opts.modality)
+    model, processor = get_model(opts.modality, device_info=opts.device_info)
     df = get_embeddings(
         ds=ds,  # type: ignore
         processor=processor,  # type: ignore

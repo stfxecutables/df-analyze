@@ -99,7 +99,6 @@ class RandEnum(Generic[T]):
 
     @classmethod
     def from_args(cls: Type[T], args: Sequence[str]) -> tuple[T, ...]:
-        print(type(args), args)
         if args is None:
             return tuple()
         if isinstance(args, list) or isinstance(args, tuple):
@@ -148,39 +147,69 @@ class Scorer:
 
 
 class DfAnalyzeClassifier(RandEnum, Enum):
+    CatBoost = "catboost"
+    XGBoost = "xgboost"
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
     LR = "lr"
     SGD = "sgd"
     MLP = "mlp"
+    TabPFN = "tabpfn"
     SVM = "svm"
     GANDALF = "gandalf"
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
-        from df_analyze.models.dummy import DummyClassifier
-        from df_analyze.models.gandalf import GandalfEstimator
-        from df_analyze.models.knn import KNNClassifier
-        from df_analyze.models.lgbm import (
-            LightGBMClassifier,
-            LightGBMRFClassifier,
-        )
-        from df_analyze.models.linear import LRClassifier, SGDClassifier
-        from df_analyze.models.mlp import MLPEstimator
-        from df_analyze.models.svm import SVMClassifier
+        if self is DfAnalyzeClassifier.CatBoost:
+            from df_analyze.models.catboost import CatBoostClassifier
 
-        return {
-            DfAnalyzeClassifier.KNN: KNNClassifier,
-            DfAnalyzeClassifier.LGBM: LightGBMClassifier,
-            DfAnalyzeClassifier.RF: LightGBMRFClassifier,
-            DfAnalyzeClassifier.LR: LRClassifier,
-            DfAnalyzeClassifier.SGD: SGDClassifier,
-            DfAnalyzeClassifier.MLP: MLPEstimator,
-            DfAnalyzeClassifier.SVM: SVMClassifier,
-            DfAnalyzeClassifier.GANDALF: GandalfEstimator,
-            DfAnalyzeClassifier.Dummy: DummyClassifier,
-        }[self]
+            return CatBoostClassifier
+        if self is DfAnalyzeClassifier.XGBoost:
+            from df_analyze.models.xgboost import XGBoostClassifier
+
+            return XGBoostClassifier
+        if self is DfAnalyzeClassifier.KNN:
+            from df_analyze.models.knn import KNNClassifier
+
+            return KNNClassifier
+        if self is DfAnalyzeClassifier.LGBM:
+            from df_analyze.models.lgbm import LightGBMClassifier
+
+            return LightGBMClassifier
+        if self is DfAnalyzeClassifier.RF:
+            from df_analyze.models.lgbm import LightGBMRFClassifier
+
+            return LightGBMRFClassifier
+        if self is DfAnalyzeClassifier.LR:
+            from df_analyze.models.linear import LRClassifier
+
+            return LRClassifier
+        if self is DfAnalyzeClassifier.SGD:
+            from df_analyze.models.linear import SGDClassifier
+
+            return SGDClassifier
+        if self is DfAnalyzeClassifier.MLP:
+            from df_analyze.models.mlp import MLPEstimator
+
+            return MLPEstimator
+        if self is DfAnalyzeClassifier.TabPFN:
+            from df_analyze.models.tabpfn import TabPFNClassifier
+
+            return TabPFNClassifier
+        if self is DfAnalyzeClassifier.SVM:
+            from df_analyze.models.svm import SVMClassifier
+
+            return SVMClassifier
+        if self is DfAnalyzeClassifier.GANDALF:
+            from df_analyze.models.gandalf import GandalfEstimator
+
+            return GandalfEstimator
+        if self is DfAnalyzeClassifier.Dummy:
+            from df_analyze.models.dummy import DummyClassifier
+
+            return DummyClassifier
+        raise ValueError(f"Unknown classifier: {self}")
 
     @staticmethod
     def defaults() -> tuple[str, ...]:
@@ -194,39 +223,69 @@ class DfAnalyzeClassifier(RandEnum, Enum):
 
 
 class DfAnalyzeRegressor(RandEnum, Enum):
+    CatBoost = "catboost"
+    XGBoost = "xgboost"
     KNN = "knn"
     LGBM = "lgbm"
     RF = "rf"
     ElasticNet = "elastic"
     SGD = "sgd"
     MLP = "mlp"
+    TabPFN = "tabpfn"
     SVM = "svm"
     GANDALF = "gandalf"
     Dummy = "dummy"
 
     def get_model(self) -> Type[DfAnalyzeModel]:
-        from df_analyze.models.dummy import DummyRegressor
-        from df_analyze.models.gandalf import GandalfEstimator
-        from df_analyze.models.knn import KNNRegressor
-        from df_analyze.models.lgbm import (
-            LightGBMRegressor,
-            LightGBMRFRegressor,
-        )
-        from df_analyze.models.linear import ElasticNetRegressor, SGDRegressor
-        from df_analyze.models.mlp import MLPEstimator
-        from df_analyze.models.svm import SVMRegressor
+        if self is DfAnalyzeRegressor.CatBoost:
+            from df_analyze.models.catboost import CatBoostRegressor
 
-        return {
-            DfAnalyzeRegressor.KNN: KNNRegressor,
-            DfAnalyzeRegressor.LGBM: LightGBMRegressor,
-            DfAnalyzeRegressor.RF: LightGBMRFRegressor,
-            DfAnalyzeRegressor.ElasticNet: ElasticNetRegressor,
-            DfAnalyzeRegressor.SGD: SGDRegressor,
-            DfAnalyzeRegressor.MLP: MLPEstimator,
-            DfAnalyzeRegressor.SVM: SVMRegressor,
-            DfAnalyzeRegressor.GANDALF: GandalfEstimator,
-            DfAnalyzeRegressor.Dummy: DummyRegressor,
-        }[self]
+            return CatBoostRegressor
+        if self is DfAnalyzeRegressor.XGBoost:
+            from df_analyze.models.xgboost import XGBoostRegressor
+
+            return XGBoostRegressor
+        if self is DfAnalyzeRegressor.KNN:
+            from df_analyze.models.knn import KNNRegressor
+
+            return KNNRegressor
+        if self is DfAnalyzeRegressor.LGBM:
+            from df_analyze.models.lgbm import LightGBMRegressor
+
+            return LightGBMRegressor
+        if self is DfAnalyzeRegressor.RF:
+            from df_analyze.models.lgbm import LightGBMRFRegressor
+
+            return LightGBMRFRegressor
+        if self is DfAnalyzeRegressor.ElasticNet:
+            from df_analyze.models.linear import ElasticNetRegressor
+
+            return ElasticNetRegressor
+        if self is DfAnalyzeRegressor.SGD:
+            from df_analyze.models.linear import SGDRegressor
+
+            return SGDRegressor
+        if self is DfAnalyzeRegressor.MLP:
+            from df_analyze.models.mlp import MLPEstimator
+
+            return MLPEstimator
+        if self is DfAnalyzeRegressor.TabPFN:
+            from df_analyze.models.tabpfn import TabPFNRegressor
+
+            return TabPFNRegressor
+        if self is DfAnalyzeRegressor.SVM:
+            from df_analyze.models.svm import SVMRegressor
+
+            return SVMRegressor
+        if self is DfAnalyzeRegressor.GANDALF:
+            from df_analyze.models.gandalf import GandalfEstimator
+
+            return GandalfEstimator
+        if self is DfAnalyzeRegressor.Dummy:
+            from df_analyze.models.dummy import DummyRegressor
+
+            return DummyRegressor
+        raise ValueError(f"Unknown regressor: {self}")
 
     @staticmethod
     def defaults() -> tuple[str, ...]:

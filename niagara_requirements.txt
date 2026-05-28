@@ -1,3 +1,4 @@
+# LEGACY SNAPSHOT: use pyproject.toml/uv.lock for the current GPU/TabPFN stack.
 coverage
 featuretools
 joblib

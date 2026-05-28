@@ -11,6 +11,7 @@ sys.path.append(str(ROOT))  # isort: skip
 """
 File for defining all options passed to `df-analyze.py`.
 """
+import json
 import os
 import secrets
 import sys
@@ -69,6 +70,7 @@ from df_analyze.cli.text import (
     CATEGORICAL_HELP_STR,
     CLS_HELP_STR,
     CLS_TUNE_METRIC,
+    DEVICE_HELP,
     DF_HELP_STR,
     DF_TEST_SETS_METHOD_HELP_STR,
     DF_TESTS_HELP_STR,
@@ -101,6 +103,8 @@ from df_analyze.cli.text import (
     SEP_HELP_STR,
     SHEET_HELP_STR,
     TARGET_HELP_STR,
+    TABPFN_TUNE_FOLDS_HELP,
+    TABPFN_VERSION_HELP,
     TEST_VALSIZES_HELP,
     USAGE_EXAMPLES,
     USAGE_STRING,
@@ -126,7 +130,24 @@ from df_analyze.enumerables import (
     WrapperSelection,
     WrapperSelectionModel,
 )
+from df_analyze.device import (
+    DEVICE_CHOICES,
+    RANDOM_DEVICE_CHOICES,
+    DeviceInfo,
+    configure_torch_cuda_performance,
+    device_info_from_json,
+    device_info_from_resolved,
+    resolve_device,
+)
 from df_analyze.loading import load_spreadsheet
+from df_analyze.models.tabpfn import (
+    TABPFN_DEFAULT_VERSION,
+    TABPFN_DEFAULT_TUNE_FOLDS,
+    TABPFN_TUNE_FOLD_CHOICES,
+    TABPFN_VERSION_CHOICES,
+    normalize_tabpfn_tune_folds,
+    normalize_tabpfn_version,
+)
 from df_analyze.saving import add_fold_idx
 
 if TYPE_CHECKING:
@@ -224,6 +245,11 @@ class ProgramOptions(Debug):
         verbosity: Verbosity,
         no_warn_explosion: bool,
         no_preds: bool,
+        device_requested: str = "auto",
+        device: Optional[str] = None,
+        resolved_device_info: Optional[DeviceInfo] = None,
+        tabpfn_version: str = TABPFN_DEFAULT_VERSION,
+        tabpfn_tune_folds: int = TABPFN_DEFAULT_TUNE_FOLDS,
     ) -> None:
         # memoization-related
         # other
@@ -290,6 +316,16 @@ class ProgramOptions(Debug):
         self.verbosity: Verbosity = verbosity
         self.no_warn_explosion: bool = no_warn_explosion
         self.no_preds: bool = no_preds
+        self.tabpfn_version = normalize_tabpfn_version(tabpfn_version)
+        self.tabpfn_tune_folds = normalize_tabpfn_tune_folds(tabpfn_tune_folds)
+        device_info = resolved_device_info or (
+            resolve_device(device_requested)
+            if device is None
+            else device_info_from_resolved(device_requested, device)
+        )
+        self.device_requested = device_info.requested
+        self.device = device_info.resolved
+        self._device_info = device_info
 
         self.program_dirs: ProgramDirs = ProgramDirs.new(self.outdir, self.hash())
 
@@ -313,6 +349,15 @@ class ProgramOptions(Debug):
         sources = self.classifiers if self.is_classification else self.regressors
         clses = [source.get_model() for source in sources]
         return clses
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        stored = getattr(self, "_device_info", None)
+        if isinstance(stored, DeviceInfo):
+            return stored
+        if isinstance(stored, dict):
+            return device_info_from_json(stored)
+        return device_info_from_resolved(self.device_requested, self.device)
 
     @staticmethod
     def random(
@@ -365,6 +410,7 @@ class ProgramOptions(Debug):
         separator: str = ","
         verbosity: Verbosity = Verbosity.ERROR
         no_warn_explosion: bool = False
+        device_requested = choice(RANDOM_DEVICE_CHOICES)
         return ProgramOptions(
             datapath=datapath,
             test_paths=[],  # TODO: think of something better here...
@@ -413,6 +459,9 @@ class ProgramOptions(Debug):
             verbosity=verbosity,
             no_warn_explosion=no_warn_explosion,
             no_preds=False,
+            device_requested=device_requested,
+            tabpfn_version=TABPFN_DEFAULT_VERSION,
+            tabpfn_tune_folds=TABPFN_DEFAULT_TUNE_FOLDS,
         )
 
     def spam_warnings(self) -> None:
@@ -495,13 +544,41 @@ class ProgramOptions(Debug):
         )
 
     def to_json(self) -> None:
+        path = self.program_dirs.options
+        if path is None:
+            return
         try:
-            path = self.program_dirs.options
-            if path is None:
-                return
             path.write_text(str(jsonpickle.encode(self, unpicklable=True, indent=4)))
         except Exception as e:
             print(f"Got error saving options: {e}")
+            traceback.print_exc()
+            return
+
+        self.write_device_report()
+
+    def write_device_report(self) -> None:
+        report_path = self.program_dirs.device_report
+        if report_path is None:
+            return
+        try:
+            from df_analyze.models.gpu import backend_availability_report
+
+            report = backend_availability_report(
+                self.device_info,
+                selected_models=_device_report_selected_models(
+                    is_cls=self.is_classification,
+                    classifiers=set(self.classifiers),
+                    regressors=set(self.regressors),
+                    feat_select=set(self.feat_select),
+                    embed_select=self.embed_select,
+                    wrapper_select=self.wrapper_select,
+                    wrapper_model=self.wrapper_model,
+                ),
+                run_smoke_checks=True,
+            )
+            report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        except Exception as e:
+            print(f"Got error saving device report: {e}")
             traceback.print_exc()
 
     @staticmethod
@@ -520,15 +597,48 @@ class ProgramOptions(Debug):
             return Path(d["_raw_paths"][0])
 
         options = root / "options.json"
-        obj = cast(dict, jsonpickle.decode(options.read_text()))
+        program_dirs = ProgramDirs.new(
+            root=options.parent.parent, hsh=options.parent.name
+        )
+        decoded = jsonpickle.decode(options.read_text())
+        if isinstance(decoded, ProgramOptions):
+            if not hasattr(decoded, "device_requested"):
+                decoded.device_requested = "auto"
+            if not hasattr(decoded, "device"):
+                decoded.device = "cpu"
+            stored_device_info = getattr(decoded, "_device_info", None)
+            if isinstance(stored_device_info, dict):
+                decoded._device_info = device_info_from_json(stored_device_info)
+            elif not isinstance(stored_device_info, DeviceInfo):
+                decoded._device_info = device_info_from_resolved(
+                    decoded.device_requested,
+                    decoded.device,
+                )
+            decoded.__dict__.pop("ensure_lightgbm_cuda", None)
+            if not hasattr(decoded, "tabpfn_version"):
+                decoded.tabpfn_version = TABPFN_DEFAULT_VERSION
+            decoded.tabpfn_version = normalize_tabpfn_version(decoded.tabpfn_version)
+            if not hasattr(decoded, "tabpfn_tune_folds"):
+                decoded.tabpfn_tune_folds = TABPFN_DEFAULT_TUNE_FOLDS
+            decoded.tabpfn_tune_folds = normalize_tabpfn_tune_folds(
+                decoded.tabpfn_tune_folds
+            )
+            decoded.program_dirs = program_dirs
+            return decoded
+
+        obj = cast(dict, decoded)
         obj.pop("version", None)
         obj.pop("cli_args", None)
         obj.pop("comparables", None)
         obj.pop("program_dirs", None)
-
-        program_dirs = ProgramDirs.new(
-            root=options.parent.parent, hsh=options.parent.name
-        )
+        stored_device_info = obj.pop("_device_info", obj.pop("device_info", None))
+        obj.setdefault("device_requested", "auto")
+        obj.setdefault("device", "cpu")
+        if stored_device_info is not None:
+            obj["resolved_device_info"] = device_info_from_json(stored_device_info)
+        obj.pop("ensure_lightgbm_cuda", None)
+        obj.setdefault("tabpfn_version", TABPFN_DEFAULT_VERSION)
+        obj.setdefault("tabpfn_tune_folds", TABPFN_DEFAULT_TUNE_FOLDS)
 
         for key, d in obj.items():
             if is_jsonpickle_dict(d):
@@ -1059,6 +1169,27 @@ def make_parser() -> ArgumentParser:
         help=TEST_VALSIZES_HELP,
     )
     parser.add_argument(
+        "--device",
+        type=str,
+        choices=DEVICE_CHOICES,
+        default="auto",
+        help=DEVICE_HELP,
+    )
+    parser.add_argument(
+        "--tabpfn-version",
+        type=normalize_tabpfn_version,
+        choices=TABPFN_VERSION_CHOICES,
+        default=TABPFN_DEFAULT_VERSION,
+        help=TABPFN_VERSION_HELP,
+    )
+    parser.add_argument(
+        "--tabpfn-tune-folds",
+        type=normalize_tabpfn_tune_folds,
+        choices=TABPFN_TUNE_FOLD_CHOICES,
+        default=TABPFN_DEFAULT_TUNE_FOLDS,
+        help=TABPFN_TUNE_FOLDS_HELP,
+    )
+    parser.add_argument(
         "--outdir",
         type=resolved_path,
         required=False,
@@ -1170,6 +1301,9 @@ def get_parser_dict() -> ArgsDict:
         "--htune-cls-metric": (RandKind.ChooseOne, ClassifierScorer.choices()),
         "--htune-reg-metric": (RandKind.ChooseOne, RegressorScorer.choices()),
         "--test-val-size": (RandKind.IntOrPercent, None),
+        "--device": (RandKind.ChooseOne, list(RANDOM_DEVICE_CHOICES)),
+        "--tabpfn-version": (RandKind.ChooseOne, list(TABPFN_VERSION_CHOICES)),
+        "--tabpfn-tune-folds": (RandKind.ChooseOne, list(TABPFN_TUNE_FOLD_CHOICES)),
         "--outdir": (RandKind.Path, None),
         "--verbosity": (RandKind.ChooseOne, ["0", "1", "2"]),
         "--no-warn-explosion": (RandKind.Flag, None),
@@ -1394,6 +1528,186 @@ def random_cli_args(
         return arg_options, tempfile, testfiles
 
 
+def _selected_lightgbm_boosting_types(
+    is_cls: bool,
+    classifiers: set[DfAnalyzeClassifier],
+    regressors: set[DfAnalyzeRegressor],
+    feat_select: set[FeatureSelection] | None = None,
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]] = None,
+    wrapper_select: Optional[WrapperSelection] = None,
+    wrapper_model: WrapperSelectionModel | None = None,
+) -> tuple[str, ...]:
+    if is_cls:
+        selected = classifiers
+        lgbm = DfAnalyzeClassifier.LGBM
+        rf = DfAnalyzeClassifier.RF
+    else:
+        selected = regressors
+        lgbm = DfAnalyzeRegressor.LGBM
+        rf = DfAnalyzeRegressor.RF
+
+    boosting_types: list[str] = []
+    if lgbm in selected:
+        _append_unique(boosting_types, "gbdt")
+    if rf in selected:
+        _append_unique(boosting_types, "rf")
+    if _embedded_model_selected(feat_select, embed_select, EmbedSelectionModel.LGBM):
+        _append_unique(boosting_types, "gbdt")
+    if (
+        wrapper_select is not None
+        and wrapper_model is WrapperSelectionModel.LGBM
+    ):
+        _append_unique(boosting_types, "gbdt")
+    return tuple(boosting_types)
+
+
+def _selected_cuml_backends(
+    is_cls: bool,
+    classifiers: set[DfAnalyzeClassifier],
+    regressors: set[DfAnalyzeRegressor],
+    feat_select: set[FeatureSelection] | None = None,
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]] = None,
+    wrapper_select: Optional[WrapperSelection] = None,
+    wrapper_model: WrapperSelectionModel | None = None,
+) -> tuple[str, ...]:
+    backends: list[str] = []
+    if is_cls:
+        if DfAnalyzeClassifier.KNN in classifiers:
+            _append_unique(backends, "knn-classifier")
+        if DfAnalyzeClassifier.LR in classifiers:
+            _append_unique(backends, "logistic-regression")
+        if _embedded_model_selected(
+            feat_select, embed_select, EmbedSelectionModel.Linear
+        ):
+            _append_unique(backends, "mbsgd-classifier")
+        if wrapper_select is not None:
+            if wrapper_model is WrapperSelectionModel.KNN:
+                _append_unique(backends, "knn-classifier")
+        return tuple(backends)
+
+    if DfAnalyzeRegressor.KNN in regressors:
+        _append_unique(backends, "knn-regressor")
+    if DfAnalyzeRegressor.ElasticNet in regressors:
+        _append_unique(backends, "elasticnet")
+    if DfAnalyzeRegressor.SGD in regressors:
+        _append_unique(backends, "mbsgd-regressor")
+    if _embedded_model_selected(feat_select, embed_select, EmbedSelectionModel.Linear):
+        _append_unique(backends, "mbsgd-regressor")
+    if wrapper_select is not None:
+        if wrapper_model is WrapperSelectionModel.KNN:
+            _append_unique(backends, "knn-regressor")
+    return tuple(backends)
+
+
+def _append_unique(values: list[str], value: str) -> None:
+    if value not in values:
+        values.append(value)
+
+
+def _embedded_model_selected(
+    feat_select: set[FeatureSelection] | None,
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]],
+    model: EmbedSelectionModel,
+) -> bool:
+    return (
+        feat_select is not None
+        and FeatureSelection.Embedded in feat_select
+        and embed_select is not None
+        and model in embed_select
+    )
+
+
+def _device_report_selected_models(
+    is_cls: bool,
+    classifiers: set[DfAnalyzeClassifier],
+    regressors: set[DfAnalyzeRegressor],
+    feat_select: set[FeatureSelection],
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]],
+    wrapper_select: Optional[WrapperSelection],
+    wrapper_model: WrapperSelectionModel,
+) -> list[str]:
+    selected: list[str] = []
+    if is_cls:
+        for model in sorted(classifiers):
+            if model is DfAnalyzeClassifier.KNN:
+                name = "knn-classifier"
+            elif model is DfAnalyzeClassifier.SGD:
+                name = "sgd-classifier"
+            else:
+                name = model.value
+            _append_unique(selected, name)
+    else:
+        for model in sorted(regressors):
+            if model is DfAnalyzeRegressor.KNN:
+                name = "knn-regressor"
+            elif model is DfAnalyzeRegressor.SGD:
+                name = "sgd-regressor"
+            else:
+                name = model.value
+            _append_unique(selected, name)
+
+    if _embedded_model_selected(feat_select, embed_select, EmbedSelectionModel.Linear):
+        _append_unique(
+            selected,
+            "sgd-selector-classifier" if is_cls else "sgd-selector-regressor",
+        )
+    if _embedded_model_selected(feat_select, embed_select, EmbedSelectionModel.LGBM):
+        _append_unique(selected, "lgbm")
+
+    if wrapper_select is not None:
+        if wrapper_model is WrapperSelectionModel.KNN:
+            _append_unique(selected, "knn")
+        elif wrapper_model is WrapperSelectionModel.LGBM:
+            _append_unique(selected, "lgbm")
+    return selected
+
+
+def _check_cuml_cuda_for_selected_models(
+    device_info: DeviceInfo,
+    is_cls: bool,
+    classifiers: set[DfAnalyzeClassifier],
+    regressors: set[DfAnalyzeRegressor],
+    feat_select: set[FeatureSelection],
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]],
+    wrapper_select: Optional[WrapperSelection],
+    wrapper_model: WrapperSelectionModel,
+) -> None:
+    from df_analyze.models.cuml_cuda import check_cuml_cuda_backends
+
+    backends = _selected_cuml_backends(
+        is_cls,
+        classifiers,
+        regressors,
+        feat_select,
+        embed_select,
+        wrapper_select,
+        wrapper_model,
+    )
+    if len(backends) == 0:
+        return
+    check_cuml_cuda_backends(
+        device_info,
+        backends,
+        enabled=device_info.cuda_backends_enabled,
+        auto_install=True,
+    )
+
+
+def _check_lightgbm_cuda_for_selected_models(
+    device_info: DeviceInfo,
+    is_cls: bool,
+    classifiers: set[DfAnalyzeClassifier],
+    regressors: set[DfAnalyzeRegressor],
+    feat_select: set[FeatureSelection],
+    embed_select: Optional[tuple[EmbedSelectionModel, ...]],
+    wrapper_select: Optional[WrapperSelection],
+    wrapper_model: WrapperSelectionModel,
+) -> None:
+    # LightGBM lgbm/rf execution is pinned to CPU in models/lgbm.py. Do not
+    # validate or auto-install the CUDA build for model execution.
+    return
+
+
 def get_options(args: Optional[str] = None) -> ProgramOptions:
     """parse command line arguments"""
     # parser = ArgumentParser(description=DESC)
@@ -1415,25 +1729,46 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
             )
             ords.remove(cat)
 
+    device_info = resolve_device(cli_args.device)
+    configure_torch_cuda_performance(device_info)
+
     classifiers = set(DfAnalyzeClassifier.from_args(cli_args.classifiers))
     regressors = set(DfAnalyzeRegressor.from_args(cli_args.regressors))
+    feat_select = FeatureSelection.from_args(cli_args.feat_select)
+    embed_select = EmbedSelectionModel.from_args(cli_args.embed_select)
+    wrapper_select = WrapperSelection.from_argN(cli_args.wrapper_select)
+    wrapper_model = WrapperSelectionModel.from_arg(cli_args.wrapper_model)
+    _check_cuml_cuda_for_selected_models(
+        device_info=device_info,
+        is_cls=is_cls,
+        classifiers=classifiers,
+        regressors=regressors,
+        feat_select=set(feat_select),
+        embed_select=embed_select,
+        wrapper_select=wrapper_select,
+        wrapper_model=wrapper_model,
+    )
+    _check_lightgbm_cuda_for_selected_models(
+        device_info=device_info,
+        is_cls=is_cls,
+        classifiers=classifiers,
+        regressors=regressors,
+        feat_select=set(feat_select),
+        embed_select=embed_select,
+        wrapper_select=wrapper_select,
+        wrapper_model=wrapper_model,
+    )
     if DfAnalyzeClassifier.SVM in classifiers:
         warn(
-            "Found `svm` classifier as a specified model. SVMs are at the "
-            "moment too computationally-expensive on most datasets. This "
-            "model has been disabled and performance metrics for this model "
-            "will not appear in final results."
+            "Found `svm` classifier as a specified model, but SVMs are "
+            "disabled because they are usually too slow in df-analyze."
         )
-
         classifiers.discard(DfAnalyzeClassifier.SVM)
     if DfAnalyzeRegressor.SVM in regressors:
         warn(
-            "Found `svm` regressor as a specified model. SVMs are at the "
-            "moment too computationally-expensive on most datasets. This "
-            "model has been disabled and performance metrics for this model "
-            "will not appear in final results."
+            "Found `svm` regressor as a specified model, but SVMs are "
+            "disabled because they are usually too slow in df-analyze."
         )
-
         regressors.discard(DfAnalyzeRegressor.SVM)
 
     if DfAnalyzeClassifier.Dummy not in classifiers:
@@ -1469,10 +1804,10 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         drops=cli_args.drops,
         norm=Normalization.from_arg(cli_args.norm),
         nan_handling=NanHandling.from_arg(cli_args.nan),
-        feat_select=FeatureSelection.from_args(cli_args.feat_select),
-        embed_select=EmbedSelectionModel.from_args(cli_args.embed_select),
-        wrapper_select=WrapperSelection.from_argN(cli_args.wrapper_select),
-        wrapper_model=WrapperSelectionModel.from_arg(cli_args.wrapper_model),
+        feat_select=feat_select,
+        embed_select=embed_select,
+        wrapper_select=wrapper_select,
+        wrapper_model=wrapper_model,
         # n_feat=cli_args.n_feat,
         n_feat_wrapper=cli_args.n_feat_wrapper,
         n_feat_filter=cli_args.n_feat_filter,
@@ -1506,6 +1841,11 @@ def get_options(args: Optional[str] = None) -> ProgramOptions:
         verbosity=cli_args.verbosity,
         no_warn_explosion=cli_args.no_warn_explosion,
         no_preds=cli_args.no_preds,
+        device_requested=device_info.requested,
+        device=device_info.resolved,
+        resolved_device_info=device_info,
+        tabpfn_version=cli_args.tabpfn_version,
+        tabpfn_tune_folds=cli_args.tabpfn_tune_folds,
     )
 
 

@@ -8,6 +8,7 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
+import os
 import sys
 import traceback
 import warnings
@@ -29,9 +30,15 @@ from tqdm import tqdm
 from df_analyze.analysis.univariate.predict.models import (
     CLS_MODELS,
     REG_MODELS,
+    model_classes_use_gpu_backend,
 )
+from df_analyze.device import DeviceInfo
 from df_analyze.preprocessing.prepare import PreparedData
 from df_analyze.saving import add_fold_idx
+
+
+DEFAULT_CPU_PRED_N_JOBS = 8
+PRED_N_JOBS_ENV = "DF_ANALYZE_UNIVARIATE_PRED_N_JOBS"
 
 
 @dataclass
@@ -76,7 +83,7 @@ class PredResults:
             )
         else:
             DataFrame().to_parquet(
-                add_fold_idx(root / self.files.conts_raw, fold_idx=fold_idx)
+                add_fold_idx(root / self.files.cats_raw, fold_idx=fold_idx)
             )
         if self.idx_subsample is not None:
             with open(root / self.files.idx, "wb") as handle:
@@ -169,6 +176,7 @@ def continuous_feature_target_preds(
     column: str,
     target: Series,
     is_classification: bool,
+    device_info: DeviceInfo | None = None,
 ) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
     with warnings.catch_warnings(record=True) as warns:
         warnings.simplefilter("once")
@@ -182,7 +190,7 @@ def continuous_feature_target_preds(
             # )
             for model_cls in models:
                 # pbar.set_description(f"Tuning {model_cls.__name__}")
-                model = model_cls()
+                model = model_cls(device_info=device_info)
                 score, spam = model.evaluate(x, y)
                 score.insert(0, "model", model.short)
                 score.index = pd.Index([column], name="feature")
@@ -201,6 +209,7 @@ def categorical_feature_target_preds(
     column: str,
     target: Series,
     is_classification: bool,
+    device_info: DeviceInfo | None = None,
 ) -> tuple[DataFrame, Optional[Exception], list[WarningMessage]]:
     """Must be UN-ENCODED categoricals"""
     with warnings.catch_warnings(record=True) as warns:
@@ -219,7 +228,7 @@ def categorical_feature_target_preds(
             # )
             for model_cls in models:
                 # pbar.set_description(f"Tuning {model_cls.__name__}")
-                model = model_cls()
+                model = model_cls(device_info=device_info)
                 score, spam = model.evaluate(X, y)
                 score.insert(0, "model", model.short)
                 score.index = pd.Index([column], name="feature")
@@ -233,11 +242,34 @@ def categorical_feature_target_preds(
             return DataFrame(), e, warns
 
 
+def cpu_parallel_n_jobs() -> int:
+    raw = os.environ.get(PRED_N_JOBS_ENV)
+    if raw is not None:
+        try:
+            n_jobs = int(raw)
+        except ValueError:
+            warn(
+                f"Ignoring invalid {PRED_N_JOBS_ENV}={raw!r}; expected an integer.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        else:
+            if n_jobs != 0:
+                return n_jobs
+            warn(
+                f"Ignoring invalid {PRED_N_JOBS_ENV}=0; joblib n_jobs cannot be 0.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    return max(1, min(os.cpu_count() or 1, DEFAULT_CPU_PRED_N_JOBS))
+
+
 def feature_target_predictions(
     categoricals: DataFrame | None,
     continuous: DataFrame | None,
     target: Series,
     is_classification: bool,
+    device_info: DeviceInfo | None = None,
 ) -> tuple[
     Optional[DataFrame], Optional[DataFrame], list[BaseException], list[WarningMessage]
 ]:
@@ -245,15 +277,24 @@ def feature_target_predictions(
         warnings.filterwarnings("ignore", category=FutureWarning)
         df_conts: list[DataFrame]
         df_cats: list[DataFrame]
-        results: list[tuple[DataFrame, Optional[Exception], list[WarningMessage]]] = []
+        cont_results: list[
+            tuple[DataFrame, Optional[Exception], list[WarningMessage]]
+        ] = []
+        cat_results: list[
+            tuple[DataFrame, Optional[Exception], list[WarningMessage]]
+        ] = []
+
+        models = CLS_MODELS if is_classification else REG_MODELS
+        n_jobs = 1 if model_classes_use_gpu_backend(models, device_info) else cpu_parallel_n_jobs()
 
         if continuous is not None:
-            results = Parallel(n_jobs=-1)(
+            cont_results = Parallel(n_jobs=n_jobs)(
                 delayed(continuous_feature_target_preds)(
-                    continuous=continuous,
+                    continuous=continuous[[col]],
                     column=col,
                     target=target,
                     is_classification=is_classification,
+                    device_info=device_info,
                 )
                 for col in tqdm(
                     continuous.columns,
@@ -263,18 +304,19 @@ def feature_target_predictions(
                     position=0,
                 )
             )  # type: ignore
-        if len(results) > 0:
-            df_conts, cont_errors, cont_warns = list(zip(*results))  # type: ignore
+        if len(cont_results) > 0:
+            df_conts, cont_errors, cont_warns = list(zip(*cont_results))  # type: ignore
         else:
             df_conts, cont_errors, cont_warns = [], [], []
 
         if categoricals is not None:
-            results = Parallel(n_jobs=-1)(
+            cat_results = Parallel(n_jobs=n_jobs)(
                 delayed(categorical_feature_target_preds)(
-                    categoricals=categoricals,
+                    categoricals=categoricals[[col]],
                     column=col,
                     target=target,
                     is_classification=is_classification,
+                    device_info=device_info,
                 )
                 for col in tqdm(
                     categoricals.columns,
@@ -284,8 +326,8 @@ def feature_target_predictions(
                     position=0,
                 )
             )  # type: ignore
-        if len(results) > 0:
-            df_cats, cat_errors, cat_warns = list(zip(*results))  # type: ignore
+        if len(cat_results) > 0:
+            df_cats, cat_errors, cat_warns = list(zip(*cat_results))  # type: ignore
         else:
             df_cats, cat_errors, cat_warns = [], [], []
 
@@ -308,6 +350,7 @@ def feature_target_predictions(
 def univariate_predictions(
     prepared: PreparedData,
     is_classification: bool,
+    device_info: DeviceInfo | None = None,
 ) -> PredResults:
     sub, idx = prepared.representative_subsample()
     df_cont, df_cat, errs, warns = feature_target_predictions(
@@ -315,6 +358,7 @@ def univariate_predictions(
         continuous=sub.X_cont,
         target=sub.y,
         is_classification=is_classification,
+        device_info=device_info,
     )
     return PredResults(
         conts=df_cont,

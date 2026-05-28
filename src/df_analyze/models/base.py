@@ -43,9 +43,15 @@ from sklearn.calibration import CalibratedClassifierCV as CVCalibrate
 from sklearn.metrics import accuracy_score as acc
 from sklearn.metrics import mean_absolute_error as mae
 
+from df_analyze._constants import SEED
 from df_analyze.enumerables import (
     Scorer,
     WrapperSelection,
+)
+from df_analyze.device import (
+    DeviceInfo,
+    cleanup_accelerator_memory,
+    device_info_from_resolved,
 )
 from df_analyze.splitting import OmniKFold
 
@@ -85,6 +91,41 @@ class EarlyStopping:
             study.stop()
 
 
+class TargetScoreStopping:
+    def __init__(
+        self,
+        *,
+        target: float,
+        higher_is_better: bool,
+        min_trials: int = 1,
+        tolerance: float = 1e-12,
+    ) -> None:
+        self.target = target
+        self.higher_is_better = higher_is_better
+        self.min_trials = max(1, min_trials)
+        self.tolerance = tolerance
+
+    def __call__(self, study: Study, trial: FrozenTrial) -> None:
+        trial_number = getattr(trial, "number", 0)
+        if (trial_number + 1) < self.min_trials:
+            return
+        best = study.best_value
+        if self.higher_is_better:
+            reached = best >= self.target - self.tolerance
+        else:
+            reached = best <= self.target + self.tolerance
+        if reached:
+            study.stop()
+
+
+class AcceleratorCleanup:
+    def __init__(self, device_info: DeviceInfo) -> None:
+        self.device_info = device_info
+
+    def __call__(self, _study: Study, _trial: FrozenTrial) -> None:
+        cleanup_accelerator_memory(self.device_info)
+
+
 class DfAnalyzeModel(ABC):
     shortname: str = ""
     longname: str = ""
@@ -99,10 +140,53 @@ class DfAnalyzeModel(ABC):
         self.default_args: dict[str, Any] = {}
         self.model_args: Mapping = model_args or {}
         self.grid: Optional[dict[str, Any]] = None
+        self.device_info = device_info_from_resolved("cpu", "cpu")
 
         self.tuned_args: Optional[dict[str, Any]] = None
         self.tuned_model: Optional[Any] = None
         self.is_refit = False
+
+    def set_device_info(self, device_info: DeviceInfo) -> None:
+        self.device_info = device_info
+
+    def uses_accelerated_backend(
+        self, tuned_args: Optional[Mapping[str, Any]] = None
+    ) -> bool:
+        return False
+
+    def _tuning_n_jobs(self, n_jobs: int) -> int:
+        if self.uses_accelerated_backend():
+            return 1
+        return n_jobs
+
+    def cuda_tuning_trial_budget(self) -> Optional[int]:
+        return None
+
+    def effective_tuning_n_trials(self, n_trials: int) -> int:
+        budget = self.cuda_tuning_trial_budget()
+        if budget is None:
+            return n_trials
+        return min(n_trials, budget)
+
+    def target_score_stopping_min_trials(self) -> int:
+        return 1
+
+    def _calibration_n_jobs(self) -> int:
+        if self.uses_accelerated_backend():
+            return 1
+        return 5
+
+    def _reset_tuned_model_for_refit(self) -> None:
+        if self.tuned_model is None:
+            return
+        self.tuned_model = None
+        cleanup_accelerator_memory(self.device_info)
+
+    def backend_name(self, tuned_args: Optional[Mapping[str, Any]] = None) -> str:
+        return "sklearn-cpu"
+
+    def model_version(self) -> str:
+        return ""
 
     @abstractmethod
     def model_cls_args(
@@ -211,28 +295,41 @@ class DfAnalyzeModel(ABC):
 
         grid = self.grid
         direction = "maximize" if metric.higher_is_better() else "minimize"
+        optuna.logging.set_verbosity(verbosity)
         study = create_study(
             direction=direction,
-            sampler=GridSampler(grid) if grid is not None else TPESampler(),
+            sampler=GridSampler(grid) if grid is not None else TPESampler(seed=SEED),
             pruner=MedianPruner(n_warmup_steps=0, n_min_trials=5),
         )
-        optuna.logging.set_verbosity(verbosity)
         objective = self.optuna_objective(
             X_train=X_train,
             y_train=y_train,
             g_train=g_train,
             metric=metric,
         )
-        cbs = [EarlyStopping(patience=15, min_trials=50)]
+        n_jobs = self._tuning_n_jobs(n_jobs)
+        callbacks = [AcceleratorCleanup(self.device_info)]
+        target_score = 1.0 if metric.higher_is_better() else 0.0
+        callbacks.insert(
+            0,
+            TargetScoreStopping(
+                target=target_score,
+                higher_is_better=metric.higher_is_better(),
+                min_trials=self.target_score_stopping_min_trials(),
+            ),
+        )
+        if grid is None:
+            callbacks.insert(0, EarlyStopping(patience=15, min_trials=50))
         study.optimize(
             objective,
-            n_trials=n_trials,
-            callbacks=cbs if grid is None else [],
+            n_trials=self.effective_tuning_n_trials(n_trials),
+            callbacks=callbacks,
             timeout=self.__class__.timeout_s,
             n_jobs=n_jobs,
             gc_after_trial=True,
             show_progress_bar=True,
         )
+        cleanup_accelerator_memory(self.device_info)
         self.tuned_args = study.best_params
         self.refit_tuned(X=X_train, y=y_train, tuned_args=self.tuned_args)
 
@@ -241,7 +338,8 @@ class DfAnalyzeModel(ABC):
     def fit(self, X_train: DataFrame, y_train: Series) -> None:
         if self.model is None:
             kwargs = {**self.fixed_args, **self.default_args, **self.model_args}
-            self.model = self.model_cls_args(kwargs)[0](**kwargs)
+            model_cls, clean_args = self.model_cls_args(kwargs)
+            self.model = model_cls(**clean_args)
         self.model.fit(X_train, y_train)  # type: ignore
 
     def refit_tuned(
@@ -251,6 +349,7 @@ class DfAnalyzeModel(ABC):
         g: Optional[Series] = None,
         tuned_args: Optional[Mapping] = None,
     ) -> None:
+        self._reset_tuned_model_for_refit()
         tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
@@ -258,11 +357,15 @@ class DfAnalyzeModel(ABC):
             **self.model_args,
             **tuned_args,
         }
-        self.tuned_model = self.model_cls_args(kwargs)[0](**kwargs)
+        model_cls, clean_args = self.model_cls_args(kwargs)
+        self.tuned_model = model_cls(**clean_args)
 
         if self.needs_calibration:
             self.tuned_model = CVCalibrate(
-                self.tuned_model, method="sigmoid", cv=5, n_jobs=5
+                self.tuned_model,
+                method="sigmoid",
+                cv=5,
+                n_jobs=self._calibration_n_jobs(),
             )
 
         self.tuned_model.fit(X, y)  # type: ignore
@@ -330,13 +433,10 @@ class DfAnalyzeModel(ABC):
 
         scores = []
         for idx_train, idx_test in kf.split(y_test.to_frame(), y_test, g_test)[0]:
-            try:
-                df_train = X_test.loc[idx_train]
-                df_test = X_test.loc[idx_test]
-                targ_train = y_test.loc[idx_train]
-                targ_test = y_test.loc[idx_test]
-            except KeyError as e:
-                raise IndexError("Couldn't use .loc in internal k-fold") from e
+            df_train = X_test.iloc[idx_train]
+            df_test = X_test.iloc[idx_test]
+            targ_train = y_test.iloc[idx_train]
+            targ_test = y_test.iloc[idx_test]
             self.refit_tuned(X=df_train, y=targ_train, tuned_args=self.tuned_args)
             inner_preds_test = self.tuned_predict(X=df_test)
             if self.is_classifier:
@@ -401,13 +501,14 @@ class DfAnalyzeModel(ABC):
         scores = []
 
         for idx_train, idx_test in kf.split(y.to_frame(), y.copy(), g)[0]:
-            X_train = X.loc[idx_train].copy()
-            X_test = X.loc[idx_test].copy()
-            y_train = y.loc[idx_train].copy()
-            y_test = y.loc[idx_test].copy()
+            X_train = X.iloc[idx_train].copy()
+            X_test = X.iloc[idx_test].copy()
+            y_train = y.iloc[idx_train].copy()
+            y_test = y.iloc[idx_test].copy()
             self.fit(X_train, y_train)
             preds = self.predict(X=X_test)
             self.model = None  # reset for next fit call
+            cleanup_accelerator_memory(self.device_info)
             if metric is None:
                 scorer = acc if self.is_classifier else mae
                 score = scorer(preds, y_test)

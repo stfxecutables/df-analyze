@@ -14,6 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from cli_test_helpers import ArgvContext
 from pytest import CaptureFixture
 from tqdm import tqdm
 from transformers.models.siglip.modeling_siglip import SiglipModel
@@ -23,7 +24,10 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
     XLMRobertaTokenizerFast,
 )
 
-from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions
+import df_analyze.device as device
+from df_analyze.device import device_info_from_resolved
+from df_analyze.embedding import embed as embed_module
+from df_analyze.embedding.cli import EmbeddingModality, EmbeddingOptions, make_parser
 from df_analyze.embedding.datasets import (
     EmbeddingDataset,
     VisionDataset,
@@ -62,6 +66,132 @@ MACOS_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes.parquet"
 MACOS_VISION_RUNTIMES = ROOT / "vision_embed_runtimes.parquet"
 NIAGARA_NLP_RUNTIMES = ROOT / "nlp_embed_runtimes_niagara.parquet"
 NIAGARA_VISION_RUNTIMES = ROOT / "vision_embed_runtimes_niagara.parquet"
+
+
+@pytest.mark.fast
+def test_embedding_options_accept_cpu_device() -> None:
+    opts = EmbeddingOptions(
+        datapath=None,
+        modality=EmbeddingModality.NLP,
+        download=True,
+        device_requested="cpu",
+    )
+
+    assert opts.device_requested == "cpu"
+    assert opts.device == "cpu"
+    assert opts.device_info.torch_device == "cpu"
+
+
+@pytest.mark.fast
+def test_embedding_cli_accepts_cpu_device() -> None:
+    with ArgvContext(
+        "df-embed.py",
+        "--modality",
+        "nlp",
+        "--download",
+        "--device",
+        "cpu",
+    ):
+        opts = EmbeddingOptions.from_parser(make_parser())
+
+    assert opts.device_requested == "cpu"
+    assert opts.device == "cpu"
+
+
+@pytest.mark.fast
+def test_embedding_cli_auto_prefers_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(device, "cuda_available", lambda: True)
+    monkeypatch.setattr(device, "mps_available", lambda: True)
+
+    with ArgvContext(
+        "df-embed.py",
+        "--modality",
+        "nlp",
+        "--download",
+        "--device",
+        "auto",
+    ):
+        opts = EmbeddingOptions.from_parser(make_parser())
+
+    assert opts.device_requested == "auto"
+    assert opts.device == "cuda"
+    assert opts.device_info.torch_device == "cuda"
+
+
+@pytest.mark.fast
+def test_embedding_cli_auto_uses_cpu_torch_for_driver_only_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(device, "cuda_available", lambda: False)
+    monkeypatch.setattr(device, "cuda_driver_available", lambda: True)
+    monkeypatch.setattr(device, "mps_available", lambda: True)
+
+    with ArgvContext(
+        "df-embed.py",
+        "--modality",
+        "nlp",
+        "--download",
+        "--device",
+        "auto",
+    ):
+        opts = EmbeddingOptions.from_parser(make_parser())
+
+    assert opts.device_requested == "auto"
+    assert opts.device == "cuda"
+    assert opts.device_info.torch_device == "cpu"
+
+
+@pytest.mark.fast
+def test_embedding_cli_accepts_mps_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(device, "mps_available", lambda: True)
+
+    with ArgvContext(
+        "df-embed.py",
+        "--modality",
+        "nlp",
+        "--download",
+        "--device",
+        "mps",
+    ):
+        opts = EmbeddingOptions.from_parser(make_parser())
+
+    assert opts.device_requested == "mps"
+    assert opts.device == "mps"
+    assert opts.device_info.torch_device == "mps"
+
+
+@pytest.mark.fast
+def test_get_model_moves_loaded_model_to_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeModel:
+        def __init__(self) -> None:
+            self.moves: list[str] = []
+            self.evaluated = False
+
+        def eval(self) -> None:
+            self.evaluated = True
+
+        def to(self, device_name: str) -> None:
+            self.moves.append(device_name)
+
+    model = FakeModel()
+    tokenizer = object()
+    monkeypatch.setattr(
+        embed_module,
+        "load_nlp_intfloat_ml_model_offline",
+        lambda: (model, tokenizer),
+    )
+
+    returned_model, returned_tokenizer = get_model(
+        EmbeddingModality.NLP,
+        device_info=device_info_from_resolved("auto", "cuda", torch_cuda_available=True, cuda_driver_available=True),
+    )
+
+    assert returned_model is model
+    assert returned_tokenizer is tokenizer
+    assert model.evaluated is True
+    assert model.moves == ["cuda"]
 
 
 @pytest.mark.fast

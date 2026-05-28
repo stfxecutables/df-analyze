@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from df_analyze._constants import TEST_RESULTS
+from df_analyze.analysis.univariate import associate as assoc_module
 from df_analyze.analysis.univariate.associate import AssocResults
 from df_analyze.testing.datasets import (
     FAST_INSPECTION,
@@ -31,6 +32,22 @@ logger = logging.getLogger("py.warnings")
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.addFilter(lambda record: "ConvergenceWarning" not in record.getMessage())
+
+
+@pytest.mark.fast
+def test_assoc_parallel_n_jobs_defaults_to_all_cores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(assoc_module.ASSOC_N_JOBS_ENV, raising=False)
+
+    assert assoc_module.assoc_parallel_n_jobs() == -1
+
+
+@pytest.mark.fast
+def test_assoc_parallel_n_jobs_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(assoc_module.ASSOC_N_JOBS_ENV, "3")
+
+    assert assoc_module.assoc_parallel_n_jobs() == 3
 
 
 def do_associate(dataset: tuple[str, TestDataset]) -> None:

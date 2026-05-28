@@ -10,14 +10,20 @@ sys.path.append(str(ROOT))  # isort: skip
 
 from random import randint
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
+import numpy as np
+import pandas as pd
 from _pytest.capture import CaptureFixture
+from sklearn.base import BaseEstimator
 
 from df_analyze._constants import ROOT
 from df_analyze.analysis.univariate.associate import CatAssociation, ContAssociation
 from df_analyze.cli.cli import ProgramOptions
+from df_analyze.device import device_info_from_resolved
 from df_analyze.enumerables import (
+    ClassifierScorer,
     ClsScore,
     EmbedSelectionModel,
     RegScore,
@@ -108,6 +114,121 @@ def do_embed_select(dataset: tuple[str, TestDataset]) -> None:
         if selected is None or (selected.selected is None):
             raise ValueError("Impossible!")
         assert len(selected.selected) > 0
+
+
+def test_embed_select_respects_htune_trials(monkeypatch: Any) -> None:
+    calls: list[tuple[int, int]] = []
+
+    class FakeEstimator(BaseEstimator):
+        def __init__(self) -> None:
+            self.coef_ = np.array([[0.0, 1.0]])
+
+        def fit(self, X: pd.DataFrame, y: pd.Series | None = None) -> FakeEstimator:
+            return self
+
+    class FakeLinearSelector:
+        def set_device_info(self, device_info: Any) -> None:
+            self.device_info = device_info
+
+        def htune_optuna(
+            self,
+            X_train: pd.DataFrame,
+            y_train: pd.Series,
+            g_train: pd.Series | None,
+            metric: ClassifierScorer,
+            n_trials: int = 100,
+            n_jobs: int = -1,
+            verbosity: int = 0,
+        ) -> None:
+            calls.append((n_trials, n_jobs))
+            self.tuned_model = FakeEstimator()
+
+    monkeypatch.setattr(
+        "df_analyze.selection.embedded.SGDClassifierSelector",
+        FakeLinearSelector,
+    )
+    prep_train = SimpleNamespace(
+        X=pd.DataFrame({"a": [0.0, 1.0, 0.0, 1.0], "b": [1.0, 0.0, 1.0, 0.0]}),
+        y=pd.Series([0, 1, 0, 1], name="target"),
+        groups=None,
+        is_classification=True,
+    )
+    options = SimpleNamespace(
+        embed_select=(EmbedSelectionModel.Linear,),
+        is_classification=True,
+        htune_cls_metric=ClassifierScorer.Accuracy,
+        htune_reg_metric=ClassifierScorer.Accuracy,
+        htune_trials=7,
+        device_info=device_info_from_resolved("cpu", "cpu"),
+    )
+
+    selected = embed_select_features(prep_train=prep_train, options=options)
+
+    assert calls == [(7, -1)]
+    assert len(selected) == 1
+
+
+def test_embed_select_lgbm_accepts_read_only_feature_importances(
+    monkeypatch: Any,
+) -> None:
+    calls: list[int] = []
+
+    class FakeReadOnlyFeatureImportancesEstimator(BaseEstimator):
+        def __init__(self) -> None:
+            self.n_features_in_ = 2
+
+        @property
+        def feature_importances_(self) -> np.ndarray:
+            return np.array([0.0, 1.0])
+
+        def fit(
+            self,
+            X: pd.DataFrame,
+            y: pd.Series | None = None,
+        ) -> FakeReadOnlyFeatureImportancesEstimator:
+            return self
+
+    class FakeLGBMSelector:
+        def set_device_info(self, device_info: Any) -> None:
+            self.device_info = device_info
+
+        def htune_optuna(
+            self,
+            X_train: pd.DataFrame,
+            y_train: pd.Series,
+            g_train: pd.Series | None,
+            metric: ClassifierScorer,
+            n_trials: int = 100,
+            n_jobs: int = -1,
+            verbosity: int = 0,
+        ) -> None:
+            calls.append(n_trials)
+            self.tuned_model = FakeReadOnlyFeatureImportancesEstimator()
+
+    monkeypatch.setattr(
+        "df_analyze.selection.embedded.LightGBMClassifier",
+        FakeLGBMSelector,
+    )
+    prep_train = SimpleNamespace(
+        X=pd.DataFrame({"a": [0.0, 1.0, 0.0, 1.0], "b": [1.0, 0.0, 1.0, 0.0]}),
+        y=pd.Series([0, 1, 0, 1], name="target"),
+        groups=None,
+        is_classification=True,
+    )
+    options = SimpleNamespace(
+        embed_select=(EmbedSelectionModel.LGBM,),
+        is_classification=True,
+        htune_cls_metric=ClassifierScorer.Accuracy,
+        htune_reg_metric=ClassifierScorer.Accuracy,
+        htune_trials=5,
+        device_info=device_info_from_resolved("cpu", "cpu"),
+    )
+
+    selected = embed_select_features(prep_train=prep_train, options=options)
+
+    assert calls == [5]
+    assert len(selected) == 1
+    assert selected[0].selected == ["b"]
 
 
 def estimate_select(
