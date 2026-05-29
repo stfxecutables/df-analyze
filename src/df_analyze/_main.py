@@ -10,7 +10,6 @@ sys.path.append(str(SRC))  # isort: skip
 # fmt: on
 
 
-import logging
 import sys
 import traceback
 from copy import deepcopy
@@ -25,7 +24,7 @@ from df_analyze.analysis.univariate.associate import target_associations
 from df_analyze.analysis.univariate.predict.predict import univariate_predictions
 from df_analyze.cli.cli import ProgramOptions, get_options
 from df_analyze.hypertune import evaluate_tuned
-from df_analyze.nonsense import silence_spam
+from df_analyze.nonsense import silence_lightning_info, silence_spam
 from df_analyze.preprocessing.cleaning import sanitize_names
 from df_analyze.preprocessing.inspection.inspection import inspect_data
 from df_analyze.preprocessing.prepare import prepare_data
@@ -36,18 +35,7 @@ RESULTS_DIR = Path(__file__).parent / "results"
 
 T = TypeVar("T")
 
-# https://github.com/Lightning-AI/pytorch-lightning/issues/3431#issuecomment-2130390858
-logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
-logger.setLevel(logging.ERROR)
-logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
-
-
-class IgnorePLFilter(logging.Filter):
-    def filter(self, record):
-        return "available:" not in record.getMessage()
-
-
-logger.addFilter(IgnorePLFilter())
+silence_lightning_info()
 
 
 def listify(item: Union[T, list[T], tuple[T, ...]]) -> List[T]:
@@ -181,12 +169,16 @@ def main() -> None:
         prog_dirs.save_univariate_assocs(associations, fold_idx)
         prog_dirs.save_assoc_report(associations.to_markdown(), fold_idx)
 
-        if options.no_preds:
-            predictions = None
-        else:
-            predictions = univariate_predictions(prep_train, is_cls)
+        if not options.no_preds:
+            predictions = univariate_predictions(
+                prep_train,
+                is_cls,
+                device_info=options.device_info,
+            )
             prog_dirs.save_univariate_preds(predictions, fold_idx)
             prog_dirs.save_pred_report(predictions.to_markdown(), fold_idx)
+        else:
+            predictions = None
 
         # select features via filter methods first
         assoc_filtered, pred_filtered = filter_select_features(

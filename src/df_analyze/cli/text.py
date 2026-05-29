@@ -219,13 +219,26 @@ Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeCla
 
   knn         scikit-learn KNeighborsClassifier.
 
+  catboost    CatBoost gradient boosting classifier. Uses CUDA when
+              --device resolves to cuda; otherwise CPU.
+
+  xgboost     XGBoost gradient boosting classifier. Uses CUDA when
+              --device resolves to cuda and a working XGBoost CUDA backend is
+              available; otherwise CPU.
+
   lgbm        LightGBM boosted decision tree classifier.
 
   rf          LightGBM random forest classifier.
 
-  sgd         scikit-learn SGDClassifier.
+  sgd         scikit-learn SGDClassifier. This path intentionally stays on
+              sklearn even when CUDA is selected so probability-based
+              classifier scoring remains available.
 
   mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
+
+  tabpfn      TabPFN classifier. Defaults to TabPFN-3; use
+              --tabpfn-version v2_5 for TabPFN 2.5 compatibility. Expensive
+              and opt-in; include it explicitly when needed.
 
   svm         scikit-learn support vector classifer.
 
@@ -233,24 +246,6 @@ Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeCla
               Features for Tabular Data: https://arxiv.org/abs/2207.08548
 
   dummy       scikit-learn DummyClassifier.
-
-  knn         scikit-learn KNeighborsClassifier.
-
-  lgbm        LightGBM boosted decision tree classifier.
-
-  rf          LightGBM random forest classifier.
-
-  sgd         scikit-learn SGDClassifier.
-
-  mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
-
-  svm         scikit-learn support vector classifer.
-
-  gandalf     Gated Adaptive Network for Deep Automated Learning of
-              Features for Tabular Data: https://arxiv.org/abs/2207.08548
-
-  dummy       scikit-learn DummyClassifier.
-
 """
 
 REG_HELP_STR = f"""
@@ -259,22 +254,12 @@ Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeReg
 
   knn         scikit-learn KNeighborsRegressor.
 
-  lgbm        LightGBM boosted decision tree regressor.
+  catboost    CatBoost gradient boosting regressor. Uses CUDA when
+              --device resolves to cuda; otherwise CPU.
 
-  rf          LightGBM random forest regressor.
-
-  sgd         scikit-learn SGDRegressor.
-
-  mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
-
-  svm         scikit-learn support vector regressor.
-
-  gandalf     Gated Adaptive Network for Deep Automated Learning of
-              Features for Tabular Data: https://arxiv.org/abs/2207.08548
-
-  dummy       scikit-learn DummyRegressor.
-
-  knn         scikit-learn KNeighborsRegressor.
+  xgboost     XGBoost gradient boosting regressor. Uses CUDA when
+              --device resolves to cuda and a working XGBoost CUDA backend is
+              available; otherwise CPU.
 
   lgbm        LightGBM boosted decision tree regressor.
 
@@ -284,13 +269,16 @@ Can be a list of elements from: [{" ".join(sorted([x.value for x in DfAnalyzeReg
 
   mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
 
+  tabpfn      TabPFN regressor. Defaults to TabPFN-3; use
+              --tabpfn-version v2_5 for TabPFN 2.5 compatibility. Expensive
+              and opt-in; include it explicitly when needed.
+
   svm         scikit-learn support vector regressor.
 
   gandalf     Gated Adaptive Network for Deep Automated Learning of
               Features for Tabular Data: https://arxiv.org/abs/2207.08548
 
   dummy       scikit-learn DummyRegressor.
-
 """
 
 FEAT_SELECT_HELP = """
@@ -708,17 +696,19 @@ methods with `--htune-trials=100` will result in 2 x 5 x 100 = 600 trials. If
 also using e.g. the default 3-fold validation for `--htune-val-sizes`, then the
 total number of estimator fits from tuning will be 600 x 3.
 
-NOTE: if you can afford it, it is strongly recommended to set this value to a
-minimum of 100 (default), or 50 if your budget is constrained. Lower values
-often will fail to find good fits, given the wide range on hyperparameters
-needed to make Optuna generally useful.
+NOTE: `--htune-trials` is an upper bound. CUDA GPU backends with expensive
+tuning automatically cap this value at efficient per-model budgets:
+CatBoost/XGBoost/MLP=75, GANDALF=50, TabPFN classifier=24, and TabPFN
+regressor=12. Passing a smaller value keeps the smaller value for quick runs.
+For CPU and uncapped models, 100 remains the default recommendation.
 
 NOTE: Currently, df-analyze configures Optuna to use both early stopping (i.e.
 do not keep testing new hyperparameters when model performance has not improved
 for a number of trials) and pruning (by not performing the remaining of the five
 k-fold fits and evaluations when the first 2 are clearly terrible). Thus, while
-the *maximum* number of trials will be the value specified in this argument, in
-practice for most models Optuna may stop early at about 50 trials or so.
+the *maximum* number of trials will be the value specified in this argument
+after any CUDA per-model cap, in practice for most models Optuna may stop early
+at about 50 trials or so.
 
 df-analyze also currently configures Optuna with a *timeout* specific to each
 model, so that tuning will not exceed a certain amount of time:
@@ -794,6 +784,66 @@ input spreadsheet or table to set aside for evaluating during hyperparameter
 tuning.
 
 An integer specifies the number of samples to set aside for testing.
+
+"""
+
+DEVICE_HELP = """
+Select the compute device for GPU-capable parts of df-analyze. Options:
+
+  auto       Default. Prefer CUDA, then Apple MPS, then CPU.
+  cpu        Force CPU.
+  cuda       Request CUDA. Raises an error if CUDA is unavailable.
+  mps        Request Apple MPS. Raises an error if MPS is unavailable.
+
+CUDA is detected from PyTorch CUDA or a visible NVIDIA driver. If CUDA is
+resolved through the driver while PyTorch itself is CPU-only, PyTorch-oriented
+components stay on CPU and traditional CUDA backends are still checked.
+
+MPS is used only for PyTorch-oriented components such as MLP, GANDALF, and
+embeddings. CUDA-only libraries such as cuML/RAPIDS, CatBoost GPU, XGBoost
+CUDA, and TabPFN do not use MPS; those paths fall back to CPU unless CUDA is
+resolved and their backend smoke checks pass. LightGBM lgbm/rf execution is
+pinned to CPU in df-analyze.
+
+CUDA can accelerate MLP, GANDALF, embeddings, CatBoost, XGBoost, TabPFN, KNN
+via optional cuML, and selected cuML linear/SGD paths. The main
+SGD classifier stays on sklearn because
+df-analyze classifier evaluation can require probabilities. GPU-heavy Optuna
+tuning is kept to one job to avoid GPU memory contention. CatBoost, MLP,
+GANDALF, and TabPFN are opt-in rather than defaults; include them explicitly
+when they are part of the analysis.
+
+When CUDA resolves and selected models can use RAPIDS cuML, df-analyze attempts
+to install the matching `cuml-cu12` or `cuml-cu13` package from NVIDIA's Python
+package index if cuML is missing. Set DF_ANALYZE_AUTO_INSTALL_CUML=0 to disable
+that automatic install, or DF_ANALYZE_CUML_CUDA_SUFFIX=cu12/cu13 to override
+CUDA wheel selection.
+
+"""
+
+TABPFN_VERSION_HELP = """
+Select which TabPFN model version to use when `tabpfn` is included in the
+classifier or regressor list.
+
+  auto       Default. Use df-analyze's current TabPFN default, TabPFN-3.
+  v3         Use TabPFN-3.
+  v2_6       Use TabPFN 2.6.
+  v2_5       Use TabPFN 2.5 for older comparisons and DeepTune parity.
+
+TabPFN 2.5 remains available for reproducible comparison, but new runs should
+usually use `auto`/`v3`.
+
+"""
+
+TABPFN_TUNE_FOLDS_HELP = """
+Number of internal validation folds to use when tuning TabPFN hyperparameters.
+
+  1          Default. Tune on one validation split to keep TabPFN runs practical.
+  3          Tune across three folds for stricter experiment comparisons.
+  5          Tune across five folds, matching regular learner tuning more closely.
+
+The final df-analyze evaluation table still includes its normal 5-fold result;
+this option only controls the Optuna tuning objective for TabPFN.
 
 """
 

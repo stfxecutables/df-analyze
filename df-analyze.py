@@ -12,7 +12,20 @@ andr2w commented on Jan 25, 2023:
 >
 > My solution is just to import torch before import the transformers
 """
-import torch  # noqa  # type: ignore
+import os
+
+
+def _migrate_torch_alloc_conf() -> None:
+    deprecated = "PYTORCH_CUDA_ALLOC_CONF"
+    current = "PYTORCH_ALLOC_CONF"
+    value = os.environ.pop(deprecated, None)
+    if value is not None:
+        os.environ.setdefault(current, value)
+
+
+_migrate_torch_alloc_conf()
+
+import torch  # noqa  # type: ignore  # isort: skip
 
 # fmt: off
 import sys  # isort: skip

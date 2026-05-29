@@ -50,6 +50,13 @@ all command-line installation instructions below.
    uv run df-analyze.py --help
    ```
 
+GPU note: Windows CPU installs do not require RAPIDS/cuML. cuML support is
+optional and is generally Linux/WSL2 and CUDA-stack dependent, so do not add it
+to a normal Windows install unless you already have a compatible RAPIDS
+environment. PyTorch CUDA can still be used by PyTorch-backed components when
+your local PyTorch installation supports it. For final CUDA/cuML experiments,
+use the environment checklist in [`gpu_setup.md`](gpu_setup.md).
+
 If you get an error at this point involving lines like:
 
 ```
@@ -177,11 +184,15 @@ python -m pip install --upgrade pip setuptools wheel --no-cache-dir
 Then run the following command:
 
 ```powershell
-python -m pip install cli-test-helpers joblib jsonpickle lightgbm llvmlite matplotlib numba numpy openpyxl optuna pandas pyarrow pytest "pytest-xdist[psutil]" python-dateutil scikit-image scikit-learn scipy seaborn statsmodels tabulate torch torchaudio torchvision tqdm typing_extensions skorch "transformers[torch]" accelerate "datasets[vision]" protobuf sentencepiece "pytorch_tabular"
+python -m pip install cli-test-helpers joblib jsonpickle catboost xgboost lightgbm lightning llvmlite matplotlib numba numpy openpyxl optuna pandas pyarrow pytest "pytest-xdist[psutil]" python-dateutil scikit-image scikit-learn scipy seaborn statsmodels tabpfn tabulate tensorboardx torch torchaudio torchvision tqdm typing_extensions skorch "transformers[torch]" accelerate "datasets[vision]" protobuf sentencepiece "pytorch-tabular"
 ```
 
-All necessary dependencies should now be installed. You can verify that the installation
-was a success by running:
+All necessary Python dependencies should now be installed for the standard CPU
+and PyTorch-backed paths. RAPIDS/cuML is intentionally not included in this
+legacy Windows command; use a compatible Linux/WSL2 CUDA environment if you need
+cuML-backed KNN or linear/SGD acceleration. See [`gpu_setup.md`](gpu_setup.md)
+for the final GPU experiment setup. You can verify that the installation was a
+success by running:
 
 ```
 python df-analyze.py --help
@@ -194,12 +205,6 @@ This should produce the documentation for the `df-analyze` tabular prediction in
 Anytime you open PowerShell and navigate to the `df-analyze` directory, you will have
 to [activate the virtual environment](#activating-the-virtual-environment) prior to
 running `df-analyze`. But you won't have to do any of the other install procedures again.
-
-
-
-
-
-
 
 
 

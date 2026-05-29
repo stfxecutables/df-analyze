@@ -15,6 +15,13 @@ from typing import TYPE_CHECKING, Optional, Type, Union
 from df_analyze.cli.parsing import (
     resolved_path,
 )
+from df_analyze.device import (
+    DEVICE_CHOICES,
+    DeviceInfo,
+    device_info_from_json,
+    device_info_from_resolved,
+    resolve_device,
+)
 
 if TYPE_CHECKING:
     pass
@@ -213,6 +220,12 @@ generally be a small integer value like 2, 4, or 8.
 
 """
 
+DEVICE_HELP = """
+Select the compute device for embedding generation. Options: auto, cpu, cuda,
+mps. Default is auto.
+
+"""
+
 
 class EmbeddingModality(Enum):
     NLP = "nlp"
@@ -230,6 +243,9 @@ class EmbeddingOptions(Debug):
         batch_size: Optional[int] = 2,
         download: bool = False,
         force_download: bool = False,
+        device_requested: str = "auto",
+        device: Optional[str] = None,
+        resolved_device_info: Optional[DeviceInfo] = None,
     ) -> None:
         # memoization-related
         # other
@@ -247,6 +263,23 @@ class EmbeddingOptions(Debug):
         self.download: bool = download
         self.force_download: bool = force_download
         self.any_download = any_download
+        device_info = resolved_device_info or (
+            resolve_device(device_requested)
+            if device is None
+            else device_info_from_resolved(device_requested, device)
+        )
+        self.device_requested = device_info.requested
+        self.device = device_info.resolved
+        self._device_info = device_info
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        stored = getattr(self, "_device_info", None)
+        if isinstance(stored, DeviceInfo):
+            return stored
+        if isinstance(stored, dict):
+            return device_info_from_json(stored)
+        return device_info_from_resolved(self.device_requested, self.device)
 
     @staticmethod
     def validate_datapath(df_path: Optional[Path], any_download: bool) -> Optional[Path]:
@@ -280,6 +313,7 @@ class EmbeddingOptions(Debug):
             batch_size=args.batch_size,
             download=args.download,
             force_download=args.force_download,
+            device_requested=args.device,
         )
 
     def __str__(self) -> str:
@@ -355,6 +389,12 @@ def make_parser() -> ArgumentParser:
         type=pos_int,
         default=2,
         help=BATCH_HELP,
+    )
+    parser.add_argument(
+        "--device",
+        choices=DEVICE_CHOICES,
+        default="auto",
+        help=DEVICE_HELP,
     )
     parser.add_argument(
         "--download",

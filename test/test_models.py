@@ -24,6 +24,7 @@ from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.preprocessing import KBinsDiscretizer
 
+from df_analyze.device import device_info_from_resolved
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer
 from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.models.dummy import DummyClassifier, DummyRegressor
@@ -364,6 +365,184 @@ class TestLightGBM:
 
 @pytest.mark.fast
 class TestGandalf:
+    def test_cuda_loader_defaults_keep_training_batching(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import df_analyze.models.gandalf as gandalf_module
+
+        monkeypatch.delenv(gandalf_module.GANDALF_LOADER_WORKERS_ENV, raising=False)
+        monkeypatch.delenv(gandalf_module.GANDALF_PIN_MEMORY_ENV, raising=False)
+
+        model = GandalfEstimator(num_classes=C)
+        model.set_device_info(device_info_from_resolved("auto", "cuda", torch_cuda_available=True, cuda_driver_available=True))
+
+        loader = model._pred_loader(DataFrame(np.zeros((1024, 4))), g=None)
+        assert loader.batch_size == gandalf_module.BATCH
+        assert model._loader_kwargs() == {
+            "num_workers": 0,
+            "persistent_workers": False,
+            "pin_memory": True,
+        }
+
+    def test_small_train_split_keeps_a_training_batch(self) -> None:
+        model = GandalfEstimator(num_classes=2)
+        X = DataFrame(np.zeros((20, 4)))
+        y = Series([0, 1] * 10)
+
+        train_loader, val_loader = model._train_val_loaders(X, y)
+
+        assert len(train_loader) > 0
+        assert train_loader.batch_size <= len(train_loader.dataset)  # type: ignore[arg-type]
+        assert val_loader.batch_size <= len(val_loader.dataset)  # type: ignore[arg-type]
+
+    def test_pred_loader_rejects_empty_data(self) -> None:
+        model = GandalfEstimator(num_classes=2)
+
+        with pytest.raises(ValueError, match="empty dataset"):
+            model._pred_loader(DataFrame(np.empty((0, 4))), g=None)
+
+    def test_classification_tuning_scores_probabilities(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+
+        class FakeModel:
+            def __init__(self, **kwargs: object) -> None:
+                return None
+
+        class FakeTrainer:
+            log_dir = None
+
+            def fit(self, **kwargs: object) -> None:
+                return None
+
+        class ValDataset:
+            y = torch.tensor([0, 1])
+
+            def __len__(self) -> int:
+                return 2
+
+            def __getitem__(self, idx: int) -> torch.Tensor:
+                return torch.tensor([float(idx)])
+
+        class Metric:
+            value = "score"
+
+            def get_scores(
+                self, y_true: Series, y_pred: Series, y_prob: np.ndarray
+            ) -> dict[str, float]:
+                assert np.allclose(y_prob.sum(axis=1), 1.0)
+                assert list(y_pred) == [0, 1]
+                return {"score": 0.75}
+
+            def higher_is_better(self) -> bool:
+                return True
+
+        train = DataLoader(TensorDataset(torch.zeros(2, 1)), batch_size=1)
+        val = DataLoader(ValDataset(), batch_size=1)
+        model = GandalfEstimator(num_classes=2)
+        model.model_cls = FakeModel  # type: ignore[assignment]
+        monkeypatch.setattr(model, "optuna_args", lambda trial: {})
+        monkeypatch.setattr(model, "_train_val_loaders", lambda **kwargs: (train, val))
+        monkeypatch.setattr(model, "_get_trainer", lambda **kwargs: FakeTrainer())
+        monkeypatch.setattr(model, "_load_best_checkpoint", lambda trainer, model: None)
+        monkeypatch.setattr(
+            model,
+            "_predict_logits",
+            lambda model, loader: torch.tensor([[3.0, 1.0], [1.0, 3.0]]),
+        )
+
+        objective = model.optuna_objective(
+            DataFrame(np.zeros((2, 1))),
+            Series([0, 1]),
+            None,
+            Metric(),  # type: ignore[arg-type]
+        )
+
+        assert objective(object()) == 0.75  # type: ignore[arg-type]
+
+    def test_cuda_virtual_batch_choices_match_cpu_defaults(self) -> None:
+        class TrialStub:
+            def __init__(self) -> None:
+                self.choices: dict[str, list[int]] = {}
+
+            def suggest_float(self, name: str, low: float, high: float, **kwargs) -> float:
+                return low
+
+            def suggest_categorical(self, name: str, choices: list) -> object:
+                self.choices[name] = list(choices)
+                return choices[0]
+
+        trial = TrialStub()
+        model = GandalfEstimator(num_classes=C)
+        model.set_device_info(device_info_from_resolved("auto", "cuda", torch_cuda_available=True, cuda_driver_available=True))
+
+        model.optuna_args(trial)  # type: ignore[arg-type]
+
+        assert trial.choices["virtual_batch"] == [8, 16, 32, 64]
+
+    def test_cuda_loader_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import df_analyze.models.gandalf as gandalf_module
+
+        monkeypatch.setenv(gandalf_module.GANDALF_LOADER_WORKERS_ENV, "2")
+        monkeypatch.setenv(gandalf_module.GANDALF_PIN_MEMORY_ENV, "1")
+
+        model = GandalfEstimator(num_classes=C)
+        model.set_device_info(device_info_from_resolved("auto", "cuda", torch_cuda_available=True, cuda_driver_available=True))
+
+        assert model._loader_kwargs() == {
+            "num_workers": 2,
+            "persistent_workers": True,
+            "pin_memory": True,
+        }
+
+    def test_checkpoint_uses_private_dir_and_metric_mode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import df_analyze.models.gandalf as gandalf_module
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+
+        checkpoint_kwargs: list[dict] = []
+        trainer_kwargs: list[dict] = []
+
+        class FakeCheckpoint:
+            def __init__(self, **kwargs: object) -> None:
+                checkpoint_kwargs.append(dict(kwargs))
+
+        class FakeEarlyStopping:
+            def __init__(self, **kwargs: object) -> None:
+                pass
+
+        class FakeTrainer:
+            def __init__(self, **kwargs: object) -> None:
+                trainer_kwargs.append(dict(kwargs))
+
+        monkeypatch.setattr(gandalf_module, "LOGS", tmp_path / "gandalf_logs")
+        monkeypatch.setattr(gandalf_module, "ModelCheckpoint", FakeCheckpoint)
+        monkeypatch.setattr(gandalf_module, "LightningEarlyStopping", FakeEarlyStopping)
+        monkeypatch.setattr(gandalf_module, "Trainer", FakeTrainer)
+
+        data = TensorDataset(torch.arange(4.0).reshape(4, 1), torch.arange(4.0))
+        train = DataLoader(data, batch_size=2)
+        val = DataLoader(data, batch_size=2)
+
+        GandalfEstimator(num_classes=C)._get_trainer(train=train, val=val)
+        GandalfEstimator(num_classes=1)._get_trainer(train=train, val=val)
+
+        cls_checkpoint, reg_checkpoint = checkpoint_kwargs
+        assert cls_checkpoint["monitor"] == "val/metric"
+        assert cls_checkpoint["mode"] == "max"
+        assert cls_checkpoint["save_top_k"] == 1
+        assert cls_checkpoint["save_weights_only"] is True
+        assert cls_checkpoint["dirpath"].parent == (
+            tmp_path / "gandalf_logs" / "checkpoints"
+        )
+        assert reg_checkpoint["mode"] == "min"
+        assert len(trainer_kwargs) == 2
+        assert trainer_kwargs[0]["num_sanity_val_steps"] == 0
+
     def test_gandalf_cls(self, capsys: CaptureFixture) -> None:
         try:
             model = GandalfEstimator(num_classes=C)

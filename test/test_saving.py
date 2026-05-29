@@ -24,7 +24,9 @@ from numpy import ndarray
 from pandas import DataFrame, Series
 
 from df_analyze.cli.cli import ProgramOptions
-from df_analyze.hypertune import EvaluationResults
+from df_analyze.enumerables import ClassifierScorer
+from df_analyze.hypertune import EvaluationResults, HtuneResult
+from df_analyze.models.dummy import DummyClassifier
 from df_analyze.preprocessing.inspection.inspection import InspectionResults
 from df_analyze.selection.embedded import EmbedSelected
 from df_analyze.selection.wrapper import WrapperSelected
@@ -84,6 +86,40 @@ def are_equal(obj1: Any, obj2: Any) -> bool:
         return np.all((obj1.round(8).values == obj2.round(8).values)).item()
     else:
         return obj1 == obj2
+
+
+def test_eval_report_handles_failed_model_rows() -> None:
+    metrics = ["acc", "auroc", "sens", "spec", "ppv", "npv", "f1", "bal-acc"]
+    df = DataFrame(
+        {
+            "metric": metrics,
+            "trainset": np.nan,
+            "holdout": np.nan,
+            "5-fold": np.nan,
+            "model": "mlp",
+            "selection": "none",
+            "embed_selector": "none",
+            "device": "cpu",
+            "backend": "skorch-cpu",
+            "tune_seconds": 0.0,
+            "eval_seconds": 0.0,
+            "total_seconds": 0.0,
+        }
+    )
+    results = EvaluationResults(
+        df=df,
+        X_train=DataFrame(),
+        y_train=Series(dtype=int),
+        X_test=DataFrame(),
+        y_test=Series(dtype=int),
+        results=[],
+        is_classification=True,
+    )
+
+    report = results.to_markdown()
+
+    assert "Final Model Performances" in report
+    assert "mlp" in report
 
 
 @fast_ds
@@ -195,6 +231,52 @@ def test_eval_save(dataset: Tuple[str, TestDataset]) -> None:
                     )
     except Exception as e:
         raise ValueError(f"Got error saving eval results for data {dsname}:\n{e}")
+    finally:
+        tempdir.cleanup()
+
+
+def test_eval_save_omits_fitted_model_objects() -> None:
+    sentinel = "df-analyze-fitted-model-sentinel"
+    tempdir = TemporaryDirectory()
+    outdir = Path(tempdir.name)
+    try:
+        model = DummyClassifier()
+        model.model = {"secret": sentinel}
+        model.tuned_model = {"secret": sentinel}
+        result = HtuneResult(
+            selection="none",
+            selected_cols=["x"],
+            embed_select_model=None,
+            model_cls=DummyClassifier,
+            model=model,
+            params={"strategy": "most_frequent"},
+            metric=ClassifierScorer.Accuracy,
+            score=0.5,
+            preds_test=Series([0, 1]),
+            preds_train=Series([0, 1]),
+            probs_test=np.array([[1.0, 0.0], [0.0, 1.0]]),
+            probs_train=np.array([[1.0, 0.0], [0.0, 1.0]]),
+            device="cpu",
+            backend="dummy-cpu",
+        )
+        selected = EvaluationResults(
+            df=result.to_row(),
+            X_train=DataFrame({"x": [0, 1]}),
+            y_train=Series([0, 1], name="target"),
+            X_test=DataFrame({"x": [0, 1]}),
+            y_test=Series([0, 1], name="target"),
+            results=[result],
+            is_classification=True,
+        )
+
+        selected.save(root=outdir, fold_idx=None)
+
+        prediction_path = outdir / "prediction_results.json"
+        metadata = (outdir / "eval_htune_results_jsonpickle.json").read_text()
+        assert prediction_path.exists()
+        assert sentinel not in metadata
+        assert model.model is None
+        assert model.tuned_model is None
     finally:
         tempdir.cleanup()
 

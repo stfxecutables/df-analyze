@@ -29,6 +29,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import KBinsDiscretizer
 from sklearn.svm import SVC, SVR
 
+from df_analyze.device import DeviceInfo, device_info_from_resolved
+from df_analyze.models import gpu as gpu_backends
 from df_analyze.nonsense import enable_spam, silence_spam
 from df_analyze.scoring import CLASSIFIER_TEST_SCORERS as CLS_SCORING
 from df_analyze.scoring import REGRESSION_TEST_SCORERS as REG_SCORING
@@ -51,13 +53,19 @@ AnyModel = Union[
 class UnivariatePredictor(ABC):
     """Mixin needed for unified interface"""
 
-    def __init__(self) -> None:
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
         self.model: Type[AnyModel]
         self.grid: dict[str, list[Any]] = {}
         self.fixed_args: dict[str, Any] = {}
         self.is_classifier: bool = False
         self.__opt: Optional[GridSearchCV] = None
         self.short: str = "abstract"
+        self.device_info = device_info or device_info_from_resolved("cpu", "cpu")
+        self.uses_gpu_backend: bool = False
+
+    @classmethod
+    def uses_gpu_backend_for(cls, device_info: DeviceInfo | None) -> bool:
+        return False
 
     def evaluate(
         self, X: Union[Series, DataFrame, ndarray], target: Series
@@ -129,9 +137,16 @@ def logspace(start: int, stop: int) -> list[float]:
     return np.logspace(start, stop, num=n, endpoint=True).tolist()
 
 
+def model_classes_use_gpu_backend(
+    model_classes: list[Type[UnivariatePredictor]],
+    device_info: DeviceInfo | None,
+) -> bool:
+    return any(model_cls.uses_gpu_backend_for(device_info) for model_cls in model_classes)
+
+
 class SVMClassifier(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = SVC
         self.grid = {
             "kernel": ["rbf"],
@@ -144,8 +159,8 @@ class SVMClassifier(UnivariatePredictor):
 
 
 class LogisticClassifier(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = LogisticRegressionCV
         self.grid = {
             "Cs": [logspace(-7, 5)],
@@ -158,8 +173,8 @@ class LogisticClassifier(UnivariatePredictor):
 
 
 class LightGBMClassifier(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = LGBMClassifier
         self.grid = {
             "n_estimators": [50, 200],
@@ -178,8 +193,8 @@ class LightGBMClassifier(UnivariatePredictor):
 
 
 class DumbClassifier(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = DummyClassifier
         self.grid = {
             "strategy": ["most_frequent", "prior", "stratified", "uniform"],
@@ -189,8 +204,8 @@ class DumbClassifier(UnivariatePredictor):
 
 
 class DumbRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = DummyRegressor
         self.grid = {
             "strategy": ["mean", "median", "quantile"],
@@ -201,8 +216,16 @@ class DumbRegressor(UnivariatePredictor):
 
 
 class SGDRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    @classmethod
+    def uses_gpu_backend_for(cls, device_info: DeviceInfo | None) -> bool:
+        if device_info is None or not device_info.cuda_backends_enabled:
+            return False
+        if gpu_backends.get_cuml_mbsgd_regressor_cls() is None:
+            return False
+        return gpu_backends.cuml_mbsgd_regressor_available()
+
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = SklearnSGDRegressor
         self.grid = {
             "loss": ["squared_error", "huber", "epsilon_insensitive"],
@@ -211,11 +234,31 @@ class SGDRegressor(UnivariatePredictor):
         }
         self.is_classifier = False
         self.short = "sgd-linear"
+        if not self.device_info.cuda_backends_enabled:
+            return
+
+        cuml_cls = gpu_backends.get_cuml_mbsgd_regressor_cls()
+        if cuml_cls is None:
+            gpu_backends.warn_missing_cuml_backend("univariate SGD regressor")
+            return
+        if not gpu_backends.cuml_mbsgd_regressor_available():
+            gpu_backends.warn_unavailable_gpu_backend(
+                "univariate SGD regressor",
+                "The cuML MBSGDRegressor smoke test failed in this environment.",
+            )
+            return
+        self.model = cuml_cls
+        self.grid = {
+            "loss": ["squared_loss"],
+            "penalty": ["l1", "l2"],
+        }
+        self.fixed_args = gpu_backends.with_numpy_output(cuml_cls, self.fixed_args)
+        self.uses_gpu_backend = True
 
 
 class SGDClassifier(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = SklearnSGDClassifier
         self.grid = {
             # below are only methods that enable `predict_proba`
@@ -227,11 +270,14 @@ class SGDClassifier(UnivariatePredictor):
         }
         self.is_classifier = True
         self.short = "sgd-linear"
+        # Keep the univariate classifier on sklearn for now: the scoring path can
+        # use probability metrics, and cuML MBSGDClassifier does not document
+        # predict_proba().
 
 
 class ElasticNetRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = ElasticNetCV
         self.grid = {"l1_ratio": [[0.1, 0.5, 0.7, 0.9, 0.95, 0.99, 1.0]]}
         self.is_classifier = False
@@ -239,8 +285,8 @@ class ElasticNetRegressor(UnivariatePredictor):
 
 
 class SVMRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = SVR
         self.grid = {
             "kernel": ["rbf"],
@@ -252,8 +298,8 @@ class SVMRegressor(UnivariatePredictor):
 
 
 class LinearRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = LinearRegression
         self.grid = {}
         self.is_classifier = False
@@ -261,8 +307,8 @@ class LinearRegressor(UnivariatePredictor):
 
 
 class LightGBMRegressor(UnivariatePredictor):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, device_info: DeviceInfo | None = None) -> None:
+        super().__init__(device_info)
         self.model = LGBMRegressor
         self.grid = {
             "n_estimators": [50, 200],

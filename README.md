@@ -302,6 +302,131 @@ For documentation of the embedding functionality, run:
 python df-embed.py --help
 ```
 
+### Device Selection And GPU Experiments
+
+`df-analyze.py` and `df-embed.py` accept `--device auto/cpu/cuda/mps`.
+The default, `auto`, prefers CUDA, then Apple MPS, then CPU. Explicit
+`--device cuda` and `--device mps` are strict and raise if the requested
+accelerator is unavailable.
+
+GPU support is backend-specific. MPS is used for PyTorch-oriented
+components such as MLP, GANDALF, and embeddings, but CUDA-only libraries
+do not use MPS. CUDA paths fall back to CPU unless CUDA is resolved and
+the backend smoke check passes. `--device auto` treats CUDA as available when
+PyTorch CUDA is available or an NVIDIA driver is visible. If PyTorch itself is
+CPU-only, PyTorch-oriented components stay on CPU while traditional CUDA
+backends such as cuML, CatBoost GPU, and XGBoost CUDA are still checked
+individually. LightGBM `lgbm`/`rf` execution is pinned to CPU in df-analyze.
+
+| Component | GPU backend | Device support | Notes |
+| --- | --- | --- | --- |
+| MLP | PyTorch/skorch | CUDA, MPS, CPU | Uses the shared `DeviceInfo` skorch device. |
+| GANDALF | PyTorch Lightning | CUDA, MPS, CPU | Uses the shared Lightning accelerator/device mapping. |
+| Embeddings | PyTorch | CUDA, MPS, CPU | Model and batches move to the resolved torch device; outputs return to CPU. |
+| CatBoost | CatBoost GPU | CUDA, CPU | Uses `task_type="GPU"` only after a tiny GPU fit probe. |
+| LightGBM | CPU LightGBM | CPU | `lgbm` and `rf` are pinned to all-core CPU execution; CUDA LightGBM is only for manual benchmarking outside df-analyze's default model path. |
+| KNN | cuML | CUDA, CPU | Optional RAPIDS/cuML; GPU metric search is limited to l2/euclidean. |
+| Linear/SGD paths | cuML | CUDA, CPU | Optional cuML for supported learner/univariate paths; parameter support is checked with small fit probes. The main SGD classifier stays on sklearn so probability-based classifier scoring remains available. |
+| TabPFN | TabPFN/PyTorch | CUDA, CPU | Defaults to TabPFN-3 with `--tabpfn-version auto`; `v2_5` remains available for older comparisons. MPS falls back to CPU. |
+
+Linear stepwise wrapper feature selection is an intentional exception: even
+when `--device cuda` resolves successfully, the linear wrapper scorer uses CPU
+parallelism. Stepwise selection evaluates many small CV fits across candidate
+features, so joblib CPU parallelism is usually faster and more stable than
+serial GPU execution plus cuML setup and host-device transfer overhead. This
+does not prevent final linear learners or other supported linear paths from
+using CUDA-capable backends.
+
+cuML/RAPIDS is optional and should be installed only in CUDA-capable
+Linux/WSL2 environments using the RAPIDS instructions for the local CUDA
+and Python version. For CUDA 13-capable WSL2/Linux machines, run
+`uv run df-analyze-gpu-setup`, then use
+`uv run --group cuda-cu13 ...`. The setup command detects unsupported platforms
+and CUDA versions before syncing GPU dependencies. LightGBM CUDA is not used by
+df-analyze's normal `lgbm`/`rf` execution path; benchmarking it manually still
+requires a CUDA-enabled build, not just a generic LightGBM install. See
+[`docs/gpu_setup.md`](docs/gpu_setup.md) for the suggested final GPU experiment
+environment and validation checklist.
+
+The project depends on TabPFN releases that support TabPFN-3 as the package
+default. df-analyze uses `--tabpfn-version auto` by default, which resolves to
+TabPFN-3. Use `--tabpfn-version v2_5` when reproducing older TabPFN 2.5 or
+DeepTune comparisons. TabPFN tuning uses one internal validation split by
+default; use `--tabpfn-tune-folds 3` or `--tabpfn-tune-folds 5` for stricter,
+slower tuning comparisons. By default it uses the local `tabpfn` package. To use
+Prior Labs' hosted API instead, explicitly set `DF_ANALYZE_TABPFN_BACKEND=client`
+and provide a token in the environment; df-analyze will call
+`tabpfn_client.set_access_token(...)` automatically and use `tabpfn-client`.
+The API backend sends training and prediction data to the hosted service, so
+check the upstream terms before using private datasets or publishing outputs.
+When feature selection picks one-hot categorical columns for a TabPFN run,
+df-analyze maps those selected dummy columns back to the original categorical
+feature. For example, selecting `city_Halifax` makes TabPFN receive `city`,
+because TabPFN is given raw categorical features instead of one-hot inputs.
+`tabpfn-client` is a runtime-optional package here because current client
+releases pin an older `scikit-learn` range than this project; install a
+compatible client package in the environment where you use the API backend.
+
+```shell
+# macOS/Linux
+export DF_ANALYZE_TABPFN_API_TOKEN="<your-token>"
+export DF_ANALYZE_TABPFN_BACKEND=client
+
+# PowerShell
+$env:DF_ANALYZE_TABPFN_API_TOKEN='<your-token>'
+$env:DF_ANALYZE_TABPFN_BACKEND='client'
+```
+
+The same variables can also go in a local `.env` file in the project root or
+the directory where you run `df-analyze`; `.env` is ignored by git.
+
+If `DF_ANALYZE_TABPFN_BACKEND` is left unset, df-analyze stays local even when
+a token is present. Tokens are passed through to the local package as
+`TABPFN_TOKEN` when needed for local weight access. A real tiny-fit smoke test
+can be run manually when local weights are available:
+
+```shell
+# macOS/Linux
+DF_ANALYZE_REAL_TABPFN_TESTS=1 uv run pytest test/test_tabpfn.py::test_real_tabpfn_tiny_fit_smoke -q
+DF_ANALYZE_REAL_TABPFN_TESTS=1 DF_ANALYZE_REAL_TABPFN_DEVICE=cuda uv run pytest test/test_tabpfn.py::test_real_tabpfn_tiny_fit_smoke -q
+
+# PowerShell
+$env:DF_ANALYZE_REAL_TABPFN_TESTS='1'; uv run pytest test/test_tabpfn.py::test_real_tabpfn_tiny_fit_smoke -q
+$env:DF_ANALYZE_REAL_TABPFN_TESTS='1'; $env:DF_ANALYZE_REAL_TABPFN_DEVICE='cuda'; uv run pytest test/test_tabpfn.py::test_real_tabpfn_tiny_fit_smoke -q
+```
+
+The default learner lists remain conservative for normal df-analyze runs.
+CatBoost, XGBoost, MLP, GANDALF, and TabPFN are available but opt-in because they can
+make a run much slower, require GPU memory, or require external model weights.
+Include them explicitly in normal df-analyze commands when they are part of the
+analysis.
+
+Each run writes `device_report.json` beside `options.json`. It is a compact
+user-facing report with four sections: `device`, `checks`, `selected_models`,
+and `models`. It only lists the models relevant to the current command, so
+unselected CUDA backends do not appear as unrelated `null` fields. Result tables include
+`device` as a compact execution-device label, plus `requested_device`,
+`resolved_device`, `torch_device`, `backend`, `model_version`, `tune_seconds`,
+`eval_seconds`, and `total_seconds`. Treat `backend` as the authoritative model
+implementation label when deciding whether a result used a CUDA/MPS/cuML/GPU
+backend.
+
+For a fresh CUDA GPU environment, prepare and preflight the GPU stack before the
+first long run:
+
+```shell
+uv run df-analyze-gpu-setup
+uv run --group cuda-cu13 python df-analyze.py --device cuda ...
+```
+
+The setup command syncs the CUDA 13 dependency group on Linux/WSL2, then checks
+the CUDA-capable df-analyze backends: PyTorch CUDA, cuML KNN/LR/ElasticNet/MBSGD,
+XGBoost CUDA, CatBoost GPU, MLP/skorch CUDA, GANDALF/Lightning CUDA, and the
+TabPFN API. Use `--models` to match a smaller command, for example
+`uv run df-analyze-gpu-setup --models knn lr xgboost catboost`. TabPFN `fit()`
+is opt-in with `--tabpfn-fit-smoke` because it can download model weights or
+trigger license/token setup.
+
 
 ## Quick Start and Examples
 
@@ -438,7 +563,7 @@ python df-embed.py --download --modality nlp
 python df-embed.py --download --modality vision
 ```
 
-**NOTE**: Because these models are only using CPUs for inference, the
+**NOTE**: Because these models can require substantial memory for inference, the
 **memory requirements may be too high for you to efficiently embed a dataset
 on your local machine**. While the embedding code will work and is tested on
 modern e.g. M-series MacBooks (Air or Pro), this may make use of swap memory,
@@ -487,9 +612,10 @@ cluster](https://docs.alliancecan.ca/wiki/Niagara)) for key operations
 (embedding, predictive analysis). This means **any dataset to be embedded should
 also generally be under abut 200 000 samples**.
 
-For embedding, `df-embed.py` makes use of CPU implementations only, and, to
-not complicate data loading, currently requires a dataset to fit in memory,
-loaded from a single, correctly-formatted `.parquet` file.
+For embedding, `df-embed.py` can use CPU or an available accelerator selected
+with `--device`, and, to not complicate data loading, currently requires a
+dataset to fit in memory, loaded from a single, correctly-formatted `.parquet`
+file.
 
 #### Image Data
 
@@ -731,7 +857,8 @@ algorithms and/or Python data science libraries (but particularly,
 [Pandas](https://pandas.pydata.org/docs/user_guide/10min.html#min),
 [scikit-learn](https://scikit-learn.org/stable/index.html),
 [PyTorch](https://pytorch.org/), and
-[LightGBM](https://lightgbm.readthedocs.io/en/stable/)). This means the
+[LightGBM](https://lightgbm.readthedocs.io/en/stable/), and
+[XGBoost](https://xgboost.readthedocs.io/)). This means the
 **_raw_** input data $\mathcal{D}$ (specified by `--df` or `--spreadsheet`
 argument) is represented as
 
@@ -1608,5 +1735,3 @@ are simply beyond the scope of `df-analyze`.
     - Models: DummyClassifier, Logistic regression, SVM with radial basis
     - Metrics: mean abs. error, mean sq. error, median abs. error, mean abs.
       percentage error, R2, percent variance explained
-
-

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from df_analyze.cli.cli import ProgramOptions
     from df_analyze.models.base import DfAnalyzeModel
 from df_analyze.enumerables import EmbedSelectionModel
+from df_analyze.models.gpu import as_numpy
 from df_analyze.models.lgbm import LightGBMClassifier, LightGBMRegressor
 from df_analyze.models.linear import SGDClassifierSelector, SGDRegressorSelector
 from df_analyze.preprocessing.prepare import PreparedData
@@ -94,6 +95,7 @@ def embed_select_features(
             model = SGDClassifierSelector() if is_cls else SGDRegressorSelector()
         else:
             model = LightGBMClassifier() if is_cls else LightGBMRegressor()
+        model.set_device_info(options.device_info)
         models.append(model)
 
     if prep_train.is_classification:
@@ -109,15 +111,16 @@ def embed_select_features(
                 y_train=y,
                 g_train=g,
                 metric=metric,
-                n_trials=100,
+                n_trials=options.htune_trials,
                 n_jobs=-1,
             )
             # `coefs` are floats if Linear, int32 if LGBM
-            scores = np.ravel(
-                model.tuned_model.coef_  # type: ignore
-                if embed_model is EmbedSelectionModel.Linear
-                else model.tuned_model.feature_importances_  # type: ignore
-            )
+            if embed_model is EmbedSelectionModel.Linear:
+                scores = as_numpy(model.tuned_model.coef_)  # type: ignore
+                model.tuned_model.coef_ = scores  # type: ignore
+            else:
+                scores = as_numpy(model.tuned_model.feature_importances_)  # type: ignore
+            scores = np.ravel(scores)
             fscores = {feature: score for feature, score in zip(X_train.columns, scores)}
 
             selector = SelectFromModel(

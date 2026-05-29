@@ -13,7 +13,7 @@ import matplotlib as mpl
 
 mpl.rcParams["axes.formatter.useoffset"] = False
 
-import multiprocessing
+import os
 import sys
 import warnings
 from copy import deepcopy
@@ -27,6 +27,7 @@ from typing import (
     Type,
     Union,
 )
+from uuid import uuid4
 
 import numpy as np
 import optuna
@@ -34,11 +35,11 @@ import torch
 from numpy import ndarray
 from optuna import Study, Trial
 from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule, Trainer
-from pytorch_lightning.callbacks import EarlyStopping as LightningEarlyStopping
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.plugins.environments import (
+from lightning.pytorch import LightningModule, Trainer
+from lightning.pytorch.callbacks import EarlyStopping as LightningEarlyStopping
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.plugins.environments import (
     SLURMEnvironment,  # pyright: ignore[reportPrivateImportUsage]
 )
 from pytorch_tabular.models.common.layers import BatchNorm1d as GhostBatchNorm1d
@@ -67,8 +68,15 @@ from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import Accuracy, MeanAbsoluteError
 
+from df_analyze.device import (
+    DeviceInfo,
+    cleanup_accelerator_memory,
+    configure_torch_cuda_performance,
+    is_fatal_accelerator_error,
+)
 from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.nonsense import silence_lightning_info
 from df_analyze.splitting import ApproximateStratifiedGroupSplit
 
 """
@@ -82,6 +90,8 @@ encoding paper.
 BATCH = 512
 """We fix batch size at 512 like original paper"""
 EPOCHS = 50
+GANDALF_LOADER_WORKERS_ENV = "DF_ANALYZE_GANDALF_LOADER_WORKERS"
+GANDALF_PIN_MEMORY_ENV = "DF_ANALYZE_GANDALF_PIN_MEMORY"
 
 LOGS = ROOT / "__GANDALF_INTERNAL_LOGS__"
 LOGS.mkdir(exist_ok=True, parents=True)
@@ -105,6 +115,7 @@ TUNING_SPACE = dict(
 warnings.filterwarnings("ignore", ".*does not have many workers.*")
 warnings.filterwarnings("ignore", ".*GPU available but not used.*")
 warnings.filterwarnings("ignore", ".*You are using `torch.load`.*")
+silence_lightning_info()
 
 # https://github.com/Lightning-AI/pytorch-lightning/issues/6389#issuecomment-1997042135
 SLURMEnvironment.detect = lambda: False
@@ -122,6 +133,50 @@ class DisabledSLURMEnvironment(SLURMEnvironment):
     @staticmethod
     def _validate_srun_variables() -> None:
         return
+
+
+def _is_fatal_accelerator_error(error: BaseException) -> bool:
+    return is_fatal_accelerator_error(error)
+
+
+def _env_int(name: str, default: int, min_value: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        warnings.warn(
+            f"Ignoring invalid {name}={raw!r}; expected an integer.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+    if value < min_value:
+        warnings.warn(
+            f"Ignoring invalid {name}={raw!r}; expected a value >= {min_value}.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return default
+    return value
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    warnings.warn(
+        f"Ignoring invalid {name}={raw!r}; expected a boolean.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+    return default
 
 
 def get_T0(
@@ -227,6 +282,35 @@ class ContinuousData(Dataset):
         return self.y.shape[0]
 
 
+class ContinuousIndexedData(Dataset):
+    def __init__(self, data: ContinuousData, indices: ndarray) -> None:
+        super().__init__()
+        self.data = data
+        self.indices = torch.as_tensor(indices, dtype=torch.long)
+        self.is_classification = data.is_classification
+        self.is_cls = data.is_cls
+        self.n_cls = data.n_cls
+        self.n_feat = data.n_feat
+        self.g = None if data.g is None else data.g.index_select(0, self.indices)
+        self.y = data.y.index_select(0, self.indices)
+        if self.is_cls:
+            _, cnts = self.y.unique(return_counts=True)
+            self.cls_weights = cnts / cnts.sum()
+        else:
+            self.cls_weights = None
+
+    @property
+    def X(self) -> Tensor:
+        return self.data.X.index_select(0, self.indices)
+
+    def __getitem__(self, i: int) -> tuple[Tensor, Tensor]:
+        base_i = int(self.indices[i])
+        return self.data.X[base_i, :], self.data.y[base_i]
+
+    def __len__(self) -> int:
+        return self.indices.shape[0]
+
+
 class ContinuousPredData(Dataset):
     def __init__(
         self,
@@ -320,6 +404,8 @@ class GandalfContCatModel(Module):
         self.embed_dim = embed_dim
         self.embed_dropout = embed_dropout
         self.gflu_dropout = gflu_dropout
+        if not 0.0 <= self.gflu_dropout < 1.0:
+            raise ValueError("gflu_dropout must be in [0.0, 1.0).")
         self.batch_norm_continuous_input = batch_norm_continuous_input
         self.virtual_batch_size = virtual_batch_size
         self.gflu_feature_init_sparsity = gflu_feature_init_sparsity
@@ -344,7 +430,7 @@ class GandalfContCatModel(Module):
         )
         self.cont_dropout = (
             Dropout(self.gflu_dropout)
-            if ((self.gflu_dropout > 0) or (self.gflu_dropout < 1))
+            if 0.0 < self.gflu_dropout < 1.0
             else Identity()
         )
         self.cont_bnorm = (
@@ -413,6 +499,8 @@ class GandalfContModel(Module):
         super().__init__(*args, **kwargs)
         self.is_classification = self.is_cls = dataset.is_classification
         self.gflu_dropout = gflu_dropout
+        if not 0.0 <= self.gflu_dropout < 1.0:
+            raise ValueError("gflu_dropout must be in [0.0, 1.0).")
         self.batch_norm_continuous_input = batch_norm_continuous_input
         self.virtual_batch_size = virtual_batch_size
         self.gflu_feature_init_sparsity = gflu_feature_init_sparsity
@@ -431,7 +519,7 @@ class GandalfContModel(Module):
         )
         self.dropout = (
             Dropout(self.gflu_dropout)
-            if ((self.gflu_dropout > 0) or (self.gflu_dropout < 1))
+            if 0.0 < self.gflu_dropout < 1.0
             else Identity()
         )
         self.bnorm = (
@@ -541,7 +629,13 @@ class GandalfContCatLightningModel(LightningModule):
     ) -> None:
         with torch.no_grad():
             loss, preds = self.shared_step(batch)
-        self.log("val_loss", loss)
+        self.log(
+            "val_loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            batch_size=batch[2].shape[0],
+        )
 
     def predict_step(
         self, batch: tuple[Tensor, Optional[Tensor], Tensor], *args: Any, **kwargs: Any
@@ -628,7 +722,9 @@ class GandalfContLightningModel(LightningModule):
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         return super().forward(*args, **kwargs)
 
-    def predict_step(self, x: Tensor, *args: Any, **kwargs: Any) -> Any:  # type: ignore
+    def predict_step(self, x: Any, *args: Any, **kwargs: Any) -> Any:  # type: ignore
+        if isinstance(x, (tuple, list)):
+            x = x[0]
         with torch.no_grad():
             preds = self.model(x)
         return preds
@@ -650,11 +746,29 @@ class GandalfContLightningModel(LightningModule):
             loss, preds = self.shared_step(batch)
 
         target = batch[1]  # target.shape (B,)
-        self.log("val/loss", loss)
+        self.log(
+            "val/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            batch_size=target.shape[0],
+        )
         if self.is_cls:
-            self.log("val/metric", self.metric(preds, target), on_step=True)
+            self.log(
+                "val/metric",
+                self.metric(preds, target),
+                on_step=False,
+                on_epoch=True,
+                batch_size=target.shape[0],
+            )
         else:
-            self.log("val/metric", self.metric(preds.squeeze(1), target), on_step=True)
+            self.log(
+                "val/metric",
+                self.metric(preds.squeeze(1), target),
+                on_step=False,
+                on_epoch=True,
+                batch_size=target.shape[0],
+            )
 
     def configure_optimizers(
         self,
@@ -691,6 +805,10 @@ class GandalfEstimator(DfAnalyzeModel):
         self.trainer: Optional[Trainer] = None
         self.tuned_trainer: Optional[Trainer] = None
 
+    def set_device_info(self, device_info: DeviceInfo) -> None:
+        super().set_device_info(device_info)
+        configure_torch_cuda_performance(device_info)
+
     def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
         return dict(
             lr=trial.suggest_float("lr", 1e-5, 5e-1, log=True),
@@ -703,24 +821,61 @@ class GandalfEstimator(DfAnalyzeModel):
             virtual_batch=trial.suggest_categorical("virtual_batch", [8, 16, 32, 64]),
         )
 
+    def backend_name(self, tuned_args: Optional[Mapping[str, Any]] = None) -> str:
+        if self.device_info.lightning_accelerator == "gpu":
+            return "lightning-cuda"
+        return f"lightning-{self.device_info.lightning_accelerator}"
+
+    def uses_accelerated_backend(
+        self, tuned_args: Optional[Mapping[str, Any]] = None
+    ) -> bool:
+        return self.device_info.lightning_accelerator != "cpu"
+
+    def cuda_tuning_trial_budget(self) -> Optional[int]:
+        if self.device_info.torch_device == "cuda":
+            return 50
+        return None
+
+    def _loader_workers(self) -> int:
+        if self.device_info.torch_device == "cuda" or sys.platform.startswith("win"):
+            default = 0
+        else:
+            default = 1
+        return _env_int(GANDALF_LOADER_WORKERS_ENV, default, min_value=0)
+
+    def _pin_memory(self, workers: int) -> bool:
+        if self.device_info.torch_device != "cuda":
+            return False
+        return _env_bool(GANDALF_PIN_MEMORY_ENV, default=True)
+
+    def _loader_kwargs(self) -> dict[str, Any]:
+        workers = self._loader_workers()
+        return {
+            "num_workers": workers,
+            "persistent_workers": workers > 0,
+            "pin_memory": self._pin_memory(workers),
+        }
+
     def _pred_loader(self, X: DataFrame | Tensor, g: Optional[Series]) -> DataLoader:
         data = ContinuousPredData(df=X, g=g, is_classification=self.is_classifier)
+        if len(data) == 0:
+            raise ValueError("Cannot predict with an empty dataset.")
         loader = DataLoader(
             data,
             batch_size=min(BATCH, len(data)),
             shuffle=False,
             drop_last=False,
-            persistent_workers=True,
-            num_workers=1,
+            **self._loader_kwargs(),
         )
         return loader
 
     def _train_val_loaders(
-        self, X_train: DataFrame, y_train: Series, g_train: Optional[Series] = None
+        self,
+        X_train: DataFrame,
+        y_train: Series,
+        g_train: Optional[Series] = None,
+        data: Optional[ContinuousData] = None,
     ) -> tuple[DataLoader, DataLoader]:
-        # data = ContinuousData(
-        #     df=X_train, y=y_train, g=g_train, is_classification=self.is_classifier
-        # )
         is_cls = self.is_classifier
         ss = ApproximateStratifiedGroupSplit(
             train_size=0.8,
@@ -732,38 +887,50 @@ class GandalfEstimator(DfAnalyzeModel):
             df_analyze_phase="GANDALF train-val split",
         )
         ix_tr, ix_v = ss.split(X_train=X_train, y_train=y_train, g_train=g_train)[0]
-        g_tr = g_train.iloc[ix_tr] if g_train is not None else None
-        g_v = g_train.iloc[ix_v] if g_train is not None else None
-        train = ContinuousData(
-            df=X_train.iloc[ix_tr],
-            y=y_train.iloc[ix_tr],
-            g=g_tr,
-            is_classification=is_cls,
-        )
-        val = ContinuousData(
-            df=X_train.iloc[ix_v], y=y_train.iloc[ix_v], g=g_v, is_classification=is_cls
-        )
+        if data is None:
+            g_tr = g_train.iloc[ix_tr] if g_train is not None else None
+            g_v = g_train.iloc[ix_v] if g_train is not None else None
+            train = ContinuousData(
+                df=X_train.iloc[ix_tr],
+                y=y_train.iloc[ix_tr],
+                g=g_tr,
+                is_classification=is_cls,
+            )
+            val = ContinuousData(
+                df=X_train.iloc[ix_v],
+                y=y_train.iloc[ix_v],
+                g=g_v,
+                is_classification=is_cls,
+            )
+        else:
+            train = ContinuousIndexedData(data, ix_tr)
+            val = ContinuousIndexedData(data, ix_v)
 
-        # if we don't set a generator we get a segfault...
-        train_batch = min(BATCH, len(train))
-        if train_batch > (len(train) // 2):
-            train_batch = 32  # prevent overfitting small datasets
-        val_batch = min(BATCH, len(val))
+        train_len = len(train)
+        val_len = len(val)
+        if train_len <= 0:
+            raise ValueError("GANDALF training split is empty.")
+        if val_len <= 0:
+            raise ValueError("GANDALF validation split is empty.")
+
+        train_batch = min(BATCH, train_len)
+        if train_len > 1 and train_batch > (train_len // 2):
+            train_batch = max(1, train_len // 2)
+        val_batch = max(1, min(BATCH, val_len))
+        loader_kwargs = self._loader_kwargs()
         train_loader = DataLoader(
             train,
             batch_size=train_batch,
             shuffle=True,
-            drop_last=True,
-            persistent_workers=True,
-            num_workers=1,
+            drop_last=train_len > train_batch,
+            **loader_kwargs,
         )
         val_loader = DataLoader(
             val,
             batch_size=val_batch,
             shuffle=False,
             drop_last=False,
-            persistent_workers=True,
-            num_workers=1,
+            **loader_kwargs,
         )
         return train_loader, val_loader
 
@@ -777,14 +944,24 @@ class GandalfEstimator(DfAnalyzeModel):
         logs = LOGS if trial is None else LOGS / str(trial.number)
         logs.mkdir(exist_ok=True, parents=True)
         (logs / "lightning_logs").mkdir(exist_ok=True, parents=True)
-        logger = TensorBoardLogger(save_dir=logs, default_hp_metric=False)
+        logger = False
+        if os.environ.get("DF_ANALYZE_GANDALF_LOGS") == "1":
+            logger = TensorBoardLogger(save_dir=logs, default_hp_metric=False)
         stop = "val/metric"
         delta = 0.002
         mode = "max" if is_cls else "min"
         # ckpt_metric = "val/loss"
+        checkpoint_dir = logs / "checkpoints" / uuid4().hex
         cbs = [
             # ModelCheckpoint(monitor=ckpt_metric, every_n_epochs=1),
-            ModelCheckpoint(monitor=stop, every_n_epochs=1),
+            ModelCheckpoint(
+                dirpath=checkpoint_dir,
+                monitor=stop,
+                mode=mode,
+                save_top_k=1,
+                save_weights_only=True,
+                every_n_epochs=1,
+            ),
             LightningEarlyStopping(monitor=stop, patience=7, min_delta=delta, mode=mode),
         ]
         # ensure we get at least one ckpt file...
@@ -805,9 +982,13 @@ class GandalfEstimator(DfAnalyzeModel):
         log_freq_train = max(1, min(len(train.dataset) // train.batch_size, 4))
         log_freq_val = max(1, min(len(val.dataset) // val.batch_size, 4))
         log_freq = min(log_freq_train, log_freq_val)
+        trainer_kwargs = {}
+        precision = os.environ.get("DF_ANALYZE_TORCH_PRECISION")
+        if precision is not None:
+            trainer_kwargs["precision"] = precision
         trainer = Trainer(
-            accelerator="cpu",
-            devices="auto",
+            accelerator=self.device_info.lightning_accelerator,
+            devices=self.device_info.lightning_devices,
             logger=logger,
             plugins=[DisabledSLURMEnvironment(auto_requeue=False)],
             max_epochs=50,
@@ -817,8 +998,50 @@ class GandalfEstimator(DfAnalyzeModel):
             enable_progress_bar=False,
             enable_model_summary=False,
             detect_anomaly=False,
+            benchmark=self.device_info.torch_device == "cuda",
+            num_sanity_val_steps=0,
+            **trainer_kwargs,
         )
         return trainer
+
+    def _load_best_checkpoint(
+        self, trainer: Optional[Trainer], model: LightningModule
+    ) -> None:
+        if trainer is None:
+            return
+        checkpoint = getattr(trainer, "checkpoint_callback", None)
+        path = getattr(checkpoint, "best_model_path", "")
+        if not path:
+            return
+        payload = torch.load(path, map_location=model.device, weights_only=False)
+        state_dict = payload.get("state_dict")
+        if state_dict is None:
+            return
+        model.load_state_dict(state_dict)
+
+    def _predict_logits(
+        self, model: GandalfContLightningModel, loader: DataLoader
+    ) -> Tensor:
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device(self.device_info.torch_device)
+        preds = []
+        was_training = model.training
+        model.eval()
+        with torch.inference_mode():
+            for batch in loader:
+                if isinstance(batch, (tuple, list)):
+                    x = batch[0]
+                else:
+                    x = batch
+                x = x.to(device=device, non_blocking=True)
+                preds.append(model.model(x))
+        if was_training:
+            model.train()
+        if len(preds) == 0:
+            return torch.empty((0, self.n_cls), device=device)
+        return torch.concatenate(preds, dim=0)
 
     def fit(
         self, X_train: DataFrame, y_train: Series, g_train: Optional[Series] = None
@@ -837,7 +1060,7 @@ class GandalfEstimator(DfAnalyzeModel):
                 ) from e
         try:
             train, val = self._train_val_loaders(
-                X_train=X_train, y_train=y_train, g_train=g_train
+                X_train=X_train, y_train=y_train, g_train=g_train, data=data
             )
             self.trainer = self._get_trainer(train=train, val=val)
             if self.trainer is None:
@@ -845,6 +1068,7 @@ class GandalfEstimator(DfAnalyzeModel):
             self.trainer.fit(
                 model=self.model, train_dataloaders=train, val_dataloaders=val
             )
+            self._load_best_checkpoint(self.trainer, self.model)
         except ValueError as e:
             raise RuntimeError(
                 "Got exception when trying to fit GANDALF.\n"
@@ -860,6 +1084,11 @@ class GandalfEstimator(DfAnalyzeModel):
         g: Optional[Series] = None,
         tuned_args: Optional[Mapping] = None,
     ) -> None:
+        if self.tuned_trainer is not None or self.tuned_model is not None:
+            old_trainer = self.tuned_trainer
+            self.tuned_trainer = None
+            self.tuned_model = None
+            self._cleanup_trial(old_trainer)
         tuned_args = tuned_args or {}
         kwargs = {
             **self.fixed_args,
@@ -869,7 +1098,7 @@ class GandalfEstimator(DfAnalyzeModel):
         }
         data = ContinuousData(df=X, y=y, g=g, is_classification=self.is_classifier)
         kwargs["dataset"] = data
-        train, val = self._train_val_loaders(X_train=X, y_train=y, g_train=g)
+        train, val = self._train_val_loaders(X_train=X, y_train=y, g_train=g, data=data)
         self.tuned_trainer = self._get_trainer(train=train, val=val)
         if self.tuned_trainer is None:
             raise ValueError("Could not get Optuna tuned Trainer.")
@@ -877,32 +1106,27 @@ class GandalfEstimator(DfAnalyzeModel):
         self.tuned_trainer.fit(
             model=self.tuned_model, train_dataloaders=train, val_dataloaders=val
         )
+        self._load_best_checkpoint(self.tuned_trainer, self.tuned_model)
 
     def predict(self, X: DataFrame) -> ndarray:
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
-        )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
+        logits = self._predict_logits(self.model, loader)
         if self.is_classifier:
-            probs = torch.softmax(logits, dim=1).numpy()
+            probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
             return probs.argmax(axis=1)
-        return logits.numpy()
+        return logits.detach().cpu().numpy()
 
     def tuned_predict(self, X: DataFrame) -> ndarray:
         if self.tuned_trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.tuned_trainer.predict(
-            model=self.tuned_model, dataloaders=loader, ckpt_path="best"
-        )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
+        logits = self._predict_logits(self.tuned_model, loader)
         if self.is_classifier:
-            probs = torch.softmax(logits, dim=1).numpy()
+            probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
             return probs.argmax(axis=1)
-        return logits.numpy()
+        return logits.detach().cpu().numpy()
 
     def predict_proba_untuned(self, X: DataFrame) -> ndarray:
         if not self.is_classifier:
@@ -910,11 +1134,8 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.trainer is None:
             raise RuntimeError("Model has not been trained yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
-        )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
-        probs = torch.softmax(logits, dim=1).numpy()
+        logits = self._predict_logits(self.model, loader)
+        probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
         return probs
 
     def predict_proba(self, X: DataFrame) -> ndarray:
@@ -923,16 +1144,21 @@ class GandalfEstimator(DfAnalyzeModel):
         if self.tuned_trainer is None:
             raise RuntimeError("Model has not been tuned yet.")
         loader = self._pred_loader(X=X, g=None)
-        all_logits = self.tuned_trainer.predict(
-            model=self.model, dataloaders=loader, ckpt_path="best"
-        )
-        logits = torch.concatenate(all_logits, dim=0)  # type: ignore
-        probs = torch.softmax(logits, dim=1).numpy()
+        logits = self._predict_logits(self.tuned_model, loader)
+        probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
         return probs
 
     def _to_model_args(self, optuna_args: Mapping, X_train: DataFrame) -> Mapping:
         final_args: Mapping = deepcopy(optuna_args)
         return final_args
+
+    def _cleanup_trial(self, trainer: Optional[Trainer]) -> None:
+        if trainer is not None:
+            try:
+                trainer.strategy.teardown()
+            except Exception:
+                pass
+        cleanup_accelerator_memory(self.device_info)
 
     def optuna_objective(
         self,
@@ -947,11 +1173,11 @@ class GandalfEstimator(DfAnalyzeModel):
         )
 
         def objective(trial: Trial) -> float:
-            # these MUST be created in the objective, or we get a bug with
-            # the iter() loop "generator already executing"
+            trainer: Optional[Trainer] = None
+            model: Optional[GandalfContLightningModel] = None
             try:
                 train, val = self._train_val_loaders(
-                    X_train=X_train, y_train=y_train, g_train=g_train
+                    X_train=X_train, y_train=y_train, g_train=g_train, data=data
                 )
                 opt_args = self.optuna_args(trial)
                 model_args = self._to_model_args(opt_args, X_train)
@@ -960,44 +1186,38 @@ class GandalfEstimator(DfAnalyzeModel):
                 if not isinstance(train.dataset, Sized):
                     raise ValueError("Training data is not sized (e.g. has no length).")
 
-                n_train = len(train.dataset)
-                if full_args["virtual_batch"] > n_train:
-                    full_args["virtual_batch"] = 16
                 model = self.model_cls(**full_args)
                 trainer = self._get_trainer(train=train, val=val, trial=trial)
-                Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)  # type: ignore
+                if trainer.log_dir is not None:
+                    Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)
                 trainer.fit(model=model, train_dataloaders=train, val_dataloaders=val)
-                pred = self._pred_loader(val.dataset.X, g=None)  # type: ignore
-                all_preds = trainer.predict(
-                    model=model, dataloaders=pred, ckpt_path="best"
-                )
-                preds = torch.concatenate(all_preds, dim=0).numpy()  # type: ignore
+                self._load_best_checkpoint(trainer, model)
+                logits = self._predict_logits(model, val)
                 if not hasattr(val.dataset, "y"):
                     raise AttributeError(
                         "Validation dataset missing target attribute `y`"
                     )
-                y_true = Series(data=val.dataset.y.numpy())  # type: ignore
+                y_true = Series(data=val.dataset.y.detach().cpu().numpy())  # type: ignore
                 if self.is_classifier:
-                    y_pred = Series(data=preds.argmax(axis=1))
-                    y_prob = preds
+                    y_prob = torch.softmax(logits, dim=1).detach().cpu().numpy()
+                    y_pred = Series(data=y_prob.argmax(axis=1))
                     score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
                     return score[metric.value]  # type: ignore
-                    # and (metric is not ClassifierScorer.AUROC):
-                    # if metric is not ClassifierScorer.AUROC:
-                    #     preds = preds.argmax(axis=1)
-                    # else:
-                    #     if self.n_cls == 2:
-                    #         preds = preds[:, 1]
 
+                preds = logits.detach().cpu().numpy()
                 score = metric.tuning_score(y_true=y_true, y_pred=preds)
                 return score
             except Exception as e:
+                if _is_fatal_accelerator_error(e):
+                    raise
                 traceback.print_exc()
                 print(f"Got error: {e}")
                 if metric.higher_is_better():
                     return float(-np.inf)
-                else:
-                    return float(np.inf)
+                return float(np.inf)
+            finally:
+                model = None
+                self._cleanup_trial(trainer)
 
         return objective
 
@@ -1011,10 +1231,7 @@ class GandalfEstimator(DfAnalyzeModel):
         n_jobs: int = -1,
         verbosity: int = optuna.logging.ERROR,
     ) -> Study:
-        # completely arbitrary...
-        n_cpu = multiprocessing.cpu_count()
-        n_jobs = n_cpu // 2
-        # n_jobs = 4 if os.environ.get("CC_CLUSTER") is None else 8
+        n_jobs = 1
         return super().htune_optuna(
             X_train=X_train,
             y_train=y_train,

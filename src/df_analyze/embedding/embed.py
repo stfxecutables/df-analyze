@@ -24,6 +24,7 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import (
     XLMRobertaTokenizerFast,
 )
 
+from df_analyze.device import DeviceInfo, device_info_from_resolved
 from df_analyze.embedding.cli import EmbeddingModality
 from df_analyze.embedding.datasets import NLPDataset, VisionDataset
 from df_analyze.embedding.download import (
@@ -35,14 +36,22 @@ from df_analyze.embedding.utils import avg_pool, batched
 
 def get_model(
     modality: EmbeddingModality,
+    device_info: Optional[DeviceInfo] = None,
 ) -> Union[
     tuple[XLMRobertaModel, XLMRobertaTokenizerFast], tuple[SiglipModel, SiglipProcessor]
 ]:
+    device_info = device_info or device_info_from_resolved("cpu", "cpu")
     # no idea WTF is going on here, why I can't compare enums properly...
     if EmbeddingModality(modality.value) is EmbeddingModality.NLP:
-        return load_nlp_intfloat_ml_model_offline()
+        model, tokenizer = load_nlp_intfloat_ml_model_offline()
+        model.eval()
+        model.to(device_info.torch_device)
+        return model, tokenizer
     elif EmbeddingModality(modality.value) is EmbeddingModality.Vision:
-        return load_siglip_offline()
+        model, processor = load_siglip_offline()
+        model.eval()
+        model.to(device_info.torch_device)
+        return model, processor
     else:
         raise ValueError(f"Unrecognized modality: {modality}")
 
@@ -143,6 +152,7 @@ def get_nlp_embeddings(
     # attention_mask is a boolean where mask[i, :] is such that for input i,
     # mask[i] is all ones up to number of non-masking tokens in input_ids
     all_embeddings = []
+    device = next(model.parameters()).device
     with torch.no_grad():
         text_batches = [*batched(all_texts, batch_size)]
         for texts in tqdm(
@@ -158,13 +168,14 @@ def get_nlp_embeddings(
                 truncation=True,
                 return_tensors="pt",
             )
+            batch_dict = batch_dict.to(device)
             mask = batch_dict["attention_mask"]
             assert isinstance(mask, Tensor)
 
             outputs = model(**batch_dict)
             embeddings = avg_pool(outputs.last_hidden_state, attention_mask=mask)
             # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
-            all_embeddings.append(embeddings)
+            all_embeddings.append(embeddings.detach().cpu())
 
     embeddings = torch.cat(all_embeddings)
     N, p = embeddings.shape
@@ -191,6 +202,7 @@ def get_vision_embeddings(
         y = y.iloc[:num_imgs]
 
     all_embeddings = []
+    device = next(model.parameters()).device
     with torch.no_grad():
         img_batches = [*batched(all_imgs, batch_size)]
         for img in tqdm(
@@ -209,6 +221,7 @@ def get_vision_embeddings(
                 # max_length=1024,  # leave at default, only add this if needed
                 return_tensors="pt",  # type: ignore
             )
+            processed = processed.to(device)
             outputs = model.vision_model(
                 **processed, output_hidden_states=False, output_attentions=False
             )
@@ -216,7 +229,7 @@ def get_vision_embeddings(
 
             # embeddings = avg_pool(embeddings2)
             # embeddings = F.normalize(embeddings, p=2, dim=1)  # shape [B, 1024]
-            all_embeddings.append(embeddings)
+            all_embeddings.append(embeddings.detach().cpu())
 
     embeddings = torch.cat(all_embeddings)
     N, p = embeddings.shape

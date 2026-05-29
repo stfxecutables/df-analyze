@@ -8,15 +8,74 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import numpy as np
+import pytest
+from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from sklearn.model_selection import train_test_split
 
+from df_analyze.device import DeviceInfo
 from df_analyze.enumerables import ClassifierScorer, RegressorScorer
-from df_analyze.models.mlp import MLPEstimator
+from df_analyze.models.mlp import BATCH_SIZE, MLPEstimator
 from df_analyze.testing.datasets import TestDataset, fast_ds, med_ds, slow_ds
 
 MAX_N = 1000
 MAX_EPOCHS = 10
+
+
+@pytest.mark.fast
+def test_mlp_cuda_keeps_default_batch_size() -> None:
+    model = MLPEstimator(num_classes=2)
+    model.set_device_info(
+        DeviceInfo(
+            requested="cuda",
+            resolved="cuda",
+            torch_device="cuda",
+            skorch_device="cuda",
+            lightning_accelerator="gpu",
+            lightning_devices=1,
+            accelerated=True,
+            torch_cuda_available=True,
+            cuda_driver_available=True,
+            mps_available=False,
+        )
+    )
+
+    assert model.fixed_args["device"] == "cuda"
+    assert model.fixed_args["batch_size"] == BATCH_SIZE
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize("restarts", [False, True])
+def test_mlp_scheduler_callbacks_match_current_torch_api(restarts: bool) -> None:
+    rng = np.random.default_rng(0)
+    X = DataFrame(rng.normal(size=(24, 4)).astype(np.float32))
+    y = Series(np.tile([0, 1], 12))
+    model = MLPEstimator(
+        num_classes=2,
+        model_args=dict(
+            batch_size=8,
+            max_epochs=1,
+            module__depth=3,
+            module__dropout=0.0,
+            module__use_bn=False,
+            module__width=8,
+            verbose=0,
+        ),
+    )
+    tuned_args = {
+        "early_stopping": False,
+        "module__depth": 3,
+        "module__dropout": 0.0,
+        "module__use_bn": False,
+        "module__width": 8,
+        "optimizer__lr": 1e-3,
+        "optimizer__weight_decay": 1e-4,
+        "restarts": restarts,
+    }
+
+    model.refit_tuned(X=X, y=y, tuned_args=tuned_args)
+
+    assert model.tuned_model is not None
 
 
 def do_mlp_classifier(dataset: tuple[str, TestDataset]) -> None:

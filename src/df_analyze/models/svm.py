@@ -7,12 +7,9 @@ from typing import Any, Mapping, Optional
 
 from optuna import Trial
 
-from pandas import DataFrame, Series  # isort: skip
 ROOT = Path(__file__).resolve().parent.parent.parent  # isort: skip
 sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
-
-from copy import deepcopy
 
 from sklearn.svm import SVC, SVR, LinearSVC, LinearSVR
 
@@ -31,7 +28,7 @@ class SVMEstimator(DfAnalyzeModel):
         self.default_args = dict(kernel="rbf")
 
     def model_cls_args(self, full_args: dict[str, Any]) -> tuple[type, dict[str, Any]]:
-        is_rbf = full_args["kernel"]
+        is_rbf = full_args.get("kernel", "rbf") == "rbf"
         # plain SVC is excruciatingly slow even on small datasets for many
         # C and gamma values. So we switch to Linear here despite the fact
         # that, in theory, it confounds Optuna by ignoring a lot of gamma
@@ -43,11 +40,11 @@ class SVMEstimator(DfAnalyzeModel):
         else:
             model_cls = SVR if is_rbf else LinearSVR
 
-        args = deepcopy(full_args)
+        args = dict(full_args)
         if not is_rbf:
-            args.pop("cache_size")
-            args.pop("gamma")
-            args.pop("kernel")
+            args.pop("cache_size", None)
+            args.pop("gamma", None)
+            args.pop("kernel", None)
 
         return model_cls, args
 
@@ -60,6 +57,9 @@ class SVMEstimator(DfAnalyzeModel):
             gamma=trial.suggest_float("gamma", 1e-7, 1e5, log=True),
         )
 
+    def backend_name(self, tuned_args: Optional[Mapping[str, Any]] = None) -> str:
+        return "sklearn-svm"
+
 
 class SVMClassifier(SVMEstimator):
     shortname = "svm"
@@ -71,12 +71,6 @@ class SVMClassifier(SVMEstimator):
         self.is_classifier = True
         self.needs_calibration = True
         self.model_cls = SVC
-
-    def fit(self, X_train: DataFrame, y_train: Series) -> None:
-        if self.model is None:
-            kwargs = {**self.fixed_args, **self.model_args}
-            self.model = self.model_cls(**kwargs)
-        self.model.fit(X_train, y_train)  # type: ignore
 
 
 class SVMRegressor(SVMEstimator):

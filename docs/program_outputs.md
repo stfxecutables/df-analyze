@@ -24,6 +24,38 @@
 - **tuning**: (currently unused) params for each tuned model and each
   selection method
 
+## Device, Backend, And Timing Metadata
+
+Model tuning and final performance outputs include:
+
+- **device**: a compact execution-device label for this model result, such as
+  `cpu`, `cuda`, `mps`, or `accelerated`
+- **requested_device**: the user request from `--device auto/cpu/cuda/mps`
+- **resolved_device**: the global device resolved before model-specific
+  fallback, such as `cpu`, `cuda`, or `mps`
+- **torch_device**: the device used by PyTorch/skorch/Lightning components
+- **backend**: the authoritative model implementation label, such as
+  `lightgbm-cpu`, `catboost-gpu`, `xgboost-cuda`, `tabpfn-v3-cuda`,
+  `cuml-knn`, or a CPU/sklearn fallback
+- **model_version**: version metadata for models that expose it, such as
+  `v3` or `v2_5` for TabPFN
+- **tune_seconds**: time spent in hyperparameter tuning
+- **eval_seconds**: time spent in final holdout and k-fold evaluation
+- **total_seconds**: tuning plus evaluation time
+
+A run with `--device cuda` can still report a CPU backend for a specific model
+if that model's CUDA backend is unavailable or a particular configuration is not
+supported. In that case `resolved_device` can be `cuda` while `device` is `cpu`.
+When `device` and `backend` seem ambiguous, use `backend` to decide which model
+implementation path actually ran.
+The hashed run directory also includes `device_report.json`. It is intentionally
+small and user-facing: `device` records the requested and resolved device,
+`checks` records whether smoke checks ran, `selected_models` records the models
+from this run, and `models` contains one entry per selected model/backend that
+df-analyze actually needs to explain. Unselected models are omitted instead of
+being represented by `null` fields. LightGBM `lgbm` and `rf` appear as CPU
+entries because df-analyze pins those execution paths to CPU.
+
 ## Output Files
 
 ## Makrkdown Reports
