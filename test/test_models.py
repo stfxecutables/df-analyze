@@ -384,6 +384,84 @@ class TestGandalf:
             "pin_memory": True,
         }
 
+    def test_small_train_split_keeps_a_training_batch(self) -> None:
+        model = GandalfEstimator(num_classes=2)
+        X = DataFrame(np.zeros((20, 4)))
+        y = Series([0, 1] * 10)
+
+        train_loader, val_loader = model._train_val_loaders(X, y)
+
+        assert len(train_loader) > 0
+        assert train_loader.batch_size <= len(train_loader.dataset)  # type: ignore[arg-type]
+        assert val_loader.batch_size <= len(val_loader.dataset)  # type: ignore[arg-type]
+
+    def test_pred_loader_rejects_empty_data(self) -> None:
+        model = GandalfEstimator(num_classes=2)
+
+        with pytest.raises(ValueError, match="empty dataset"):
+            model._pred_loader(DataFrame(np.empty((0, 4))), g=None)
+
+    def test_classification_tuning_scores_probabilities(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+
+        class FakeModel:
+            def __init__(self, **kwargs: object) -> None:
+                return None
+
+        class FakeTrainer:
+            log_dir = None
+
+            def fit(self, **kwargs: object) -> None:
+                return None
+
+        class ValDataset:
+            y = torch.tensor([0, 1])
+
+            def __len__(self) -> int:
+                return 2
+
+            def __getitem__(self, idx: int) -> torch.Tensor:
+                return torch.tensor([float(idx)])
+
+        class Metric:
+            value = "score"
+
+            def get_scores(
+                self, y_true: Series, y_pred: Series, y_prob: np.ndarray
+            ) -> dict[str, float]:
+                assert np.allclose(y_prob.sum(axis=1), 1.0)
+                assert list(y_pred) == [0, 1]
+                return {"score": 0.75}
+
+            def higher_is_better(self) -> bool:
+                return True
+
+        train = DataLoader(TensorDataset(torch.zeros(2, 1)), batch_size=1)
+        val = DataLoader(ValDataset(), batch_size=1)
+        model = GandalfEstimator(num_classes=2)
+        model.model_cls = FakeModel  # type: ignore[assignment]
+        monkeypatch.setattr(model, "optuna_args", lambda trial: {})
+        monkeypatch.setattr(model, "_train_val_loaders", lambda **kwargs: (train, val))
+        monkeypatch.setattr(model, "_get_trainer", lambda **kwargs: FakeTrainer())
+        monkeypatch.setattr(model, "_load_best_checkpoint", lambda trainer, model: None)
+        monkeypatch.setattr(
+            model,
+            "_predict_logits",
+            lambda model, loader: torch.tensor([[3.0, 1.0], [1.0, 3.0]]),
+        )
+
+        objective = model.optuna_objective(
+            DataFrame(np.zeros((2, 1))),
+            Series([0, 1]),
+            None,
+            Metric(),  # type: ignore[arg-type]
+        )
+
+        assert objective(object()) == 0.75  # type: ignore[arg-type]
+
     def test_cuda_virtual_batch_choices_match_cpu_defaults(self) -> None:
         class TrialStub:
             def __init__(self) -> None:

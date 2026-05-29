@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 import df_analyze.gpu_setup as gpu_setup
+from df_analyze.models import gpu as gpu_backends
 from df_analyze.gpu_setup import (
     CUDA13_GROUP,
     GpuPreflightResult,
@@ -158,6 +159,21 @@ def test_gpu_preflight_results_runs_selected_checks(
 
     assert calls == ["torch", "xgboost"]
     assert [item.name for item in results] == ["torch", "xgboost"]
+
+
+@pytest.mark.fast
+def test_tabpfn_preflight_does_not_require_v25_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_probe() -> tuple[bool, str]:
+        raise AssertionError("unexpected v2.5 probe")
+
+    monkeypatch.setattr(gpu_backends, "tabpfn_api_status", lambda: (True, ""))
+    monkeypatch.setattr(gpu_backends, "tabpfn_v25_api_status", fail_probe)
+
+    result = gpu_setup.PREFLIGHT_CHECKS["tabpfn"]()
+
+    assert result.status == "pass"
 
 
 @pytest.mark.fast

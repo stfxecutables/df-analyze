@@ -53,6 +53,7 @@ from df_analyze.device import (
     cleanup_accelerator_memory,
     device_info_from_resolved,
 )
+from df_analyze.models.gpu import as_numpy
 from df_analyze.splitting import OmniKFold
 
 NEG_MAE = "neg_mean_absolute_error"
@@ -263,7 +264,7 @@ class DfAnalyzeModel(ABC):
                 model_cls, clean_args = self.model_cls_args(full_args)
                 estimator = model_cls(**clean_args)
                 estimator.fit(X_tr, y_tr)
-                preds = estimator.predict(X_test)
+                preds = as_numpy(estimator.predict(X_test))
                 score = metric.tuning_score(y_test, preds)
                 scores.append(score)
                 # allows pruning

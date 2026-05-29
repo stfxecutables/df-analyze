@@ -328,7 +328,13 @@ class SGDRegressor(DfAnalyzeModel):
     def uses_accelerated_backend(
         self, tuned_args: Optional[Mapping[str, Any]] = None
     ) -> bool:
-        return self._uses_cuml_backend(tuned_args)
+        full_args = {
+            **self.fixed_args,
+            **self.default_args,
+            **self.model_args,
+            **(tuned_args or {}),
+        }
+        return self._uses_cuml_backend(full_args)
 
     def htune_optuna(
         self,
@@ -447,7 +453,13 @@ class SGDClassifierSelector(DfAnalyzeModel):
     def uses_accelerated_backend(
         self, tuned_args: Optional[Mapping[str, Any]] = None
     ) -> bool:
-        return self._uses_cuml_backend(tuned_args)
+        full_args = {
+            **self.fixed_args,
+            **self.default_args,
+            **self.model_args,
+            **(tuned_args or {}),
+        }
+        return self._uses_cuml_backend(full_args)
 
     def htune_optuna(
         self,
@@ -571,7 +583,13 @@ class SGDRegressorSelector(DfAnalyzeModel):
     def uses_accelerated_backend(
         self, tuned_args: Optional[Mapping[str, Any]] = None
     ) -> bool:
-        return self._uses_cuml_backend(tuned_args)
+        full_args = {
+            **self.fixed_args,
+            **self.default_args,
+            **self.model_args,
+            **(tuned_args or {}),
+        }
+        return self._uses_cuml_backend(full_args)
 
     def htune_optuna(
         self,

@@ -657,11 +657,22 @@ def _torch_model_backend(
     cpu_backend: str,
     device_info: DeviceInfo,
 ) -> dict[str, Any]:
-    uses_cuda = device_info.torch_device == "cuda"
+    device = device_info.torch_device
+    if device == "cuda":
+        backend = cuda_backend
+    elif device == "mps":
+        backend = (
+            cpu_backend.removesuffix("-cpu") + "-mps"
+            if cpu_backend.endswith("-cpu")
+            else cpu_backend
+        )
+    else:
+        device = "cpu"
+        backend = cpu_backend
     return _static_backend(
         model=model,
-        backend=cuda_backend if uses_cuda else cpu_backend,
-        device="cuda" if uses_cuda else "cpu",
+        backend=backend,
+        device=device,
     )
 
 
@@ -678,6 +689,7 @@ def _selected_or_all(selected: set[str] | None) -> set[str]:
         "catboost",
         "dummy",
         "gandalf",
+        "elastic",
         "knn-classifier",
         "knn-regressor",
         "lgbm",
@@ -835,12 +847,9 @@ def backend_availability_report(
     if "tabpfn" in selected_for_output:
         if check_tabpfn:
             tabpfn_available, tabpfn_reason = tabpfn_api_status()
-            tabpfn_v25_available, tabpfn_v25_reason = tabpfn_v25_api_status()
             details = []
             if not tabpfn_available and tabpfn_reason:
                 details.append(str(tabpfn_reason))
-            if not tabpfn_v25_available and tabpfn_v25_reason:
-                details.append(str(tabpfn_v25_reason))
             entry = _checked_backend(
                 model="tabpfn",
                 backend=(
@@ -849,7 +858,7 @@ def backend_availability_report(
                     else "tabpfn-cpu"
                 ),
                 device="cuda" if device_info.torch_device == "cuda" else "cpu",
-                available=tabpfn_available and tabpfn_v25_available,
+                available=tabpfn_available,
                 reason="; ".join(details),
             )
             entry["fit_smoke"] = False

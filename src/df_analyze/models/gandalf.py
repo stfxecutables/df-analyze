@@ -404,6 +404,8 @@ class GandalfContCatModel(Module):
         self.embed_dim = embed_dim
         self.embed_dropout = embed_dropout
         self.gflu_dropout = gflu_dropout
+        if not 0.0 <= self.gflu_dropout < 1.0:
+            raise ValueError("gflu_dropout must be in [0.0, 1.0).")
         self.batch_norm_continuous_input = batch_norm_continuous_input
         self.virtual_batch_size = virtual_batch_size
         self.gflu_feature_init_sparsity = gflu_feature_init_sparsity
@@ -428,7 +430,7 @@ class GandalfContCatModel(Module):
         )
         self.cont_dropout = (
             Dropout(self.gflu_dropout)
-            if ((self.gflu_dropout > 0) or (self.gflu_dropout < 1))
+            if 0.0 < self.gflu_dropout < 1.0
             else Identity()
         )
         self.cont_bnorm = (
@@ -497,6 +499,8 @@ class GandalfContModel(Module):
         super().__init__(*args, **kwargs)
         self.is_classification = self.is_cls = dataset.is_classification
         self.gflu_dropout = gflu_dropout
+        if not 0.0 <= self.gflu_dropout < 1.0:
+            raise ValueError("gflu_dropout must be in [0.0, 1.0).")
         self.batch_norm_continuous_input = batch_norm_continuous_input
         self.virtual_batch_size = virtual_batch_size
         self.gflu_feature_init_sparsity = gflu_feature_init_sparsity
@@ -515,7 +519,7 @@ class GandalfContModel(Module):
         )
         self.dropout = (
             Dropout(self.gflu_dropout)
-            if ((self.gflu_dropout > 0) or (self.gflu_dropout < 1))
+            if 0.0 < self.gflu_dropout < 1.0
             else Identity()
         )
         self.bnorm = (
@@ -854,6 +858,8 @@ class GandalfEstimator(DfAnalyzeModel):
 
     def _pred_loader(self, X: DataFrame | Tensor, g: Optional[Series]) -> DataLoader:
         data = ContinuousPredData(df=X, g=g, is_classification=self.is_classifier)
+        if len(data) == 0:
+            raise ValueError("Cannot predict with an empty dataset.")
         loader = DataLoader(
             data,
             batch_size=min(BATCH, len(data)),
@@ -900,16 +906,23 @@ class GandalfEstimator(DfAnalyzeModel):
             train = ContinuousIndexedData(data, ix_tr)
             val = ContinuousIndexedData(data, ix_v)
 
-        train_batch = min(BATCH, len(train))
-        if train_batch > (len(train) // 2):
-            train_batch = 32
-        val_batch = min(BATCH, len(val))
+        train_len = len(train)
+        val_len = len(val)
+        if train_len <= 0:
+            raise ValueError("GANDALF training split is empty.")
+        if val_len <= 0:
+            raise ValueError("GANDALF validation split is empty.")
+
+        train_batch = min(BATCH, train_len)
+        if train_len > 1 and train_batch > (train_len // 2):
+            train_batch = max(1, train_len // 2)
+        val_batch = max(1, min(BATCH, val_len))
         loader_kwargs = self._loader_kwargs()
         train_loader = DataLoader(
             train,
             batch_size=train_batch,
             shuffle=True,
-            drop_last=True,
+            drop_last=train_len > train_batch,
             **loader_kwargs,
         )
         val_loader = DataLoader(
@@ -1179,18 +1192,19 @@ class GandalfEstimator(DfAnalyzeModel):
                     Path(trainer.log_dir).mkdir(exist_ok=True, parents=True)
                 trainer.fit(model=model, train_dataloaders=train, val_dataloaders=val)
                 self._load_best_checkpoint(trainer, model)
-                preds = self._predict_logits(model, val).detach().cpu().numpy()
+                logits = self._predict_logits(model, val)
                 if not hasattr(val.dataset, "y"):
                     raise AttributeError(
                         "Validation dataset missing target attribute `y`"
                     )
                 y_true = Series(data=val.dataset.y.detach().cpu().numpy())  # type: ignore
                 if self.is_classifier:
-                    y_pred = Series(data=preds.argmax(axis=1))
-                    y_prob = preds
+                    y_prob = torch.softmax(logits, dim=1).detach().cpu().numpy()
+                    y_pred = Series(data=y_prob.argmax(axis=1))
                     score = metric.get_scores(y_true=y_true, y_pred=y_pred, y_prob=y_prob)
                     return score[metric.value]  # type: ignore
 
+                preds = logits.detach().cpu().numpy()
                 score = metric.tuning_score(y_true=y_true, y_pred=preds)
                 return score
             except Exception as e:

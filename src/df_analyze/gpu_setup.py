@@ -460,19 +460,13 @@ def _tabpfn_preflight() -> GpuPreflightResult:
     from df_analyze.models import gpu
 
     api_ok, api_reason = gpu.tabpfn_api_status()
-    v25_ok, v25_reason = gpu.tabpfn_v25_api_status()
-    if api_ok and v25_ok:
+    if api_ok:
         return _result(
             "tabpfn",
             True,
             "TabPFN API is importable; fit smoke is opt-in.",
         )
-    detail = "; ".join(
-        reason
-        for ok, reason in ((api_ok, api_reason), (v25_ok, v25_reason))
-        if not ok and reason
-    )
-    return _result("tabpfn", False, detail)
+    return _result("tabpfn", False, api_reason)
 
 
 def _tabpfn_fit_preflight() -> GpuPreflightResult:

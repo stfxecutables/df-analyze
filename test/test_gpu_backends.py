@@ -112,6 +112,57 @@ def test_base_model_uses_cleaned_fit_and_refit_args() -> None:
 
 
 @pytest.mark.fast
+def test_base_optuna_objective_converts_gpu_like_predictions() -> None:
+    seen: list[type] = []
+
+    class FakeGet:
+        def __init__(self, values: np.ndarray) -> None:
+            self.values = values
+
+        def get(self) -> np.ndarray:
+            return self.values
+
+    class FakeEstimator:
+        def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+            return None
+
+        def predict(self, X: np.ndarray) -> FakeGet:
+            return FakeGet(np.zeros(len(X), dtype=float))
+
+    class Model(DfAnalyzeModel):
+        is_classifier = False
+
+        def model_cls_args(
+            self, full_args: dict[str, Any]
+        ) -> tuple[type, dict[str, Any]]:
+            return FakeEstimator, {}
+
+        def optuna_args(self, trial: Trial) -> dict[str, str | float | int]:
+            return {}
+
+    class Metric:
+        def tuning_score(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+            seen.append(type(y_pred))
+            return 1.0
+
+    class TrialStub:
+        def report(self, value: float, step: int) -> None:
+            return None
+
+        def should_prune(self) -> bool:
+            return False
+
+    X, y = tiny_tuning_data()
+    model = Model()
+    model.is_classifier = False
+
+    objective = model.optuna_objective(X, y, None, Metric(), n_folds=2)  # type: ignore[arg-type]
+
+    assert objective(TrialStub()) == 1.0  # type: ignore[arg-type]
+    assert seen == [np.ndarray, np.ndarray]
+
+
+@pytest.mark.fast
 def test_knn_cpu_preserves_tuned_args() -> None:
     model = KNNClassifier()
     args = {"n_neighbors": 7, "weights": "distance", "metric": "cosine", "n_jobs": -1}
@@ -492,7 +543,42 @@ def test_backend_availability_report_skips_cuda_smoke_checks_for_cpu(
     tabpfn = report_model(report, model="tabpfn")
     assert tabpfn["checked"] is True
     assert tabpfn["available"] is False
-    assert tabpfn["reason"] == "tabpfn missing; tabpfn missing"
+    assert tabpfn["reason"] == "tabpfn missing"
+    assert report_model(report, model="elastic")["backend"] == "sklearn-elasticnet"
+
+
+@pytest.mark.fast
+def test_backend_availability_report_accepts_current_tabpfn_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_probe() -> tuple[bool, str]:
+        raise AssertionError("unexpected v2.5 probe")
+
+    monkeypatch.setattr(gpu_backends, "tabpfn_api_status", lambda: (True, ""))
+    monkeypatch.setattr(gpu_backends, "tabpfn_v25_api_status", fail_probe)
+
+    report = gpu_backends.backend_availability_report(
+        device_info_from_resolved("cpu", "cpu"),
+        selected_models=["tabpfn"],
+    )
+
+    tabpfn = report_model(report, model="tabpfn")
+    assert tabpfn["checked"] is True
+    assert tabpfn["available"] is True
+
+
+@pytest.mark.fast
+def test_backend_availability_report_names_mps_torch_backends() -> None:
+    report = gpu_backends.backend_availability_report(
+        device_info_from_resolved("auto", "mps", mps_is_available=True),
+        selected_models=["mlp", "gandalf"],
+        run_smoke_checks=False,
+    )
+
+    assert report_model(report, model="mlp")["backend"] == "skorch-mps"
+    assert report_model(report, model="mlp")["device"] == "mps"
+    assert report_model(report, model="gandalf")["backend"] == "lightning-mps"
+    assert report_model(report, model="gandalf")["device"] == "mps"
 
 
 @pytest.mark.fast
@@ -955,6 +1041,50 @@ def test_elasticnet_cpu_and_mps_keep_sklearn(resolved: str) -> None:
     assert model_cls is ElasticNet
     assert clean_args == args
     assert model.backend_name() == "sklearn-elasticnet"
+
+
+@pytest.mark.fast
+@pytest.mark.parametrize(
+    ("model", "expected_backend"),
+    [
+        (SGDRegressor(model_args={"loss": "huber"}), "sklearn-sgd-regressor"),
+        (
+            SGDClassifierSelector(model_args={"loss": "modified_huber"}),
+            "sklearn-sgd-classifier",
+        ),
+        (
+            SGDRegressorSelector(model_args={"loss": "huber"}),
+            "sklearn-sgd-regressor",
+        ),
+    ],
+)
+def test_sgd_uses_accelerated_backend_matches_backend_name(
+    monkeypatch: pytest.MonkeyPatch,
+    model: DfAnalyzeModel,
+    expected_backend: str,
+) -> None:
+    class FakeCumlMBSGD:
+        pass
+
+    monkeypatch.setattr(
+        gpu_backends, "get_cuml_mbsgd_classifier_cls", lambda: FakeCumlMBSGD
+    )
+    monkeypatch.setattr(
+        gpu_backends, "get_cuml_mbsgd_regressor_cls", lambda: FakeCumlMBSGD
+    )
+    monkeypatch.setattr(gpu_backends, "cuml_mbsgd_classifier_available", lambda: True)
+    monkeypatch.setattr(gpu_backends, "cuml_mbsgd_regressor_available", lambda: True)
+    model.set_device_info(
+        device_info_from_resolved(
+            "auto",
+            "cuda",
+            torch_cuda_available=True,
+            cuda_driver_available=True,
+        )
+    )
+
+    assert model.backend_name() == expected_backend
+    assert model.uses_accelerated_backend() is False
 
 
 @pytest.mark.fast
