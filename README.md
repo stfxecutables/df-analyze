@@ -11,16 +11,20 @@
   - [By Singularity / Apptainer Container](#by-singularity--apptainer-container)
   - [Windows Support](#windows-support)
 - [Usage](#usage)
+  - [CPU and CUDA Devices](#cpu-and-cuda-devices)
   - [Quick Start and Examples](#quick-start-and-examples)
     - [Using Builtin Data](#using-builtin-data)
-    - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
-      - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
+    - [Additional Model Backends](#additional-model-backends)
+  - [Multi-Target Analysis](#multi-target-analysis)
+  - [Using a `df-analyze`-formatted Spreadsheet](#using-a-df-analyze-formatted-spreadsheet)
+    - [Overriding Spreadsheet Options](#overriding-spreadsheet-options)
   - [Embedding Functionality](#embedding-functionality)
     - [Quickstart](#quickstart)
     - [About the Embedding Models](#about-the-embedding-models)
     - [Supported Dataset Formats](#supported-dataset-formats)
       - [Image Data](#image-data)
       - [Text Data](#text-data)
+  - [Large-Scale Feature Downsampling](#large-scale-feature-downsampling)
   - [Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters](#usage-on-compute-canada--digital-research-alliance-of-canada--slurm-hpc-clusters)
     - [Building the Singularity Container](#building-the-singularity-container)
     - [Using the Singularity Container](#using-the-singularity-container)
@@ -35,6 +39,8 @@
       - [Redundancy-Aware Feature Selection \*\*\[NEW\]\*\*](#redundancy-aware-feature-selection-new)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
     - [Final Validation](#final-validation)
+    - [Adaptive Error Analysis](#adaptive-error-analysis)
+    - [Error Consistency](#error-consistency)
 - [Program Outputs](#program-outputs)
   - [Order of Reading](#order-of-reading)
   - [Subdirectories](#subdirectories)
@@ -43,45 +49,54 @@
       - [Destructive Data Changes](#destructive-data-changes)
     - [`📂 prepared`](#-prepared)
     - [`📂 features`](#-features)
+      - [`📂 downsampling`](#-downsampling)
       - [`📂 associations`](#-associations)
       - [`📂 descriptions`](#-descriptions)
       - [`📂 predictions`](#-predictions)
     - [`📂 selection`](#-selection)
       - [`📂 embed`](#-embed)
       - [`📂 filter`](#-filter)
-      - [`📂 wrap`](#-wrap)
+      - [`📂 wrapper`](#-wrapper)
     - [`📂 tuning`](#-tuning)
     - [`📂 results`](#-results)
-  - [Complete Listing](#complete-listing)
+- [Complete Listing](#complete-listing)
 - [Limitations](#limitations)
-  - [One Target Variable per Invocation / Run](#one-target-variable-per-invocation--run)
+  - [Target Variables](#target-variables)
   - [Dataset Size](#dataset-size)
   - [Inappropriate Data](#inappropriate-data)
   - [Inappropriate Tasks](#inappropriate-tasks)
 - [Currently Implemented Program Features and Analyses](#currently-implemented-program-features-and-analyses)
   - [Completed Features](#completed-features)
-    - [Automated Data Preproccesing](#automated-data-preproccesing)
-    - [Feature Descriptive Statisics](#feature-descriptive-statisics)
+    - [Automated Data Preprocessing](#automated-data-preprocessing)
+    - [Feature Descriptive Statistics](#feature-descriptive-statistics)
     - [Univariate Feature-Target Associations](#univariate-feature-target-associations)
     - [Univariate Prediction Metrics for each Feature-Target Pair](#univariate-prediction-metrics-for-each-feature-target-pair)
 
 
 # Overview
 
-`df-analyze` is a command-line tool for perfoming
+`df-analyze` is a command-line tool for performing
 [AutoML](https://en.wikipedia.org/w/index.php?title=Automated_machine_learning&oldid=1193286380)
-on small to medium-sized tabular datasets (less than about 200 000 samples,
-and less than about 50 to 100 features). `df-analyze` attempts to automate:
+on small to medium-sized tabular datasets. Separate downsampling paths are
+available for much wider numeric data, including sparse SVMlight input.
+`df-analyze` attempts to automate:
 
 - feature type inference
 - feature description (e.g. univariate associations and stats)
 - data cleaning (e.g. NaN handling and imputation)
 - training, validation, and test splitting
 - feature selection
+- optional large-scale feature downsampling for very wide numeric or SVMlight data
 - hyperparameter tuning
 - model selection and validation
+- single- and multi-target classification or regression
+- CPU/CUDA execution support with automatic per-component device routing
+- optional adaptive-error and repeated K-fold error-consistency diagnostics
 
 and saves all key tables and outputs from this process.
+
+See [Large-scale feature downsampling](docs/feature_downsampling.md) for the
+chunked, leakage-controlled preprocessing options for wide feature matrices.
 
 **\*\*UPDATE - September 30 2024\*\*** Now, `df-analyze` supports [zero-shot
 embedding](#embedding-functionality) of image and text data via the
@@ -90,7 +105,7 @@ formatted](#supported-dataset-formats) image and text datasets into tabular
 data that can be handled by the standard `df-analyze` tabular prediction
 tools.
 
-Currently, siginifcant efforts have been made to make `df-analyze` robust to
+Currently, significant efforts have been made to make `df-analyze` robust to
 a wide variety of tabular datasets. However, there are some significant
 [limitations](#limitations).
 
@@ -114,11 +129,11 @@ Don't be shy about asking for help in the
 ## For Students or Novices to Machine and Deep Learning
 
 For students encountering `df-analyze` through a course, see the [student
-README](https://github.com/stfxecutables/df-analyze/blob/experimental/docs/students.md)
+README](docs/students.md)
 [WIP!] in this repo. The student README contains some descriptions and tips
 that are helpful for those just starting to learn about the CLI, containers,
 AutoML tools, and also some explanations and tips for running `df-analyze` on
-SLURM High-Performance Computing (HPC) clusters, particularly the [Digitial
+SLURM High-Performance Computing (HPC) clusters, particularly the [Digital
 Research Alliance of Canada (formerly Compute Canada)
 clusters](https://docs.alliancecan.ca/wiki/Technical_documentation).
 
@@ -142,17 +157,17 @@ Canada / DRAC), you may need to [build a container to make use of
 ## Installation via `uv`
 
 1. Install `uv` as per the [installation
-   instructions](#https://docs.astral.sh/uv/getting-started/installation/#standalone-installer)
-   - i.e. if you are on MacOS or Linux: `curl -LsSf
+   instructions](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer)
+   - i.e. if you are on macOS or Linux: `curl -LsSf
    https://astral.sh/uv/install.sh | sh` - or if you are on Windows:
    `powershell -ExecutionPolicy ByPass -c "irm
    https://astral.sh/uv/install.ps1 | iex"`
 2. Make sure you have [installed Git](https://git-scm.com/install/). If you
-   are on MacOS or Linux, this should be there by default and this step is
+   are on macOS or Linux, this should be there by default and this step is
    not required.
    - Windows users looking for guidance during installation of Git should see
      the [Windows install instructions in this
-     repo](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md)
+     repo](docs/windows_install.md)
 3. Navigate to a suitable directory, e.g. `~/Documents` and clone the
    repository:
    ```shell
@@ -182,11 +197,11 @@ If the error involves `import torch` and a function `_load_dll_libraries()`,
 with an error message of the form:
 
 > Microsoft Visual C++ Redistributable is not installed, this may lead to the
-> DLL load failure.  It can be downloaded at [platform-specfic link]
+> DLL load failure. It can be downloaded at [platform-specific link]
 
 try installing the missing DLL from the link provided. Otherwise, try the
 [Windows install
-instructions](https://github.com/stfxecutables/df-analyze/blob/24749b8e3c582d7cff4185b2e69a42afe24b13be/docs/windows_install.md).
+instructions](docs/windows_install.md).
 If you see any issues during installation, feel free to reach out
 in the
 [Discussions](https://github.com/stfxecutables/df-analyze/discussions), file
@@ -198,7 +213,7 @@ an [Issue](https://github.com/stfxecutables/df-analyze/issues), or try the
 ## [\*\***LEGACY**\*\*] Local Install by Shell Script
 
 After having cloned the repo, the
-[`local_install.sh`](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+[`local_install.sh`](local_install.sh)
 script can be used to install the dependencies for `df-analyze`. You will
 need to first install [`pyenv`](https://github.com/pyenv/pyenv) (or
 [`pyenv-win`](https://github.com/pyenv-win/pyenv-win) on Windows) in order
@@ -226,11 +241,11 @@ python df-analyze.py --help
 
 ```
 
-This install procedure *should* work on MacOS (including Apple Silicon, e.g.
+This install procedure *should* work on macOS (including Apple Silicon, e.g.
 MX series macs), and on most major and up-to-date Linux distributions, and on
 Windows in the Windows Subsystem for Linux (WSL). However, Windows users
 wishing to avoid using the WSL should adapt the [install
-script](https://github.com/stfxecutables/df-analyze/blob/experimental/local_install.sh)
+script](local_install.sh)
 for their needs.
 
 
@@ -263,15 +278,15 @@ HPC systems / clusters like Compute Canada / DRAC).
 
 ## Windows Support
 
-At the moment, there is no real capacity to test `df-analyze` on Windows
-machines. Nowadays, the Windows Subsystem for Linux (WSL) generally works
-very well, so the [local install scripts](#local-install-by-shell-script)
-*should* just work there, as I have tried to avoid most platform-specific
-code.
+Native Windows support is still experimental. The automated tests cover the
+Windows installation helpers and long output paths, but not every optional
+model and GPU configuration. The Windows Subsystem for Linux (WSL) generally
+works well, and the [local install scripts](#legacy-local-install-by-shell-script)
+should work there.
 
 If for some reason you can't use the WSL, then there are experimental manual
 Windows installation instructions
-[here](https://github.com/stfxecutables/df-analyze/blob/master/docs/windows_install.md).
+[here](docs/windows_install.md).
 
 # Usage
 
@@ -292,15 +307,30 @@ environment. **Note**: all future command line examples will omit the `uv run`
 command, with the assumption that this is implicit.
 
 Alternately, you can see what the `--help` option outputs
-[here](https://github.com/stfxecutables/df-analyze/blob/develop/docs/arguments.md),
-but keep mind the actual outputs of the `--help` command are less likely to
+[here](docs/arguments.md),
+but keep in mind the actual outputs of the `--help` command are less likely to
 be out of date.
 
 For documentation of the embedding functionality, run:
 
 ```shell
+df-embed --help
+```
+
+The equivalent command from a source checkout is:
+
+```shell
 python df-embed.py --help
 ```
+
+
+## CPU and CUDA Devices
+
+Both `df-analyze` and `df-embed` accept `--device auto`, `--device cpu`, and
+`--device cuda`. The recommended `auto` mode resolves every selected component
+to an available supported backend while CPU-only work remains on the CPU. See
+[GPU experiments and device behavior](docs/gpu_experiments.md) for supported
+components, verification commands, examples, and interpretation guidance.
 
 
 ## Quick Start and Examples
@@ -323,7 +353,152 @@ python df-analyze.py \
 should work and run quite quickly on the tiny toy dataset included in the repo.
 This will produce a lot of terminal output.
 
-### Using a `df-analyze`-formatted Spreadsheet
+Registered classifier tokens are:
+
+```text
+catboost xgb tabpfn dtree et knn lgbm rf lr sgd mlp kan svm gandalf dummy
+```
+
+Registered regressor tokens are:
+
+```text
+catboost xgb tabpfn dtree et knn lgbm rf elastic sgd mlp kan svm gandalf dummy
+```
+
+The `svm` token is retained for configuration compatibility, but the CLI
+currently disables SVM training because of its runtime cost. The other tokens
+can be evaluated when their dependencies and, where needed, model weights are
+available.
+
+TabPFN uses the current v3 checkpoint. Before the first download, accept its
+license. The recommended
+setup is the Prior Labs browser flow or a `TABPFN_TOKEN` from the Prior Labs
+account page. Some `tabpfn` versions may instead report that a checkpoint is in
+a gated Hugging Face repository. In that case, accept the terms for the named
+repository and authenticate with `hf auth login` or a read-only `HF_TOKEN`.
+Do not commit either token. For an offline machine, download the weights
+separately and point `TABPFN_MODEL_CACHE_DIR` at that directory. See
+[Prior Labs' model-access instructions](https://docs.priorlabs.ai/how-to-access-gated-models).
+
+Checkpoint licenses can differ and may change. Review the current license for
+the selected version before commercial or production use; the
+[TabPFN-3 model card and license](https://huggingface.co/Prior-Labs/tabpfn_3)
+is the relevant page for the default v3 checkpoint.
+
+TabPFN receives a separate raw-valued table with its categorical columns
+identified, instead of the one-hot encoded matrix used by most other models.
+Prior Labs documents the TabPFN-3 row/feature trade-off as 1 000 000 × 200,
+100 000 × 2 000, or 1 000 × 20 000. `df-analyze` accepts an input only when it
+fits at least one of those documented row/feature regimes; it does not infer
+support for other shapes merely because their row-column product is small. The
+[TabPFN-3 model card](https://huggingface.co/Prior-Labs/tabpfn_3) separately
+states that predictive performance is not guaranteed above 2 000 features.
+Inputs with more than 2 000 features are consequently accepted only inside the
+documented 1 000 × 20 000 regime and produce an explicit experimental-regime
+warning.
+Passing these shape checks is not a memory or accuracy guarantee; compare
+wide-input results against non-TabPFN baselines. See the current
+[Prior Labs model limits](https://docs.priorlabs.ai/models) before interpreting
+or publishing results. By default, `df-analyze` refuses to run TabPFN on the CPU
+with more than 1 000 rows. Use CUDA or set
+`TABPFN_ALLOW_CPU_LARGE_DATASET=1` to allow a larger CPU run explicitly.
+
+### Additional Model Backends
+
+The following tokens add model backends beyond the original defaults:
+
+| Token | Model |
+|---|---|
+| `catboost` | CatBoost gradient-boosted trees |
+| `xgb` | XGBoost gradient-boosted trees |
+| `tabpfn` | TabPFN v3 |
+| `dtree` | A scikit-learn decision tree |
+| `et` | Scikit-learn extremely randomized trees |
+| `kan` | A Kolmogorov-Arnold Network using PyKAN |
+
+Pass these names to `--classifiers` or `--regressors` just like the original
+model names:
+
+```shell
+python df-analyze.py \
+    --df data/small_classifier_data.json \
+    --target target \
+    --mode classify \
+    --classifiers catboost xgb dtree et kan dummy \
+    --feat-select filter \
+    --htune-trials 5 \
+    --outdir ./additional_model_results
+```
+
+They use the same feature-set comparison, tuning, and final validation as the
+other models. CatBoost, XGBoost, KAN, and TabPFN can use CUDA but do not require
+it. TabPFN has the license, token, and model-download requirements described
+above. No model is expected to be best for every dataset.
+
+## Multi-Target Analysis
+
+Use `--target outcome` for the usual single-target analysis. For several
+targets, pass a comma-separated list to `--targets`:
+
+```shell
+# Several categorical outcomes
+python df-analyze.py --df data.csv --targets outcome_a,outcome_b --mode classify
+
+# Several numeric outcomes
+python df-analyze.py --df data.csv --targets score_a,score_b --mode regress
+```
+
+The usual model and output defaults still apply. Keep these rules in mind:
+
+- All targets in one run must have the same task type. Do not mix categorical
+  and continuous targets.
+- Quote the whole comma-separated value if a target name contains spaces.
+- `--targets` takes precedence when both `--target` and `--targets` are given.
+- Rows missing any target are removed.
+
+`df-analyze` checks that every classification level has enough samples for the
+requested validation folds. Every regression target must vary in the training,
+holdout, and cross-validation partitions. If a valid split cannot be made, the
+error names the target that caused the problem.
+
+Feature selection is run for each target, then the results are combined with
+Borda ranks or selection frequency:
+
+```shell
+--mt-agg-strategy borda
+--mt-agg-strategy freq
+--mt-top-k 25
+```
+
+Without `--mt-top-k`, every feature selected for at least one target is kept.
+Models with native multi-output support fit the targets together; other models
+fit one estimator per target. The default tuning search chooses one
+configuration from the average per-target score. For regression, those tuning
+scores are normalized so that a target with larger numeric values does not
+dominate. Reported errors remain in the target's original units.
+
+Final cross-validation uses up to five folds. A grouped run may use fewer folds
+when fewer than five holdout groups are available, but a group is never split
+between folds. The output column `final_cv_folds` records the number used.
+Adaptive error analysis, when enabled, runs separately for each classification
+target.
+
+The main multi-target outputs are:
+
+| Path | Description |
+|---|---|
+| `prepared/y.parquet` | Prepared target table; classification targets use encoded integers and regression targets retain their original units |
+| `prepared/labels.parquet` | Per-target classification label maps used to translate encoded integers back to original labels |
+| `features/associations/<target>/` | Per-target univariate association outputs |
+| `features/predictions/<target>/` | Per-target univariate prediction outputs when prediction output is enabled |
+| `results/results_report.md` | Overall final-evaluation report |
+| `results/results_report_target_<target>.md` | Readable report for one target |
+| `results/final_performances.csv` | Aggregate final-performance table |
+| `results/final_performances_per_target.csv` | Compact per-target performance table |
+| `results/performance_long_table_per_target.csv` | Long-form per-target metric table |
+| `results/main_metric_by_target_acc.csv` or `results/main_metric_by_target_mae.csv` | Main metric for each classification or regression target |
+
+## Using a `df-analyze`-formatted Spreadsheet
 
 Run a classification analysis on the data in the file `spreadsheet.xlsx` with
 configuration options and columns specifically formatted for `df-analyze`:
@@ -393,37 +568,49 @@ because no newlines (empty lines) separate the options from the data.
 
 
 
-#### Overriding Spreadsheet Options
+### Overriding Spreadsheet Options
 
 When spreadsheet and CLI options conflict, then `df-analyze` will prefer the
-CLI args. This allows a base spreadsheet to be setup, and for minor analysis
+CLI args. This allows a base spreadsheet to be set up, and for minor analysis
 variants to be performed without requiring copies of the formatted data file.
 So for example:
 
 ```shell
-python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan mean
-python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan median
-python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --nan impute
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --test-val-size 0.2
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --test-val-size 0.3
+python df-analyze.py --spreadsheet sheet.xlsx --outdir ./results --test-val-size 0.4
 ```
 
 would run three analyses with the options in `spreadsheet.xlsx` (or default
-values) but with the handing of NaN values differing for each run, regardless
-of what is set for `--nan` in `spreadsheet.xlsx`. Note that the same output
-directory can be specified each time, as `df-analyze` will ensure that all
-results are saved to a separate subfolder (with a unique hash reflecting the
-unique combinations of options passed to `df-analyze`). This ensures data
+values) but with the holdout fraction differing for each run, regardless of
+what is set for `--test-val-size` in `spreadsheet.xlsx`. Note that the same
+output directory can be specified each time, as `df-analyze` will ensure that
+all results are saved to a separate subfolder (with a unique hash reflecting
+the unique combinations of options passed to `df-analyze`). This ensures data
 should be overwritten only if the exact same arguments are passed twice (e.g.
 perhaps if manually cleaning your data and re-running).
+
+The parser still accepts the legacy `--nan` and `--norm` choices, including in
+spreadsheet headers, but the current preparation paths use training-fitted
+median imputation and robust normalization. Do not use those two options to
+request a different preprocessing method in the current version.
 
 
 ## Embedding Functionality
 
-`df-analyze` now supports the pre-processing of **image** and **text
-classification** datasets through the `df-embed.py` python script.
+`df-analyze` now supports the pre-processing of **image** and **text**
+classification or regression datasets through the installed `df-embed`
+command or the source-checkout `df-embed.py` Python script.
 
 ### Quickstart
 
 The CLI help can be accessed locally by running
+
+```bash
+df-embed --help
+```
+
+From a source checkout, the equivalent command is:
 
 ```bash
 python df-embed.py --help
@@ -438,21 +625,27 @@ python df-embed.py --download --modality nlp
 python df-embed.py --download --modality vision
 ```
 
-**NOTE**: Because these models are only using CPUs for inference, the
-**memory requirements may be too high for you to efficiently embed a dataset
-on your local machine**. While the embedding code will work and is tested on
-modern e.g. M-series MacBooks (Air or Pro), this may make use of swap memory,
-which could be unacceptably slow for your dataset(s), depending on your
-machine.
+Embedding then uses `--device auto` by default, or an explicit CPU/CUDA
+request:
 
-However, on a Linux-based cluster (e.g. CentOS or RedHat, on Compute Canada),
-then inference on CPU on a node with 128GB RAM is quite efficient (datasets
-of 200k to 300k samples should still embed in a few hours, and smaller
-datasets in just a few minutes). But in order to do this, you will need to
-[build the container](#building-the-singularity-container) and then make use
-of the `run_python_with_home.sh` script included in this repo, and paying
-attention to the advice to use `readlink` or `realpath` for all references to
-files.
+```bash
+python df-embed.py \
+    --data my_data.parquet \
+    --modality nlp \
+    --device auto \
+    --out my_data_embedded.parquet
+```
+
+**NOTE**: These models require enough memory for the input and model state.
+CUDA is used when the installed PyTorch build and GPU support it; larger
+embedding batches are more likely to benefit, while small batches may show
+limited improvement. CPU execution is also supported. In either mode, the
+input data and model state must fit in available memory.
+
+On a Linux cluster, a CPU node with enough memory can also be used. Follow the
+instructions to [build the container](#building-the-singularity-container), use
+the included `run_python_with_home.sh` script, and pass absolute paths obtained
+with `readlink` or `realpath`.
 
 
 ### About the Embedding Models
@@ -480,16 +673,18 @@ but is trained with a focus on producing quality zero-shot embeddings.
 
 ### Supported Dataset Formats
 
-Currently, `df-analyze` supports only small to medium-sized datasets
-(generally, under 200 features and under 200 000 or so samples), and strongly
+The ordinary dense `df-analyze` pipeline is intended for small to medium-sized
+datasets (generally, under 200 features and under 200 000 or so samples).
+[Large-scale feature downsampling](#large-scale-feature-downsampling) provides
+separate paths for wider numeric or SVMlight matrices. The project strongly
 aims to keep compute times under 24 hours (on a typical node on the [Niagara
 cluster](https://docs.alliancecan.ca/wiki/Niagara)) for key operations
-(embedding, predictive analysis). This means **any dataset to be embedded should
-also generally be under abut 200 000 samples**.
+(embedding, predictive analysis). This means **any dataset to be embedded
+should also generally be under about 200 000 samples**.
 
-For embedding, `df-embed.py` makes use of CPU implementations only, and, to
-not complicate data loading, currently requires a dataset to fit in memory,
-loaded from a single, correctly-formatted `.parquet` file.
+For embedding, `df-embed.py` supports CPU and CUDA inference through
+`--device`, and, to not complicate data loading, currently requires a dataset
+to fit in memory, loaded from a single, correctly-formatted `.parquet` file.
 
 #### Image Data
 
@@ -507,7 +702,7 @@ with the columns named "image" and "target". The order of the columns is
 not important, but the "target" column must contain floating point values.
 The floating point data type is not really important, however, if the table
 is loaded into a Pandas DataFrame `df`, then running
-`df["label"].astype(float)` should not raise any exceptions.
+`df["target"].astype(float)` should not raise any exceptions.
 
 The "image" column must be of `bytes` dtype, and must be readable by PIL
 `Image.open`. Internally, all we do, again assuming that the data is loaded
@@ -559,7 +754,7 @@ file must be a two-column table with the columns named "text" and
 "target". The order of the columns is not important, but the "target"
 column must contain floating point values. The floating point data type is
 not really important, however, if the table is loaded into a Pandas
-DataFrame `df`, then running `df["label"].astype(float)` should not raise
+DataFrame `df`, then running `df["target"].astype(float)` should not raise
 any exceptions.
 
 The "text" column will have "object" ("O") dtype. Assuming you have loaded
@@ -577,6 +772,25 @@ to be at most a paragraph or two. I.e. the underlying model is not really
 intended for efficient or effective document embedding. However, this
 ultimately depends on the text language and it is hard to make general
 recommendations here.
+
+## Large-Scale Feature Downsampling
+
+Feature downsampling reduces a very wide matrix before the usual univariate
+analyses, feature selection, and model tuning. It is disabled by default.
+
+```shell
+python df-analyze.py \
+    --df wide.parquet \
+    --target outcome \
+    --mode classify \
+    --feat-downsample f-test \
+    --n-feat-downsample 1000 \
+    --outdir ./wide_results
+```
+
+The supported methods are `normalized-variance` and `f-test`. See
+[large-scale feature downsampling](docs/feature_downsampling.md) for table,
+large-table, sparse SVMlight, protected-feature, and output details.
 
 ## Usage on Compute Canada / Digital Research Alliance of Canada / Slurm HPC Clusters
 
@@ -645,8 +859,8 @@ installed. Otherwise, there will be an error message and other information.
 
 If the singularity container `df_analyze.sif` is available in the project
 root, then it can be used to run arbitrary python scripts with the [helper
-script](https://github.com/stfxecutables/df-analyze/blob/master/run_python_with_home.sh)
-inlcluded in the repo. E.g.
+script](run_python_with_home.sh)
+included in the repo. E.g.
 
 ```bash
 cd $SCRATCH/df-analyze
@@ -670,42 +884,41 @@ script to submit to the SLURM scheduler.
 
 # Analysis Pipeline
 
-The overall data preparation and analysis process comprises six steps (some
-optional):
+The main data preparation and analysis steps are:
 
-1. [Feature Type and Cardinalty
-   Inference](#feature-type-and-cardinality-inference) (Data Inspection)
-1. [Data Preparation and Preprocessing](#data-preparation)
-1. [Data Splitting](#data-splitting)
-1. [Univariate Feature Analyses](#univariate-feature-analyses)
-1. [Feature Selection (optional)](#feature-selection)
-1. [Hyperparameter tuning](#hyperparameter-tuning)
-1. [Final validation and analyses](#final-validation)
+1. Load the data and create the raw training and holdout partitions.
+1. Infer feature types from the training rows.
+1. Fit preprocessing on the training rows and apply it to the holdout rows.
+1. Optionally downsample a very wide feature matrix.
+1. Run the univariate feature analyses.
+1. Optionally select features.
+1. Tune the requested models.
+1. Evaluate the tuned models on the final holdout.
+1. Optionally run adaptive error or error consistency analyses.
 
 In pseudocode (which closely approximates the code in the `main()` function of
-[`df-analyze.py`](https://github.com/stfxecutables/df-analyze/blob/develop/df-analyze.py)):
+[`df-analyze.py`](df-analyze.py)):
 
 ```python
     options = get_options()
     df = options.load_df()
 
-    inspection       =  inspect_data(df, options)
-    prepared         =  prepare_data(inspection)
-    train, test      =  prepared.split()
-    associations     =  target_associations(train)
-    predictions      =  univariate_predictions(train)
-    embed_selected   =  embed_select_features(train, options)
-    wrap_selected    =  wrap_select_features(train, options)
-    filter_selected  =  filter_select_features(train, associations, predictions, options)
-    selected         =  (embed_selected, wrap_selected, filter_selected)
-    tuned            =  tune_models(train, selected, options)
-    results          =  eval_tuned(test, tuned, selected, options)
+    train_rows, test_rows = raw_train_test_indices(df, options)
+    inspection = inspect_data(df.iloc[train_rows], options)
+    prepared = prepare_data(df, inspection, train_rows, test_rows)
+
+    for train, test in prepared.get_splits():
+        associations = target_associations(train)
+        predictions = univariate_predictions(train)
+        selected = select_features(train, associations, predictions, options)
+        tuned = tune_models(train, selected, options)
+        results = eval_tuned(test, tuned, selected, options)
 ```
 
 ### Feature Type and Cardinality Inference
 
 Features are checked, in order of priority, for features that cannot be used
-by `df-anaylze`. Unusable features are features which are:
+by `df-analyze`. Unusable features are features which are:
 
 1. Constant (all values identical or identical except NaNs)
 2. Sequential (autocorrelated) datetime data
@@ -721,7 +934,7 @@ Then, features are identified as one of:
 based on a number of heuristics relating to the unique values and counts of
 these values, and the string representations of the features. These
 heuristics are made explicit in code
-[here](https://github.com/stfxecutables/df-analyze/blob/develop/src/preprocessing/inspection/inference.py).
+[here](src/df_analyze/preprocessing/inspection/inference.py).
 
 ### Data Preparation
 
@@ -738,8 +951,8 @@ argument) is represented as
 $$\mathcal{D} = (\mathbf{X}, y) = \texttt{(X, y)},$$
 
  where
-`X` is a Pandas `DataFrame` and the target variable is represented in `y`, a
-Pandas `Series`.
+`X` is a Pandas `DataFrame`. For a single-target analysis, `y` is a Pandas
+`Series`; for a multi-target analysis, it is a Pandas `DataFrame`.
 
 1. Data Loading
    1. Type Conversions
@@ -760,8 +973,10 @@ Pandas `Series`.
 2. Target Encoding
    1. Categorical [targets are deflated](#categorical-target-deflation) and
       label encoded to values in $[0, n]$
-   2. Continuous targets are robustly min-max normalized (to middle 95% of
-      values)
+   2. A single continuous target keeps the original public behavior and is
+      robustly normalized using its 2.5th and 97.5th percentiles
+   3. Multiple continuous targets are converted to numeric values and kept in
+      their original units
 
 #### Categorical Deflation
 
@@ -804,6 +1019,14 @@ variable, each test fold would be expected to be 20% of the samples, so about
 6 representatives of this class. This is highly unlikely to result in
 reliable performance estimates for this class, and so only introduces noise
 to final performance metrics.
+
+For a single target, classes with 20 or fewer samples are removed. This matches
+the original cleaning behavior and avoids folds with too few examples.
+
+Multi-target classification is handled differently. Removing a row because one
+target has a rare class would also remove valid labels from the other targets,
+so low-support classes are retained and reported instead. The run continues
+only when valid training and validation splits can still be constructed.
 
 ### Data Splitting
 
@@ -910,6 +1133,174 @@ features in $\symbfit{R}$ are also greedily eliminated.
 - Final k-fold of model tuned and trained on selected features from $\mathcal{D}_\text{train}$
 - Final evaluation of trained model on $\mathcal{D}_\text{test}$
 
+### Adaptive Error Analysis
+
+Pass `--adaptive-error` to estimate the chance that each classification
+prediction is wrong. Unlike accuracy, which summarizes the whole holdout set,
+adaptive error gives each row its own estimated error rate:
+
+```shell
+python df-analyze.py \
+    --df data/small_classifier_data.json \
+    --target target \
+    --mode classify \
+    --classifiers lgbm xgb dummy \
+    --feat-select filter \
+    --htune-trials 5 \
+    --adaptive-error \
+    --aer-oof-folds 5 \
+    --aer-bins 20 \
+    --outdir ./adaptive_error_results
+```
+
+The confidence-to-error mapping is learned from out-of-fold predictions on the
+training data. Holdout labels are used only to report how well that mapping
+worked. In a multi-target classification run, each target is analyzed
+separately.
+
+#### How Adaptive Error Works
+
+1. Refit the tuned model in several training folds and collect out-of-fold
+   predictions.
+2. Calibrate the class probabilities when a supported calibrator improves them.
+3. Compare the confidence measures available for that model. In `auto` mode,
+   choose the one with the best cross-fitted Brier score.
+4. Learn the relationship between confidence and observed error on the
+   out-of-fold predictions.
+5. Apply that learned relationship to the holdout predictions.
+6. Report coverage and error thresholds with one-sided Clopper-Pearson bounds.
+
+#### Options
+
+The main options are:
+
+| Flag | Default | Description |
+|---|---:|---|
+| `--adaptive-error` | `False` | Enable AER analysis |
+| `--aer-oof-folds` | `5` | OOF splits used for AER fitting and cross-fitting |
+| `--aer-bins` | `20` | Nominal number of confidence bins |
+| `--aer-min-bin-count` | `10` | Minimum observations before bins are merged or reduced |
+| `--aer-prior-strength` | `2.0` | Strength of shrinkage toward the global error rate |
+| `--no-aer-smooth` | off | Disable the default local smoothing |
+| `--aer-monotonic` | `False` | Enforce a monotonic confidence-to-error mapping |
+| `--aer-adaptive-binning` | `False` | Use quantile-like adaptive instead of fixed-width bins |
+| `--aer-confidence-metric` | `auto` | Select a confidence signal; `auto` uses cross-fitted Brier score |
+| `--aer-nmin` | `1` | Minimum accepted observations at a risk-controlled threshold |
+| `--aer-target-error` | `0.05` | Target error rate for risk-control summaries |
+| `--aer-alpha` | `0.05` | Significance level for the one-sided error bound |
+| `--aer-top-k` | `0` | Analyze at most the top *k* usable base models; `0` means all |
+| `--no-preds` | off | Replace large per-sample prediction outputs with placeholders |
+
+Available base-model confidence signals are:
+
+| Metric | Meaning |
+|---|---|
+| `proba_margin` | Margin between the leading class probabilities |
+| `tree_vote_agreement` | Agreement among individual tree votes |
+| `tree_leaf_support` | Training support represented by tree leaves |
+| `knn_vote` | Nearest-neighbor vote agreement |
+| `knn_dist_weighted` | Distance-weighted nearest-neighbor confidence |
+| `knn_min_dist` | Confidence derived from nearest-neighbor distance |
+| `auto` | Select the best available signal by cross-fitted Brier score |
+
+Use `--aer-ensemble` to compare combinations of the eligible models. Select
+specific combinations with `--aer-ensemble-strategies`:
+
+```shell
+--aer-ensemble \
+--aer-ensemble-strategies min_aer topn calibration_aware
+```
+
+Adaptive error is available only for classification models that provide usable
+class probabilities. Dummy models are skipped.
+
+#### Outputs
+
+Results are written below `results/adaptive_error`. The main files contain the
+model ranking, the learned confidence/error relationship, one estimated error
+rate per holdout row, reliability bins, and coverage/accuracy summaries. See
+`python df-analyze.py --help` for every option.
+
+For a multi-target run, each target has its own sanitized subdirectory below
+`results/adaptive_error`; with multiple external test sets, `testXX` is added
+before the target directory. The cross-model files at each AER base directory
+include:
+
+| Path | Purpose |
+|---|---|
+| `run_config.json` | AER settings, selected models, and run metadata |
+| `tables/models_ranked.csv` | Ranking and folder location of analyzed base models |
+| `tables/aer_metrics_by_model.csv` | Cross-model error-quality metrics |
+| `plots/confidence_vs_expected_error_compare.png` | Confidence-to-error comparison across models |
+| `predictions/test_per_sample_multi_model.csv` | Model-specific AER columns aligned to the same holdout rows |
+
+Each `models/<model-slug>/` directory can contain:
+
+| Path | Purpose |
+|---|---|
+| `metadata/proba_calibrator.json` | Selected probability-calibration method |
+| `metadata/confidence_metric_selection.json` | Selected confidence signal and candidate Brier scores |
+| `metadata/adaptive_error_metrics.json` | Global test error and AER calibration summary |
+| `tables/oof_confidence_error_bins.csv` | OOF bins used to learn the mapping |
+| `tables/test_confidence_error_bins.csv` | Holdout behavior of that mapping |
+| `tables/test_error_reliability_bins.csv` | Calibration-style reliability table |
+| `tables/coverage_accuracy_curve.csv` | Selective accuracy as progressively higher-risk rows are rejected |
+| `tables/coverage_summary.csv` | Selected operating points from the full coverage curve |
+| `tables/clinician_view.csv` | Row ID, labels, `aer_pct`, and target-error flag |
+| `predictions/oof_per_sample.csv` | Row-level diagnostics for learning the mapping |
+| `predictions/test_per_sample.csv` | Main row-level holdout output |
+| `reports/clinician_view.md` | Short report for non-technical readers |
+
+The main columns in `predictions/test_per_sample.csv` are:
+
+| Column | Meaning |
+|---|---|
+| `row_id` | Original row index |
+| `y_true`, `y_pred` | Encoded true and predicted class IDs |
+| `y_true_label`, `y_pred_label` | Decoded labels when a label map is available |
+| `correct` | `1` for a correct prediction, otherwise `0` |
+| `confidence` | Selected confidence signal after its transformation |
+| `aer`, `aer_pct` | Estimated error probability as a fraction and percentage |
+| `flag_gt_target_error` | `1` when `aer` meets or exceeds `--aer-target-error` |
+| `p_max`, `p_2nd`, `p_margin` | Diagnostics from calibrated class probabilities |
+| `p_pred`, `p_pred_margin` | Probability diagnostics for the predicted class |
+
+In `adaptive_error_metrics.json`, `global_error_test` is the ordinary holdout
+error rate. `brier_error_test` and `ece_error_test` measure the quality of the
+per-row error estimates; smaller values are better.
+
+If the AER directory is absent, first confirm that the task is classification,
+that `--adaptive-error` was passed, and that at least one non-dummy model
+provided usable probabilities. Placeholder prediction files indicate that
+`--no-preds` was used. Use `--aer-adaptive-binning` to switch to quantile-based
+bins or increase `--aer-min-bin-count` to merge sparse bins more aggressively.
+
+### Error Consistency
+
+Error consistency (EC) asks whether models trained on slightly different rows
+make similar mistakes on the same samples. Enable it with `--ec`:
+
+```shell
+python df-analyze.py \
+    --df data/small_classifier_data.json \
+    --target target \
+    --mode classify \
+    --classifiers lr dummy \
+    --feat-select filter \
+    --htune-trials 1 \
+    --ec \
+    --ec-folds 2 \
+    --ec-repetitions 2 \
+    --ec-output-detail summary \
+    --outdir ./ec_classification_results
+```
+
+See the [error-consistency guide](docs/error_consistency.md) for formulas,
+classification and regression examples, runtime guidance, and interpretation.
+The [command-line arguments](docs/arguments.md) and
+[program outputs](docs/program_outputs.md) document the complete interface and
+file layout.
+
 
 # Program Outputs
 
@@ -921,10 +1312,13 @@ The output directory structure is as follows:
     ├── 📂 features/
     │   ├── 📂 associations/
     │   ├── 📂 descriptions/
+    │   ├── 📂 downsampling/
     │   └── 📂 predictions/
     ├── 📂 inspection/
     ├── 📂 prepared/
     ├── 📂 results/
+    │   ├── 📂 adaptive_error/       # when --adaptive-error is enabled
+    │   └── 📂 error_consistency/    # when --error-consistency is enabled
     ├── 📂 selection/
     │   ├── 📂 embed/
     │   ├── 📂 filter/
@@ -948,10 +1342,10 @@ numerical results for that portion of analysis. The inline tables in each
 Markdown report are saved in the same directory of the report always as
 plaintext CSV (`*.csv`) files, and also occasionally additionally as a
 Parquet file (`*.parquet`). This is because CSV is inherently lossy and, to
-be blunt, basically a [trash format for represeting tabular
+be blunt, basically a [trash format for representing tabular
 data](https://haveagreatdata.com/posts/why-you-dont-want-to-use-csv-files/).
 However, it is human-readable and easy to import into common spreadsheet
-tools (Excel, Google Sheets, LibreOffice Calc, etc ).
+tools (Excel, Google Sheets, LibreOffice Calc, etc.).
 
 The `.json` files are largely for internal use and in general should not need
 to be inspected by the end-user. However, `.json` was chosen over, e.g.,
@@ -982,23 +1376,23 @@ The subdirectories should generally be read / inspected in the following order:
 ├── 📂 features/
 │   ...
 ├── features_renamings.md
-└── options.json
+├── options.json
+└── terminal_outputs.txt
 ```
 
 This directory is named after a unique hash of all the options used for a
 particular invocation / execution of the `df-analyze` command.
 
-This directory contains two files. The `feature_renamings.md` file indicates
-which features have been renames due to problematic characters or duplicate
-feature names.
+The `feature_renamings.md` file indicates which features have been renamed due
+to problematic characters or duplicate feature names.
 
-The single file `options.json` is a `.json` representation of the specific
-invocation or spreadsheet options. This is to allow multiple sets of outputs
-from different options to be placed automatically in the same `--outdir`
-top-level directory, e.g. as mentioned
-[above](#overriding-spreadsheet-options).
+The `options.json` file is a `.json` representation of the specific invocation
+or spreadsheet options. `terminal_outputs.txt` captures the run's terminal
+output. The options hash allows multiple sets of outputs from different
+options to be placed automatically in the same `--outdir` top-level directory,
+e.g. as mentioned [above](#overriding-spreadsheet-options).
 
-So for example, running mutiple options combinations to the same output
+So for example, running multiple options combinations to the same output
 directory will make something like:
 
 ```
@@ -1017,7 +1411,7 @@ directory will make something like:
 ```
 
 This contains the inferred cardinalities (e.g. continuous, ordinal, or categorical)
-of each features, as well as the decision rule used for each inference. Features
+of each feature, as well as the decision rule used for each inference. Features
 with ambiguous cardinalities are also coerced to some cardinality (usually ordinal,
 since categorical variables are often low-information and increase compute costs),
 and this is detailed here.
@@ -1026,7 +1420,7 @@ and this is detailed here.
 
 Nuisance features (timeseries features or non-categorical
 datetime data, unique identifiers, constant features) are automatically
-removed by `df-anyalze`, and those destructive data changes are documented
+removed by `df-analyze`, and those destructive data changes are documented
 here.
 
 [Deflated categorical variables](#categorical-deflation) are documented here
@@ -1038,11 +1432,13 @@ as well.
 ```
 📂 prepared/
 ├── info.json
+├── idx_tests.json
 ├── labels.parquet
 ├── preparation_report.md
 ├── X.parquet
 ├── X_cat.parquet
 ├── X_cont.parquet
+├── X_tabpfn.parquet
 └── y.parquet
 ```
 
@@ -1050,14 +1446,17 @@ as well.
   - shows compute times for processing steps, and documents changes to the data
     shape following encoding, deflation, and dropping of target NaN values
 - `labels.parquet`
-  - a Pandas Series linking the target label encoding (integer) to the name of
-    the encoded class
+  - target label encodings for one or more classification targets
+- `idx_tests.json`
+  - row indices used for the saved train and test partitions
 - `X.parquet`
   - the final encoded complete data (categoricals and numeric)
 - `X_cat.parquet`
   - the original (unencoded) categoricals
 - `X_cont.parquet`
   - the continuous features (normalized and NaN imputed)
+- `X_tabpfn.parquet`
+  - the separate raw-valued/categorical predictor view used by TabPFN
 - `y.parquet`
   - the final encoded target variable
 - `info.json`
@@ -1070,10 +1469,17 @@ as well.
 📂 features/
 ├── 📂 associations/
 ├── 📂 descriptions/
-├── 📂 predictions/
+├── 📂 downsampling/
+└── 📂 predictions/
 ```
 
 Data for univariate analyses of all features.
+
+#### `📂 downsampling`
+
+This directory is populated when `--feat-downsample` is enabled. See
+[program outputs](docs/program_outputs.md) for its file layout and
+[feature downsampling](docs/feature_downsampling.md) for method details.
 
 #### `📂 associations`
 
@@ -1168,7 +1574,7 @@ Data for univariate analyses of all features.
   - summary tables of all feature predictive performances
 
 **Note**: for "large" datasets
-([currently](https://github.com/stfxecutables/df-analyze/blob/17abaa1bde45b9ee288bd027b7b20cd87d8c33d4/src/_constants.py#L130-L131),
+([currently](src/df_analyze/_constants.py),
 greater than 1500 samples) these predictions are made using a small (1500
 samples) subsample of the full data, for compute time reasons.
 
@@ -1179,7 +1585,7 @@ scikit-learn `KBinsDiscretizer` and `StratifiedShuffleSplit`, respectively).
 
 For categorical targets (e.g. classification), the subsample is a "viable
 subsample" (see `viable_subsample` in
-[`prepare.py`](https://github.com/stfxecutables/df-analyze/blob/develop/src/preprocessing/prepare.py))
+[`prepare.py`](src/df_analyze/preprocessing/prepare.py))
 that first ensures all target classes have the minimum number of samples
 required to avoid deflation and/or problems with 5-fold splits eliminating
 a target class.
@@ -1190,7 +1596,7 @@ a target class.
 📂 selection/
 ├── 📂 embed/
 ├── 📂 filter/
-└── 📂 wrap/
+└── 📂 wrapper/
 ```
 
 Data describing the features selected by each feature selection method.
@@ -1200,15 +1606,14 @@ Data describing the features selected by each feature selection method.
 
 ```
 📂 embed/
-├── linear_embed_selection_data.json
-├── lgbm_embed_selection_data.json
-└── embedded_selection_report.md
+├── <model>_embed_selection_data.json
+└── <model>_embedded_selection_report.md
 ```
 
-- `embedded_selection_report.md`
+- `<model>_embedded_selection_report.md`
   - summary of features selected by (each) embedded model
-- `[model]_embed_selection_data.json`
-  - feature names and importance scores for `[model]`
+- `<model>_embed_selection_data.json`
+  - feature names and importance scores for `<model>`
 
 #### `📂 filter`
 
@@ -1219,7 +1624,7 @@ Data describing the features selected by each feature selection method.
 ```
 
 - `association_selection_report.md`
-  - summary of features selected by univariate assocations with the target
+  - summary of features selected by univariate associations with the target
   - also includes which measure of association was used for selection
 - `prediction_selection_report.md`
   - summary of features selected by univariate predictive performance
@@ -1228,10 +1633,10 @@ Data describing the features selected by each feature selection method.
 **Note**: Feature importances are not included here, as these are already
 available in the [`features` directory](#📂-features).
 
-#### `📂 wrap`
+#### `📂 wrapper`
 
 ```
-📂 wrap/
+📂 wrapper/
 ├── wrapper_selection_data.json
 └── wrapper_selection_report.md
 ```
@@ -1257,11 +1662,18 @@ available in the [`features` directory](#📂-features).
 
 ```
 📂 results/
-├── eval_htune_results.json
+├── 📂 adaptive_error/
+├── 📂 error_consistency/
+├── eval_htune_results_jsonpickle.json
 ├── final_performances.csv
+├── final_performances_per_target.csv
+├── main_metric_by_target_<metric>.csv
 ├── performance_long_table.csv
+├── performance_long_table_per_target.csv
 ├── prediction_results.json
+├── results_report_target_<target>.md
 ├── results_report.md
+├── run_timing.json
 ├── X_test.csv
 ├── X_train.csv
 ├── y_test.csv
@@ -1272,6 +1684,16 @@ available in the [`features` directory](#📂-features).
   of these wide table]
   - final summary table of all performances for all models and feature
     selection methods
+- `final_performances_per_target.csv`,
+  `performance_long_table_per_target.csv`,
+  `main_metric_by_target_<metric>.csv`, and
+  `results_report_target_<target>.md`
+  - optional multi-target long-form, main-metric, and readable per-target
+    results
+- `adaptive_error` and `error_consistency`
+  - optional analysis directories described in
+    [Adaptive Error Analysis](#adaptive-error-analysis) and
+    [Error Consistency](#error-consistency)
 - `prediction_results.json`
   - dictionary of all actual predictions (predicted classes in
     classification, predicted target values in regression) and, if
@@ -1285,9 +1707,9 @@ available in the [`features` directory](#📂-features).
     are Python lists that can be converted to NumPy with `np.array`
     - Dtype information for above conversions is stored in `preds_dtype` and
       `probs_dtype` fields
-    - for the predictions, e.g. `preds_test`, after making a NumPy ndarray,
-      the entry at [*i*, *j*] corresponds to the predicted probabilities for
-      sample *i*, and label *j*
+    - for probability arrays such as `probs_test`, after making a NumPy
+      ndarray, the entry at [*i*, *j*] corresponds to the predicted probability
+      for sample *i* and label *j*
     - the original meaning of the labels prior to encoding is stored in
       `labels.parquet`, in the [`prepared` folder](#📂-prepared)
 - `results_report.md`
@@ -1301,13 +1723,19 @@ available in the [`features` directory](#📂-features).
   - target samples used for final holdout and k-fold evaluations
 - `y_train.csv`
   - target samples used for training and tuning
-- `eval_htune_results.json`
+- `eval_htune_results_jsonpickle.json`
   - serialization of final results object (not human readable, for internal
     use)
+- `run_timing.json`
+  - run status and total time, separate planned and actually resolved device
+    decisions, per-model-task device records, runtime fold counts, model
+    failures, and error-consistency backend information
 
 ## Complete Listing
 
-The full tree-structure of outputs is as follows:
+One representative tree-structure of the baseline outputs is as follows.
+Additional downsampling, multi-target, adaptive-error, error-consistency, and
+timing outputs are described above.
 
 ```
 📂 fe57fcf2445a2909e688bff847585546/
@@ -1329,38 +1757,42 @@ The full tree-structure of outputs is as follows:
 │   └── short_inspection_report.md
 ├── 📂 prepared/
 │   ├── info.json
+│   ├── idx_tests.json
 │   ├── labels.parquet
 │   ├── preparation_report.md
 │   ├── X.parquet
 │   ├── X_cat.parquet
 │   ├── X_cont.parquet
+│   ├── X_tabpfn.parquet
 │   └── y.parquet
 ├── 📂 results/
-│   ├── eval_htune_results.json
+│   ├── eval_htune_results_jsonpickle.json
 │   ├── final_performances.csv
 │   ├── performance_long_table.csv
 │   ├── results_report.md
+│   ├── run_timing.json
 │   ├── X_test.csv
 │   ├── X_train.csv
 │   ├── y_test.csv
 │   └── y_train.csv
 ├── 📂 selection/
 │   ├── 📂 embed/
-│   │   ├── embed_selection_data.json
-│   │   └── embedded_selection_report.md
+│   │   ├── <model>_embed_selection_data.json
+│   │   └── <model>_embedded_selection_report.md
 │   ├── 📂 filter/
 │   │   ├── association_selection_report.md
 │   │   └── prediction_selection_report.md
 │   └── 📂 wrapper/
+│       ├── wrapper_selection_data.json
+│       └── wrapper_selection_report.md
 ├── 📂 tuning/
 │   └── tuned_models.csv
-└── options.json
+├── options.json
+└── terminal_outputs.txt
 ```
 
 # Limitations
 
-- there can be only [one target variable per program invocation /
-  run](#one-target-variable-per-invocation--run)
 - malformed data (e.g. quoting, feature names with spaces or commas,
   malformed `.csv`, etc)
 - [inappropriate data](#inappropriate-data) (e.g. timeseries or sequence
@@ -1371,17 +1803,15 @@ The full tree-structure of outputs is as follows:
   [below](#dataset-size) for how to estimate your expected runtime on the
   Compute Canada / DRAC Niagara cluster)
 - wrapper selection is extremely expensive and the number of selected
-  features (or elminated features, in the case of step-down selection) should
+  features (or eliminated features, in the case of step-down selection) should
   *not* exceed:
     - step-up: 20
     - step-down: 10
 
+## Target Variables
 
-
-## One Target Variable per Invocation / Run
-
-Features and targets must be treated fundamentally differently by all aspects
-of analysis. E.g.
+Use `--target` for one target or `--targets` for several. Features and targets
+need different handling throughout the analysis. For example:
 
 - normalization of targets in regression must be different than normalization
   of continuous features
@@ -1391,10 +1821,9 @@ of analysis. E.g.
   stratification must be based on the target (e.g. choosing a different
   target will generally result in different splits)
 
-In addition, feature selection is expensive, and must be done for each target
-variable. Runtimes are often suprisingly sensitive to the distribution of the
-target variable.
-
+Feature selection is run for each target, then combined using the selected
+multi-target aggregation strategy. Multi-target classification uses a
+support-aware split proxy and records when stratification must be relaxed.
 
 ## Dataset Size
 
@@ -1416,6 +1845,19 @@ for $n$ less than $30 000$ and for $p$ less than $200$ or so. Doubling the
 amount of selected features should probably roughly double the expected max
 runtime, but this is not confirmed by experiments.
 
+These are historical estimates for the full, dense pipeline and should not be
+extrapolated to the large-scale downsampling paths. Downsampling can reduce the
+feature count seen by later analyses, but the ordinary and large-feature table
+paths must still load their source table in memory; use SVMlight for a source
+matrix that must remain sparse.
+
+The estimate also predates multi-target analysis, KAN, TabPFN, adaptive error,
+and error consistency, and should not be used for those combinations. Error
+consistency adds `folds x repetitions` refits for every target, model, and
+selected feature set: 25 with the default 5 x 5 settings, 50 with the
+classification profile, and 250 with the regression profile. Use a 2 x 2 run
+with one model to measure the dataset and machine before scaling up.
+
 The expected runtime on your machine will be quite different. If $n <
 10 000$ and $p < 60$, and you have a recent machine (e.g. M1/M2/M3 series
 Mac) then it is likely that your runtimes will be significantly faster than
@@ -1428,17 +1870,18 @@ hyperparameter values (e.g. for [support vector
 machines](https://scikit-learn.org/stable/auto_examples/svm/plot_rbf_parameters.html#sphx-glr-auto-examples-svm-plot-rbf-parameters-py))
 also have a significant impact on fit times.
 
-**Datasets with $n > 30 000$, i.e. over 30 000 samples should probably be
-considered computationally intractable for `df-analyze`**. They are unlikely
-to complete in under 24 hours, and may in fact cause out-of-memory errors
-(the average Niagara node has only about 190GB of RAM, and to use all 40
-cores, the dataset must be copied 40 times due to Python's inability to
-properly share memory).
+**Datasets with $n > 30 000$, i.e. over 30 000 samples, should be considered
+potentially intractable for the full all-model, wrapper-selection
+configuration described above**. Such a configuration is unlikely to complete
+in under 24 hours, and may in fact cause out-of-memory errors (the average
+Niagara node has only about 190GB of RAM, and to use all 40 cores, the dataset
+must be copied 40 times due to Python's inability to properly share memory).
 
 If you have a dataset where the expected runtime is getting close to 24 hours,
 then you should strongly consider limiting the `df-analyze` options such that:
 
-- only 2-3 models (NOT including the `mlp`) are used, AND
+- only 2-3 models (avoiding compute-heavy `mlp`, `kan`, or `tabpfn` runs unless
+  they are specifically needed) are used, AND
 - wrapper-based feature selection is not used
 
 
@@ -1446,7 +1889,7 @@ then you should strongly consider limiting the `df-analyze` options such that:
 ## Inappropriate Data
 
 Datasets with any kind of strong spatio-temporal clustering, or
-spatio-temporal autocorrelation, `df-anaylze` *technically* can handle (i.e.
+spatio-temporal autocorrelation, `df-analyze` *technically* can handle (i.e.
 will produce results for), but the reported results will be deeply invalid
 and misleading. This includes:
 
@@ -1472,9 +1915,8 @@ and misleading. This includes:
 
 - **image data** (e.g. computer vision prediction tasks)
   - These datasets will almost always be too expensive for the ML algorithms
-    in `df-analyze` to process, and years of research and experience have now
-    shown that classic ML models (which are all that `df-analyze` fits)
-    simply are not capable here
+    in `df-analyze` to process directly; use `df-embed.py` to convert supported
+    image data to tabular embeddings, or use a task-specific vision model
 
 ## Inappropriate Tasks
 
@@ -1487,12 +1929,13 @@ are simply beyond the scope of `df-analyze`.
 
 ## Completed Features
 
-### Automated Data Preproccesing
+### Automated Data Preprocessing
 
 - **NaN Removal and Handling**
   - samples with NaN target are dropped (see Target Handling below)
-  - for continous features, NaNs can be either dropped, mean, median, or
-    multiply imputed (default: mean imputation)
+  - continuous-feature NaNs are median-imputed using the training partition
+  - the legacy `--nan` choices are still accepted for configuration
+    compatibility, but the current preparation paths use median imputation
   - categorical features encode NaNs as an additional class / level
 
 - **Bad Feature Detection and Removal**
@@ -1518,12 +1961,12 @@ are simply beyond the scope of `df-analyze`.
     dropping of NaN samples required)
 
 - **Continuous Feature Handling**
-  - continuous features are MinMax normalized to be in [0, 1]
-  - this means `df-analyze` is currently **sensitive to extreme values**
-  - TODO: make robust (percentile, or even
-    [quantile](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.QuantileTransformer.html#sklearn.preprocessing.QuantileTransformer))
-    normalization options available, and auto-detect such cases and warn the
-    user
+  - continuous features use robust normalization by default
+  - the legacy `--norm` choices `minmax` and `robust` are accepted for
+    configuration compatibility, but the current preparation paths use robust
+    normalization
+  - normalization is fitted on training data and then applied to holdout data;
+    users should still inspect extreme values and distribution shift
 
 - **Target Handling**
   - all samples with NaN targets are dropped (categorical or continuous)
@@ -1536,18 +1979,51 @@ are simply beyond the scope of `df-analyze`.
     warned (these cause problems in nested stratified k-fold, and any estimated
     of any metric or performance on such a small class is essentially
     meaningless)
-  - continuous or ordinal regression targets are robustly normalized using
-    2.5th and 97.5th percentile values
+  - continuous or ordinal single regression targets are robustly normalized
+    using 2.5th and 97.5th percentile values
     - with this normalization, 95% of the target values are in [0, 1]
     - thus an MAE of, say, 0.5, means that the error is about half of the
       target (robust) range
     - this also aids in the convergence and fitting of scale-sensitive models
     - this also makes prediction metrics (e.g. MAE) more comparable across
       different targets
+  - for multi-target classification, low-support levels are retained so valid
+    labels in the other targets are not silently discarded; the preparation
+    report records them and the user is warned
+  - before model tuning, every level in each multi-target training partition
+    must support every selected K-fold model's declared tuning design (currently
+    three or five folds); non-K-fold tuners are excluded from this specific
+    preflight. Holdout support is checked against the resolved final-CV fold
+    count (up to five, and limited by group count); otherwise the run stops with
+    the target, level, observed count, and required count
+  - an internally generated classification holdout must contain every level
+    present in training. An externally supplied holdout may omit a training
+    level; when its remaining levels still satisfy fold support, the run emits
+    an explicit warning because the omitted level's performance cannot be
+    estimated
+  - binary sensitivity, specificity, PPV and NPV use encoded class `1`; each
+    per-target result table and Markdown report records the corresponding
+    original positive-class label
+  - each actual multi-target tuning and final-CV fold is also verified after
+    splitting: classification targets retain the required per-level support,
+    and every regression target varies in both sides of every fold.
+    Deterministic alternative partitions are attempted before an impossible
+    grouped or ungrouped design is rejected
+  - multi-target regression targets remain in their original units in saved
+    predictions and per-target MAE/MSE reports. Model fitting uses independent
+    training-only target standardization and then inverse-transforms
+    predictions
+  - raw errors from targets with different units are not averaged for model
+    ranking. Aggregate regression output reports normalized `multi-nmae`,
+    `multi-nmse`, and `multi-nrmse`, plus scale-independent R²; explicitly
+    prefixed `raw-*` metrics are informational only
+  - every regression target must vary in both the outer training and holdout
+    partitions; deterministic alternative outer partitions are tried before an
+    impossible design is rejected
 
 
 
-### Feature Descriptive Statisics
+### Feature Descriptive Statistics
 
 - **Continuous and ordinal features**:
   - Non-robust:
@@ -1571,8 +2047,6 @@ are simply beyond the scope of `df-analyze`.
   - Statistical: t-test, Mann-Whitney U, Brunner-Munzel W, Pearson r and
     associated p-values
   - Other: Cohen's d, AUROC, mutual information
-  - for
-
 - **Continuous/Ordinal Feature -> Continuous Target**:
   - Pearson's and Spearman's r and p-values
   - [F-test](https://scikit-learn.org/stable/modules/generated/sklearn.feature_selection.f_regression.html)
@@ -1580,33 +2054,33 @@ are simply beyond the scope of `df-analyze`.
   - mutual information
 
 - **Categorical Feature -> Continuous Target**:
-  - [Kruskal-Wallace
+  - [Kruskal-Wallis
     H](https://en.wikipedia.org/wiki/Kruskal%E2%80%93Wallis_one-way_analysis_of_variance)
     and p-value
   - mutual information
   - **NOTE**: There are relatively few measures of association for
-    categorical-continuous variable pairs. Kruskal-Wallace H has few
+    categorical-continuous variable pairs. Kruskal-Wallis H has few
     statistical assumptions, and essentially checks the extent that the medians
     of each level in the categorical variable differ significantly on the
-    continuous target, and
+    continuous target.
 
 - **Categorical Feature -> Categorical Target**:
   - Cramer's V
 
 ### Univariate Prediction Metrics for each Feature-Target Pair
 
-- simple linear predictive models (sklearn [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html), [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html#sklearn.linear_model.SGDRegressor))  are hyperparameter tuned (using 5-fold) over a small
-  grid for each feature
+- simple linear predictive models (sklearn
+  [SGDClassifier](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDClassifier.html)
+  and
+  [SGDRegressor](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.SGDRegressor.html))
+  are tuned with 5-fold cross-validation over a small grid for each feature
 - a dummy regressor or classifier (e.g. predict target mean, predict largest
   class) is also always fit
 - reported metrics are for the best-tuned model mean performance across the 5
   folds:
-  - **Continuous/Ordinal Target (e.g. regression)**:
-    - Models: DummyRegressor, ElasticNet, Linear regression, SVM with radial basis
-    - Metrics: accuracy, AUROC (except for SVM), sensitivity, specificity
   - **Categorical Target (e.g. classification)**:
-    - Models: DummyClassifier, Logistic regression, SVM with radial basis
-    - Metrics: mean abs. error, mean sq. error, median abs. error, mean abs.
-      percentage error, R2, percent variance explained
-
-
+    - Models: DummyClassifier and SGDClassifier
+    - Metrics: accuracy, AUROC, sensitivity, specificity, F1, balanced accuracy
+  - **Continuous/Ordinal Target (e.g. regression)**:
+    - Models: DummyRegressor and SGDRegressor
+    - Metrics: mean absolute error, mean squared error, median absolute error, R²

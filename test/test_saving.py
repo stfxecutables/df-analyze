@@ -18,17 +18,66 @@ from typing import (
     Any,
     Tuple,
 )
+from unittest.mock import patch
 
 import numpy as np
 from numpy import ndarray
 from pandas import DataFrame, Series
 
 from df_analyze.cli.cli import ProgramOptions
+from df_analyze.enumerables import DfAnalyzeClassifier, DfAnalyzeRegressor
 from df_analyze.hypertune import EvaluationResults
 from df_analyze.preprocessing.inspection.inspection import InspectionResults
+from df_analyze.saving import ProgramDirs, windows_io_path
 from df_analyze.selection.embedded import EmbedSelected
 from df_analyze.selection.wrapper import WrapperSelected
 from df_analyze.testing.datasets import TestDataset, fast_ds
+
+
+def test_target_markdown_reports_resolved_final_cv_folds() -> None:
+    scores = DataFrame(
+        {
+            "model": ["dummy"],
+            "selection": ["none"],
+            "metric": ["acc"],
+            "trainset": [0.8],
+            "holdout": [0.7],
+            "cv_mean": [0.6],
+            "final_cv_folds": [3],
+        }
+    )
+
+    adaptive_report = ProgramDirs()._target_markdown(
+        scores, target_name="target", is_classification=True
+    )
+    assert "## 3-fold performance on holdout set" in adaptive_report
+
+    with np.testing.assert_raises_regex(ValueError, "final_cv_folds"):
+        ProgramDirs()._target_markdown(
+            scores.drop(columns="final_cv_folds"),
+            target_name="target",
+            is_classification=True,
+        )
+
+    scores["positive_class"] = "case"
+    positive_report = ProgramDirs()._target_markdown(
+        scores, target_name="target", is_classification=True
+    )
+    assert "original label `case`" in positive_report
+
+
+def test_safe_target_names_are_collision_resistant() -> None:
+    dirs = ProgramDirs()
+
+    first = dirs._safe_target_name("a/b")
+    second = dirs._safe_target_name("a?b")
+
+    assert first != second
+    assert dirs._safe_target_name("a/b") == first
+    assert first.casefold() != second.casefold()
+    assert dirs._safe_target_name("Outcome").casefold() != dirs._safe_target_name(
+        "outcome"
+    ).casefold()
 
 
 @fast_ds
@@ -36,6 +85,48 @@ def test_random_options(dataset: Tuple[str, TestDataset]) -> None:
     dsname, ds = dataset
     for _ in range(100):
         ProgramOptions.random(ds)
+
+
+def _local_test_dataset(root: Path, *, classification: bool) -> TestDataset:
+    mode = "classification" if classification else "regression"
+    dataset_root = root / mode / "local"
+    dataset_root.mkdir(parents=True)
+    DataFrame(
+        {
+            "feature_name": ["feature", "target"],
+            "type": ["continuous", "continuous"],
+        }
+    ).to_csv(dataset_root / "types.csv", index=False)
+    target = [0, 1, 0, 1] if classification else [0.1, 0.4, 0.8, 1.2]
+    DataFrame({"feature": [1.0, 2.0, 3.0, 4.0], "target": target}).to_parquet(
+        dataset_root / "local.parquet", index=False
+    )
+    return TestDataset(dataset_root)
+
+
+def test_random_options_falls_back_when_only_tabpfn_was_drawn(
+    tmp_path: Path,
+) -> None:
+    cls_ds = _local_test_dataset(tmp_path / "classification-data", classification=True)
+    reg_ds = _local_test_dataset(tmp_path / "regression-data", classification=False)
+
+    with (
+        patch.object(
+            DfAnalyzeClassifier,
+            "random_n",
+            return_value=(DfAnalyzeClassifier.TabPFN,),
+        ),
+        patch.object(
+            DfAnalyzeRegressor,
+            "random_n",
+            return_value=(DfAnalyzeRegressor.TabPFN,),
+        ),
+    ):
+        cls_options = ProgramOptions.random(cls_ds)
+        reg_options = ProgramOptions.random(reg_ds)
+
+    assert cls_options.classifiers == (DfAnalyzeClassifier.Dummy,)
+    assert reg_options.regressors == (DfAnalyzeRegressor.Dummy,)
 
 
 @fast_ds
@@ -210,6 +301,10 @@ def test_eval_preds_save(dataset: Tuple[str, TestDataset]) -> None:
         for _ in range(10):
             options = ProgramOptions.random(ds, outdir=outdir)
             selected = EvaluationResults.random(ds, options)
+            for idx, result in enumerate(selected.results):
+                result.per_target_tuning_scores = {
+                    "target_a": 0.25 + (idx / 1000)
+                }
             preds = [result.to_preds() for result in selected.results]
 
             selected.save(root=outdir, fold_idx=None)
@@ -294,3 +389,22 @@ def test_descs_save(dataset: Tuple[str, TestDataset]) -> None:
         ) from e
     finally:
         tempdir.cleanup()
+
+
+def test_target_feature_descriptions_support_long_paths(tmp_path: Path) -> None:
+    base = tmp_path / ("long-output-component-" * 8)
+    windows_io_path(base).mkdir(parents=True)
+    dirs = ProgramDirs(descriptions=base)
+    frame = DataFrame({"value": [1.0]})
+
+    dirs.save_feature_descriptions(
+        frame,
+        frame,
+        frame,
+        target_name="scholarship_holder",
+    )
+
+    target_dir = base / "scholarship_holder"
+    assert windows_io_path(target_dir / "continuous_features.csv").is_file()
+    assert windows_io_path(target_dir / "categorical_features.csv").is_file()
+    assert windows_io_path(target_dir / "target.csv").is_file()

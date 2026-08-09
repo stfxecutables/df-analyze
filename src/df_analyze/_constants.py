@@ -1,6 +1,6 @@
 from pathlib import Path
 
-VERSION = "4.1.0"
+VERSION = "4.2.0"
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DATADIR = ROOT / "data"
@@ -139,8 +139,8 @@ when running multi-target classification.
 
 Notes
 -----
-Kept separate from N_TARG_LEVEL_MIN so multi-target filtering heuristics can be
-tuned independently without changing single-target behavior.
+Kept separate from N_TARG_LEVEL_MIN so multi-target filtering heuristics and
+split warnings can be adjusted without changing single-target behavior.
 """
 
 MULTITARGET_MAX_RARE_LEVEL_FRAC = 1.0 / 3.0
@@ -280,3 +280,13 @@ N_FILTER_TOTAL_DEFAULT = 30
 P_FILTER_CONT_DEFAULT = 0.50
 P_FILTER_CAT_DEFAULT = 0.50
 P_FILTER_TOTAL_DEFAULT = 0.5
+
+N_FEAT_DOWNSAMPLE_DEFAULT = 1000
+DOWNSAMPLE_CHUNK_SIZE_DEFAULT = 25_000
+DOWNSAMPLE_SCORE_LIMIT = 500
+LARGE_FEATURE_THRESHOLD = 100_000
+EXTREME_FEATURE_THRESHOLD = 1_000_000
+DIRECT_DOWNSAMPLE_MAX_FEATURES = 50_000
+DOWNSAMPLE_MAX_CHUNK_BYTES = 512 * 1024**2
+DOWNSAMPLE_MAX_DENSE_BYTES = 2 * 1024**3
+DOWNSAMPLE_DENSE_PEAK_FACTOR = 4

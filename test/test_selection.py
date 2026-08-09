@@ -10,13 +10,21 @@ sys.path.append(str(ROOT))  # isort: skip
 
 from random import randint
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
+import numpy as np
+import pytest
 from _pytest.capture import CaptureFixture
+from pandas import DataFrame, Series
 
 from df_analyze._constants import ROOT
-from df_analyze.analysis.univariate.associate import CatAssociation, ContAssociation
-from df_analyze.cli.cli import ProgramOptions
+from df_analyze.analysis.univariate.associate import (
+    AssocResults,
+    CatAssociation,
+    ContAssociation,
+)
+from df_analyze.cli.cli import ProgramOptions, get_options
 from df_analyze.enumerables import (
     ClsScore,
     EmbedSelectionModel,
@@ -25,13 +33,19 @@ from df_analyze.enumerables import (
     WrapperSelectionModel,
 )
 from df_analyze.nonsense import silence_spam
-from df_analyze.selection.embedded import embed_select_features
+from df_analyze.selection.embedded import EmbedSelected, embed_select_features
 from df_analyze.selection.filter import (
     FilterSelected,
     filter_by_univariate_associations,
     filter_by_univariate_predictions,
 )
+from df_analyze.selection.multitarget import (
+    aggregate_embed_selected,
+    aggregate_filter_selected,
+    aggregate_wrapper_selected,
+)
 from df_analyze.selection.stepwise import (
+    RedundantFeatures,
     StepwiseSelector,
     stepwise_select,
 )
@@ -48,6 +62,421 @@ from df_analyze.testing.datasets import (
 DATA = ROOT / "data/banking/bank.json"
 RUNTIMES = ROOT / "runtimes"
 RUNTIMES.mkdir(exist_ok=True)
+
+
+def test_backward_selection_returns_retained_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = SimpleNamespace(
+        X=DataFrame(np.zeros((4, 4)), columns=["a", "b", "c", "d"])
+    )
+    options = SimpleNamespace(
+        wrapper_select=WrapperSelection.StepDown,
+        wrapper_model=WrapperSelectionModel.Linear,
+        redundant_selection=False,
+        n_feat_wrapper=2,
+    )
+
+    def fake_fit(selector: StepwiseSelector) -> None:
+        selector.selected = {"b", "d"}
+        selector.ordered_scores = [("a", 0.9), ("c", 0.8)]
+        selector.candidate_scores = {"b": 0.7, "c": 0.8, "d": 0.6}
+
+    monkeypatch.setattr(StepwiseSelector, "fit", fake_fit)
+    result = stepwise_select(prep_train=prepared, options=options)  # type: ignore[arg-type]
+
+    assert result is not None
+    selected, scores, _, _ = result
+    assert selected == ["b", "d"]
+    assert scores == {"b": 0.7, "d": 0.6}
+
+
+@pytest.mark.fast
+def test_backward_redundancy_cannot_remove_below_requested_feature_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = SimpleNamespace(
+        X=DataFrame(np.zeros((4, 4)), columns=["a", "b", "c", "d"]),
+        is_classification=True,
+    )
+    options = SimpleNamespace(
+        wrapper_select=WrapperSelection.StepDown,
+        wrapper_model=WrapperSelectionModel.Linear,
+        redundant_selection=True,
+        n_feat_wrapper=2,
+    )
+
+    def all_candidates_redundant(selector: StepwiseSelector) -> RedundantFeatures:
+        selector.candidate_scores = {"a": 0.6, "b": 0.7, "c": 0.8, "d": 0.9}
+        return RedundantFeatures(
+            best="d",
+            best_score=0.9,
+            features=["a", "b", "c", "d"],
+            scores=[0.6, 0.7, 0.8, 0.9],
+            metric="accuracy",
+        )
+
+    monkeypatch.setattr(
+        StepwiseSelector, "_get_best_new_features", all_candidates_redundant
+    )
+
+    result = stepwise_select(
+        prep_train=prepared,  # type: ignore[arg-type]
+        options=options,  # type: ignore[arg-type]
+    )
+
+    assert result is not None
+    selected, scores, redundants, early_stop = result
+    assert selected == ["a", "b"]
+    assert scores == {"a": 0.6, "b": 0.7}
+    assert redundants[0].features == ["d", "c"]
+    assert redundants[0].scores == [0.9, 0.8]
+    assert not early_stop
+
+    report = WrapperSelected(
+        method=options.wrapper_select,
+        model=options.wrapper_model,
+        selected=selected,
+        scores=scores,
+        redundants=redundants,
+        early_stop=early_stop,
+        is_classification=True,
+    ).to_markdown()
+    assert "## Selected Features" in report
+
+
+def test_lgbm_wrapper_avoids_nested_cpu_parallelism() -> None:
+    prepared = SimpleNamespace(
+        X=DataFrame(np.zeros((4, 2)), columns=["a", "b"])
+    )
+    options = SimpleNamespace(
+        wrapper_model=WrapperSelectionModel.LGBM,
+        redundant_selection=False,
+    )
+    selector = StepwiseSelector(
+        prep_train=prepared,  # type: ignore[arg-type]
+        options=options,  # type: ignore[arg-type]
+        n_features=1,
+    )
+
+    assert selector._candidate_n_jobs() == 1
+
+
+@pytest.mark.fast
+def test_total_filter_count_is_respected_for_continuous_features() -> None:
+    columns = [f"feature_{idx}" for idx in range(6)]
+    prepared = SimpleNamespace(
+        X_cont=DataFrame(np.zeros((4, 6)), columns=columns),
+        X_cat=DataFrame(index=range(4)),
+        is_classification=True,
+    )
+    associations = AssocResults(
+        conts=DataFrame(
+            {"mut_info": [0.1, 0.6, 0.3, 0.5, 0.2, 0.4]},
+            index=columns,
+        ),
+        cats=None,
+        is_classification=True,
+    )
+
+    selected = filter_by_univariate_associations(
+        prepared,
+        associations,
+        n_total=3,
+    )
+
+    assert selected.selected == ["feature_1", "feature_3", "feature_5"]
+
+
+@pytest.mark.fast
+def test_total_filter_count_supports_missing_categorical_matrix() -> None:
+    columns = [f"feature_{idx}" for idx in range(6)]
+    prepared = SimpleNamespace(
+        X_cont=DataFrame(np.zeros((4, 6)), columns=columns),
+        X_cat=None,
+        is_classification=True,
+    )
+    associations = AssocResults(
+        conts=DataFrame(
+            {"mut_info": [0.1, 0.6, 0.3, 0.5, 0.2, 0.4]},
+            index=columns,
+        ),
+        cats=None,
+        is_classification=True,
+    )
+
+    selected = filter_by_univariate_associations(
+        prepared,
+        associations,
+        n_total=3,
+    )
+
+    assert selected.selected == ["feature_1", "feature_3", "feature_5"]
+
+
+@pytest.mark.fast
+def test_total_filter_count_is_allocated_across_feature_types() -> None:
+    cont_columns = [f"cont_{idx}" for idx in range(4)]
+    cat_columns = [f"cat_{idx}" for idx in range(2)]
+    prepared = SimpleNamespace(
+        X_cont=DataFrame(np.zeros((4, 4)), columns=cont_columns),
+        X_cat=DataFrame(np.zeros((4, 2)), columns=cat_columns),
+        is_classification=True,
+    )
+    associations = AssocResults(
+        conts=DataFrame(
+            {"mut_info": [0.4, 0.3, 0.2, 0.1]},
+            index=cont_columns,
+        ),
+        cats=DataFrame(
+            {"mut_info": [0.6, 0.5]},
+            index=cat_columns,
+        ),
+        is_classification=True,
+    )
+
+    selected = filter_by_univariate_associations(
+        prepared,
+        associations,
+        n_total=3,
+    )
+
+    assert selected.selected == ["cont_0", "cont_1", "cat_0"]
+
+
+@pytest.mark.fast
+def test_class_level_associations_count_as_one_source_feature() -> None:
+    columns = ["first", "second", "third"]
+    prepared = SimpleNamespace(
+        X_cont=DataFrame(np.zeros((4, 3)), columns=columns),
+        X_cat=DataFrame(index=range(4)),
+        is_classification=True,
+    )
+    associations = AssocResults(
+        conts=DataFrame(
+            {
+                "mut_info": [
+                    0.8,
+                    0.7,
+                    0.6,
+                    0.5,
+                    0.4,
+                    0.3,
+                ]
+            },
+            index=[
+                "first__target.0",
+                "first__target.1",
+                "second__target.0",
+                "second__target.1",
+                "third__target.0",
+                "third__target.1",
+            ],
+        ),
+        cats=None,
+        is_classification=True,
+    )
+
+    selected = filter_by_univariate_associations(
+        prepared,
+        associations,
+        n_total=2,
+    )
+
+    assert selected.selected == ["first", "second"]
+    assert selected.cont_scores is not None
+    assert selected.cont_scores.to_dict() == {"first": 0.8, "second": 0.6, "third": 0.4}
+
+
+@pytest.mark.fast
+def test_cli_total_filter_count_does_not_set_type_specific_defaults(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "input.csv"
+    DataFrame({"feature": [0, 1], "target": [0, 1]}).to_csv(path, index=False)
+
+    options = get_options(
+        f"--df {path} --target target --feat-select filter --n-feat-filter 2 "
+        f"--outdir {tmp_path / 'outputs'}"
+    )
+
+    assert options.n_feat_filter == 2
+    assert options.n_filter_cont is None
+    assert options.n_filter_cat is None
+
+
+@pytest.mark.fast
+def test_embedded_selection_preserves_public_trial_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.tuned_model = SimpleNamespace(coef_=np.array([1.0, 0.0]))
+
+        def htune_optuna(self, **kwargs: Any) -> None:
+            calls.append(kwargs)
+
+    class FakeSelector:
+        def __init__(self, model: Any, prefit: bool) -> None:
+            assert prefit
+
+        def get_support(self) -> np.ndarray:
+            return np.array([True, False])
+
+    monkeypatch.setattr(
+        "df_analyze.selection.embedded.SGDClassifierSelector", FakeModel
+    )
+    monkeypatch.setattr(
+        "df_analyze.selection.embedded.SelectFromModel", FakeSelector
+    )
+    prepared = SimpleNamespace(
+        X=DataFrame({"first": [0.0, 1.0], "second": [1.0, 0.0]}),
+        y=Series([0, 1], name="target"),
+        groups=None,
+        is_classification=True,
+    )
+    options = SimpleNamespace(
+        is_classification=True,
+        embed_select=(EmbedSelectionModel.Linear,),
+        htune_cls_metric=object(),
+        htune_reg_metric=None,
+        htune_trials=1,
+    )
+
+    selected = embed_select_features(prepared, options)
+
+    assert calls[0]["n_trials"] == 100
+    assert selected[0].selected == ["first"]
+
+
+def test_multitarget_wrapper_aggregation_uses_oriented_scores() -> None:
+    first = WrapperSelected(
+        method=WrapperSelection.StepUp,
+        model=WrapperSelectionModel.Linear,
+        selected=["feature_a", "feature_b"],
+        scores={"feature_a": -0.2, "feature_b": -0.8},
+        redundants=[],
+        early_stop=False,
+        is_classification=False,
+    )
+    second = WrapperSelected(
+        method=WrapperSelection.StepUp,
+        model=WrapperSelectionModel.Linear,
+        selected=["feature_a", "feature_b"],
+        scores={"feature_a": -0.1, "feature_b": -0.7},
+        redundants=[],
+        early_stop=False,
+        is_classification=False,
+    )
+
+    selected = aggregate_wrapper_selected(
+        [first, second], target_names=["a", "b"], top_k=1
+    )
+
+    assert selected is not None
+    assert selected.selected == ["feature_a"]
+
+
+def test_multitarget_aggregation_without_top_k_keeps_union() -> None:
+    first = WrapperSelected(
+        method=WrapperSelection.StepUp,
+        model=WrapperSelectionModel.Linear,
+        selected=["a", "b"],
+        scores={"a": 2.0, "b": 1.0},
+        redundants=[],
+        early_stop=False,
+        is_classification=True,
+    )
+    second = WrapperSelected(
+        method=WrapperSelection.StepUp,
+        model=WrapperSelectionModel.Linear,
+        selected=["c", "d"],
+        scores={"c": 2.0, "d": 1.0},
+        redundants=[],
+        early_stop=False,
+        is_classification=True,
+    )
+
+    selected = aggregate_wrapper_selected(
+        [first, second], target_names=["a", "b"], top_k=None
+    )
+
+    assert selected is not None
+    assert set(selected.selected) == {"a", "b", "c", "d"}
+
+
+def test_multitarget_filter_borda_excludes_unselected_candidates() -> None:
+    first = FilterSelected(
+        selected=["f1"],
+        cont_scores=Series({"f1": 3.0, "f2": 2.0, "f3": 1.0}),
+        cat_scores=None,
+        method="prediction",
+        is_classification=True,
+    )
+    second = FilterSelected(
+        selected=["f2"],
+        cont_scores=Series({"f1": 1.0, "f2": 3.0, "f3": 2.0}),
+        cat_scores=None,
+        method="prediction",
+        is_classification=True,
+    )
+
+    aggregated = aggregate_filter_selected(
+        [first, second],
+        method="prediction",
+        is_cls=True,
+        target_names=["a", "b"],
+    )
+
+    assert set(aggregated.selected) == {"f1", "f2"}
+
+
+def test_multitarget_embed_borda_excludes_unselected_candidates() -> None:
+    first = EmbedSelected(
+        model=EmbedSelectionModel.Linear,
+        selected=["f1"],
+        scores={"f1": 3.0, "f2": 2.0, "f3": 1.0},
+        is_classification=True,
+    )
+    second = EmbedSelected(
+        model=EmbedSelectionModel.Linear,
+        selected=["f2"],
+        scores={"f1": 1.0, "f2": 3.0, "f3": 2.0},
+        is_classification=True,
+    )
+
+    aggregated = aggregate_embed_selected(
+        [[first], [second]], target_names=["a", "b"]
+    )
+
+    assert len(aggregated) == 1
+    assert set(aggregated[0].selected) == {"f1", "f2"}
+
+
+def test_multitarget_frequency_default_keeps_single_target_union() -> None:
+    selected = [
+        WrapperSelected(
+            method=WrapperSelection.StepUp,
+            model=WrapperSelectionModel.Linear,
+            selected=[f"f{idx}"],
+            scores={f"f{idx}": float(idx)},
+            redundants=[],
+            early_stop=False,
+            is_classification=True,
+        )
+        for idx in range(6)
+    ]
+
+    aggregated = aggregate_wrapper_selected(
+        selected,
+        strategy="freq",
+        target_names=[f"target_{idx}" for idx in range(6)],
+    )
+
+    assert aggregated is not None
+    assert set(aggregated.selected) == {f"f{idx}" for idx in range(6)}
 
 
 def do_association_select(dataset: tuple[str, TestDataset]) -> FilterSelected:
@@ -155,9 +584,7 @@ def estimate_select(
             handle.write(
                 f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
             )
-        handle.write(
-            f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {minutes:3.1f}\n"
-        )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {minutes:3.1f}\n")
         handle.flush()
 
     return minutes
@@ -223,9 +650,7 @@ def estimate_knn_backward_select(
     estimate_select(dataset, file=file, forward=False, model=model, subsample=subsample)
 
 
-def do_redundant_report(
-    dataset: tuple[str, TestDataset], capsys: CaptureFixture
-) -> None:
+def do_redundant_report(dataset: tuple[str, TestDataset], capsys: CaptureFixture) -> None:
     dsname, ds = dataset
     if dsname == "internet_usage":  # undersampled target
         return
@@ -397,9 +822,7 @@ def do_logged(
             handle.write(
                 f"{'dsname':>40}  {'N':>6}  {'N_sub':>6}  {'p':>5}  {'n_iter':>6}  {'minutes':>4}\n"
             )
-        handle.write(
-            f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {elapsed:3.1f}\n"
-        )
+        handle.write(f"{dsname:>40}  {N:>6d}  {n:>6d}  {p:5d}  {m:>6d}  {elapsed:3.1f}\n")
 
 
 @fast_ds

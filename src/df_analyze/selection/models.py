@@ -9,6 +9,8 @@ from warnings import warn
 if TYPE_CHECKING:
     from df_analyze.cli.cli import ProgramOptions
 from df_analyze.preprocessing.prepare import PreparedData
+from df_analyze.enumerables import FeatureSelection
+from df_analyze.runtime.hardware import DeviceIntent
 from df_analyze.selection.embedded import (
     EmbedSelected,
     EmbedSelectionModel,
@@ -16,6 +18,15 @@ from df_analyze.selection.embedded import (
 )
 from df_analyze.selection.wrapper import WrapperSelected, wrap_select_features
 from df_analyze.testing.datasets import TestDataset
+
+
+def _raise_strict_cuda_failure(options: ProgramOptions, error: Exception) -> None:
+    runtime = getattr(options, "runtime", None)
+    if (
+        runtime is not None
+        and runtime.intent is DeviceIntent.CUDA
+    ):
+        raise error
 
 
 @dataclass
@@ -47,20 +58,28 @@ def model_select_features(
     embed_selected = None
     wrap_selected = None
     try:
-        if options.embed_select is not None:
+        if (
+            FeatureSelection.Embedded in options.feat_select
+            and options.embed_select is not None
+        ):
             embed_selected = embed_select_features(
                 prep_train=prep_train, options=options
             )
     except Exception as e:
+        _raise_strict_cuda_failure(options, e)
         warn(
             f"Got error when attempting embedded feature selection:\n{e}\n"
             f"{traceback.format_exc()}"
         )
 
     try:
-        if options.wrapper_select is not None:
+        if (
+            FeatureSelection.Wrapper in options.feat_select
+            and options.wrapper_select is not None
+        ):
             wrap_selected = wrap_select_features(prep_train=prep_train, options=options)
     except Exception as e:
+        _raise_strict_cuda_failure(options, e)
         warn(
             f"Got error when attempting wrapped-based feature selection:\n{e}\n"
             f"{traceback.format_exc()}"

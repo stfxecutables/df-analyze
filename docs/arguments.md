@@ -36,9 +36,11 @@ options:
   --df DF
                         The dataframe to analyze.
 
-                        Currently only tables saved as either `.xlsx`, `.json` or `.csv`, or NumPy
-                        `ndarray`s saved as "<filename>.npy" are supported, but a file exported by
-                        Pandas `DataFrame.to_*` method is preferred.
+                        Tables may be saved as `.parquet`, `.xlsx`, `.json`, or `.csv`. Files exported
+                        with a Pandas `DataFrame.to_*` method are preferred. SVMlight text input is
+                        also supported. Auto mode recognizes common sparse-file suffixes. For other
+                        filenames, it reads a short prefix to detect SVMlight, including gzip, bzip2,
+                        and xz-compressed files.
 
                         If your data is saved as a Pandas `DataFrame`, it must have shape
                         `(n_samples, n_features)` or `(n_samples, n_features + 1)`. The name of the
@@ -54,6 +56,13 @@ options:
 
                         The (string) name of the target variable for either regression or
                         classification.
+
+  --targets TARGETS
+
+                        Comma-separated target columns for a multi-target classification or
+                        regression run. All targets in one run must use the same `--mode`: use
+                        `classify` for categorical targets or `regress` for numeric targets. Rows
+                        missing any target are removed. This takes precedence over `--target`.
 
   --grouper GROUPER [GROUPER ...]
 
@@ -109,44 +118,84 @@ options:
 
                         If "classify", do classification. If "regress", do regression.
 
+  --device {auto,cpu,cuda}
+                        Choose how supported work uses an accelerator. Auto is recommended: each
+                        selected component uses CUDA when its backend is available, MPS when
+                        supported, and otherwise CPU. CPU disables accelerator checks. CUDA is
+                        strict for selected CUDA-capable work; missing backends and runtime CUDA
+                        errors stop the run, while CPU-only work remains on CPU. The startup plan
+                        shows every resolved device.
+
   --classifiers  [ ...]
 
                         The list of classifiers to use when comparing classification performance.
-                        Can be a list of elements from: [dummy gandalf knn lgbm lr mlp rf sgd svm].
+                        Registered tokens: [catboost dummy dtree et gandalf kan knn lgbm lr mlp rf
+                        sgd svm tabpfn xgb]. The svm token is currently disabled by the CLI.
+                        Defaults: [dummy knn lgbm sgd lr].
 
-                          knn         scikit-learn KNeighborsClassifier.
+                          catboost    CatBoost classifier.
+
+                          xgb         XGBoost classifier.
+
+                          tabpfn      TabPFN classifier.
+
+                          dtree       scikit-learn DecisionTreeClassifier.
+
+                          et          scikit-learn ExtraTreesClassifier.
+
+                          knn         KNN classifier (scikit-learn on CPU or PyTorch on CUDA).
 
                           lgbm        LightGBM boosted decision tree classifier.
 
                           rf          LightGBM random forest classifier.
 
+                          lr          scikit-learn LogisticRegression.
+
                           sgd         scikit-learn SGDClassifier.
 
                           mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
 
-                          svm         scikit-learn support vector classifer.
+                          kan         Kolmogorov-Arnold network implemented with PyKAN/skorch.
+
+                          svm         Registered for compatibility; currently disabled.
 
                           gandalf     Gated Adaptive Network for Deep Automated Learning of
                                       Features for Tabular Data: https://arxiv.org/abs/2207.08548
 
                           dummy       scikit-learn DummyClassifier.
 
-  --regressors {knn,lgbm,rf,elastic,sgd,mlp,svm,gandalf,dummy} [{knn,lgbm,rf,elastic,sgd,mlp,svm,gandalf,dummy} ...]
+  --regressors  [ ...]
 
                         The list of regressors to use when comparing regression model performance.
-                        Can be a list of elements from: [dummy elastic gandalf knn lgbm mlp rf sgd svm].
+                        Registered tokens: [catboost dummy dtree elastic et gandalf kan knn lgbm mlp
+                        rf sgd svm tabpfn xgb]. The svm token is currently disabled by the CLI.
+                        Defaults: [dummy knn lgbm sgd elastic].
 
-                          knn         scikit-learn KNeighborsRegressor.
+                          catboost    CatBoost regressor.
+
+                          xgb         XGBoost regressor.
+
+                          tabpfn      TabPFN regressor.
+
+                          dtree       scikit-learn DecisionTreeRegressor.
+
+                          et          scikit-learn ExtraTreesRegressor.
+
+                          knn         KNN regressor (scikit-learn on CPU or PyTorch on CUDA).
 
                           lgbm        LightGBM boosted decision tree regressor.
 
                           rf          LightGBM random forest regressor.
 
+                          elastic     scikit-learn ElasticNet.
+
                           sgd         scikit-learn SGDRegressor.
 
                           mlp         Modern multi-layer perceptron implemented in skorch/PyTorch.
 
-                          svm         scikit-learn support vector regressor.
+                          kan         Kolmogorov-Arnold network implemented with PyKAN/skorch.
+
+                          svm         Registered for compatibility; currently disabled.
 
                           gandalf     Gated Adaptive Network for Deep Automated Learning of
                                       Features for Tabular Data: https://arxiv.org/abs/2207.08548
@@ -161,7 +210,7 @@ options:
                                       target variables.
 
                           embed       Select features using a model with implicit feature selection,
-                                      e.g. an L1-regularized model or decision tree. For avaialable
+                                      e.g. an L1-regularized model or decision tree. For available
                                       models, see `--embed-select`.
 
                           wrap        Select features by recursive model evaluation, currently either
@@ -178,6 +227,82 @@ options:
                         provided in the `--df` or `--spreadsheet` argument to `df-analyze.py`. This
                         is to prevent double-dipping / circular analysis that can result in
                         (extremely) biased performance estimates.
+
+  --feat-downsample {none,normalized-variance,f-test}
+
+                        Reduce a wide matrix before the usual feature-selection and tuning stages.
+                        Supervised methods use separate rows for feature ranking and model tuning.
+                        The default is none.
+
+  --n-feat-downsample N_FEAT_DOWNSAMPLE
+
+                        Maximum number or fraction of features retained.
+
+  --downsample-save-scores
+
+                        Save scores for every feature instead of only the leading scores.
+
+  --downsample-chunk-size DOWNSAMPLE_CHUNK_SIZE
+
+                        Maximum number of source features scored in one chunk.
+
+  --downsample-screening-fraction DOWNSAMPLE_SCREENING_FRACTION
+
+                        Fraction of each training fold used to rank features. The remaining training
+                        rows are used for model tuning, so the same rows are not used for both steps.
+
+  --large-feature-mode
+
+                        Downsample a numeric table that fits in memory but is too wide for normal
+                        preparation.
+
+  --assume-numeric-features
+
+                        Skip the pandas dtype check in large-feature table mode; all predictor values
+                        must still convert to finite numbers.
+
+  --skip-full-prepared-save-before-downsample
+
+                        Do not save the full prepared matrix before downsampling.
+
+  --input-format {auto,table,svmlight}
+
+                        Input format. Auto recognizes common SVMlight suffixes and checks the
+                        start of files with other names.
+
+  --svmlight-index-base {auto,zero,one}
+
+                        Feature index base used to name SVMlight columns.
+
+  --svmlight-metadata SVMLIGHT_METADATA [SVMLIGHT_METADATA ...]
+
+                        Row-aligned CSV, TSV, JSON, or Parquet clinical sidecars, one per
+                        SVMlight input (training file followed by external test files).
+
+  --svmlight-feature-map SVMLIGHT_FEATURE_MAP
+
+                        CSV, TSV, JSON, or Parquet file with feature_index and feature_name
+                        columns, plus an optional protected column.
+
+  --svmlight-sample-id-column SVMLIGHT_SAMPLE_ID_COLUMN
+
+                        Clinical ID column checked row-by-row against SVMlight comments of
+                        the form '# column=value' (or '# value').
+
+  --downsample-protected-features DOWNSAMPLE_PROTECTED_FEATURES [DOWNSAMPLE_PROTECTED_FEATURES ...]
+
+                        Source feature names that are always kept during large-table or
+                        SVMlight downsampling. They count toward --n-feat-downsample.
+
+  --mt-agg-strategy {borda,freq}
+
+                        How to combine feature selection across targets. Borda combines the
+                        per-target ranks; freq favors features selected for more targets.
+
+  --mt-top-k MT_TOP_K
+
+                        Keep only the top K features after multi-target aggregation. When
+                        omitted, every feature selected for at least one target is retained.
 
   --embed-select  [ ...]
 
@@ -279,9 +404,11 @@ options:
                         Number or percentage (as a value in [0, 1]) of total features of any kind
                         (categorical or continuous) to select via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-feat-filter`,
-                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-feat-filter` argument will be ignored.
+                        Only two of the three options `--n-feat-filter`,
+                        `--n-filter-cont`, and `--n-filter-cat` may be specified at once.
+                        If all three are supplied, `--n-feat-filter` is ignored. When
+                        only the total is supplied, it is allocated between continuous
+                        and categorical features in proportion to their available counts.
 
 
   --n-feat-wrapper N_FEAT_WRAPPER
@@ -296,9 +423,11 @@ options:
                         Number or percentage (as a value in [0, 1]) of continuous features to select
                         via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-feat-filter`,
-                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-feat-filter` argument will be ignored.
+                        Only two of the three options `--n-feat-filter`,
+                        `--n-filter-cont`, and `--n-filter-cat` may be specified at once.
+                        If all three are supplied, `--n-feat-filter` is ignored. When
+                        only the total is supplied, it is allocated between continuous
+                        and categorical features in proportion to their available counts.
 
 
   --n-filter-cat N_FILTER_CAT
@@ -306,9 +435,11 @@ options:
                         Number or percentage (as a value in [0, 1]) of categorical features to select
                         via filter-based feature selection.
 
-                        Note only two of two of the three options:`--n-feat-filter`,
-                        `--n-filter-cont`, and  `--n-filter-cat` may be specified at once,
-                        otherwise the `--n-feat-filter` argument will be ignored.
+                        Only two of the three options `--n-feat-filter`,
+                        `--n-filter-cont`, and `--n-filter-cat` may be specified at once.
+                        If all three are supplied, `--n-feat-filter` is ignored. When
+                        only the total is supplied, it is allocated between continuous
+                        and categorical features in proportion to their available counts.
 
 
   --filter-method
@@ -374,7 +505,7 @@ options:
                                       https://scikit-learn.org/stable/modules/generated/
                                       sklearn.feature_selection.mutual_info_classif.html
 
-                          H           Kruskal-Wallace H. Extension of Mann-Whitney U test to multiple
+                          H           Kruskal-Wallis H. Extension of Mann-Whitney U test to multiple
                                       groups, i.e. tests whether one group has a significantly more
                                       extreme median than the rest.
 
@@ -409,7 +540,7 @@ options:
                                       https://scikit-learn.org/stable/modules/generated/
                                       sklearn.feature_selection.mutual_info_regression.html
 
-                          H           Kruskal-Wallace H. Extension of Mann-Whitney U test to multiple
+                          H           Kruskal-Wallis H. Extension of Mann-Whitney U test to multiple
                                       groups, i.e. tests whether one group has a significantly more
                                       extreme median than the rest.
 
@@ -462,7 +593,7 @@ options:
                         During each iteration of redundant wrapper selection, while some features may
                         have nearly identical scores to the best score, some of these features may
                         nevertheless contain very different information. Feature selection is done on
-                        the one-hot encoded cateogoricals and normalized continuous features. This
+                        the one-hot encoded categoricals and normalized continuous features. This
                         means correlation (e.g. Pearson) gives us a rough measure of association
                         between all selectable features. A more "cautious" redundant approach will
                         only lump in features as equivalent if they are also strongly correlated with
@@ -560,17 +691,116 @@ options:
 
                         An integer specifies the number of samples to set aside for testing.
 
+  --error-consistency, --ec
+                        Run error consistency after feature selection and tuning. The
+                        training folds change, but every fitted model predicts the same
+                        external holdout. Do not use a final-test holdout to select a model.
+  --ec-folds EC_FOLDS
+                        Number of folds in each error-consistency repetition.
+  --ec-repetitions EC_REPETITIONS
+                        Number of shuffled K-fold repetitions. Each configuration is
+                        fitted --ec-folds * --ec-repetitions times. The default is 5.
+  --ec-model-seed-mode {vary,fixed}
+                        Choose whether the model seed changes across folds. vary (the
+                        default) includes changes from both training rows and model
+                        randomness. fixed uses the same seed for every fit.
+  --ec-methods EC_METHODS [EC_METHODS ...]
+                        Regression EC methods to calculate. The default is all seven
+                        methods: ratio, ratio_diff, ratio_sign,
+                        ratio_diff_sign_magnitude, intersection_union_sample,
+                        intersection_union_all, and intersection_union_distance.
+                        ratio_diff_sign_reference is the optional signed reference
+                        calculation and is not ranked.
+  --ec-holdout-role {test,validation}
+                        Tell df-analyze how the shared holdout is being used. test (the
+                        default) calculates EC but disables model ranking and
+                        EC/performance correlations. validation enables those outputs for
+                        a separate validation or audit set. This option labels the existing
+                        split; it does not create a new one.
+  --ec-output-detail {summary,pairwise,full}
+                        Choose how much EC output to keep. summary writes the main tables
+                        and run details; pairwise adds model-pair tables and plots; full
+                        adds sample-level diagnostics. --ec-save-predictions adds
+                        prediction and residual/error matrices at any level. The default
+                        is full.
+  --ec-save-predictions
+                        Save the prediction and residual/error matrices used to calculate
+                        EC, including holdout positions and true target values.
+  --ec-empty-unions {0,1,nan,drop,error,warn}
+                        Handle classification pairs where neither model makes a holdout
+                        error. Choices are 0, 1, nan, drop, error, and warn. The default,
+                        warn, issues one warning and stores the undefined comparison as
+                        NaN.
+  --ec-epsilon EC_EPSILON
+                        Non-negative value added to regression ratio denominators near
+                        zero. The default is 0.
+
+  --adaptive-error
+                        Estimate the chance that each holdout prediction is wrong from
+                        out-of-fold training confidence.
+  --aer-oof-folds AER_OOF_FOLDS
+                        Number of training folds used to learn the confidence-to-error
+                        mapping.
+  --aer-bins AER_BINS
+                        Number of confidence bins used to learn the error mapping.
+  --aer-target-error AER_TARGET_ERROR
+                        Target error rate used when reporting risk-controlled coverage.
+  --aer-alpha AER_ALPHA
+                        Significance level for the one-sided Clopper-Pearson error bounds,
+                        after adjusting for the thresholds that were checked.
+  --aer-min-bin-count AER_MIN_BIN_COUNT
+                        Minimum number of training predictions in an adaptive-error bin.
+  --aer-prior-strength AER_PRIOR_STRENGTH
+                        How strongly small bins are pulled toward the overall error rate.
+  --no-aer-smooth
+                        Disable smoothing of adaptive-error bin estimates.
+  --aer-monotonic
+                        Require estimated error to move monotonically with confidence.
+  --aer-adaptive-binning
+                        Use quantile-based confidence bins instead of fixed-width bins.
+  --aer-confidence-metric AER_CONFIDENCE_METRIC
+                        Confidence measure used for the error mapping. Use auto to compare
+                        the measures available for each model.
+  --aer-nmin AER_NMIN
+                        Minimum number of accepted holdout rows required for a reported
+                        risk threshold.
+  --aer-top-k AER_TOP_K
+                        Analyze only the top K tuned models. The default, 0, analyzes all
+                        usable models.
+  --aer-ensemble
+                        Compare supported combinations of the analyzed models.
+  --aer-ensemble-strategies AER_ENSEMBLE_STRATEGIES [AER_ENSEMBLE_STRATEGIES ...]
+                        Ensemble strategies to run. Leave unset to use every supported
+                        strategy.
+  --aer-ens-top-n AER_ENS_TOP_N
+                        Number of leading models available to top-N ensemble strategies.
+  --aer-ens-beta AER_ENS_BETA
+                        Beta value used to weight model confidence in adaptive-error
+                        ensembles.
+  --aer-ens-tau0 AER_ENS_TAU0
+                        Base confidence threshold for adaptive-error ensembles.
+  --aer-ens-lambda AER_ENS_LAMBDA
+                        Mixing weight used by regularized adaptive-error ensembles.
+  --aer-ens-alpha AER_ENS_ALPHA
+                        Exponent applied to model support in adaptive-error ensemble
+                        scores.
+  --aer-ens-trim-q AER_ENS_TRIM_Q
+                        Confidence quantile below which ensemble members are omitted.
+  --aer-ens-tau-low AER_ENS_TAU_LOW
+                        Lower confidence cutoff for adaptive-error ensembles.
+  --aer-ens-tau-high AER_ENS_TAU_HIGH
+                        Upper confidence cutoff for adaptive-error ensembles.
+
   --outdir OUTDIR
-                        Specifies location of all results, as well as cache files for slow
-                        computations (e.g. stepwise feature selection). If unspecified, will attempt
-                        to default to a number of common locations (/Users/derekberger, the
-                        current working directory /Users/derekberger/Documents/Antigonish/df-analyze, or a temporary directory).
+                        Location for results and cached computations. If omitted, df-analyze
+                        tries the user directory, current directory, and finally a temporary
+                        directory.
 
   --no-preds
                         Do not compute univariate predictions, and thus do not filter features based
                         on univariate predictive utility. Useful for datasets with over 1 million
                         samples and a large (e.g. 30+) number of features, where even scikit-learn
-                        SGDClassifer and SGDRegressor are often too slow / expensive.
+                        SGDClassifier and SGDRegressor are often too slow / expensive.
   --verbosity VERBOSITY
 
                         Controls amount of output to stdout and stderr. Options:
@@ -587,7 +817,7 @@ options:
                         If this flag is present, just print the df-analyze version and exit.
 
 
-USAGE EXAMPLE (assumes you have run `poetry shell`):
+USAGE EXAMPLE (run from the repository root with the environment activated):
 
     python df-analyze.py \
         --df weather_data.json \
@@ -604,7 +834,7 @@ USAGE EXAMPLE (assumes you have run `poetry shell`):
         --norm robust \
         --nan median \
         --n-feat-filter 10 \
-        --n-feat-wrappper 10 \
+        --n-feat-wrapper 10 \
         --test-val-size=0.25 \
         --outdir='./results'
 ```

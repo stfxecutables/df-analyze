@@ -21,7 +21,13 @@ from df_analyze.analysis.univariate.associate import (
     ContClsStats,
     ContRegStats,
 )
-from df_analyze.cli.cli import ProgramOptions, Verbosity, get_options, random_cli_args
+from df_analyze.cli.cli import (
+    ProgramOptions,
+    Verbosity,
+    _split_cli_args,
+    get_options,
+    random_cli_args,
+)
 from df_analyze.enumerables import (
     ClsScore,
     DfAnalyzeClassifier,
@@ -36,9 +42,13 @@ from df_analyze.enumerables import (
 )
 from df_analyze.testing.datasets import ALL_DATASETS, TEST_DATASETS, TestDataset, all_ds
 
-PATH = list(TEST_DATASETS.values())[0].datapath
+requires_test_data = pytest.mark.skipif(
+    not TEST_DATASETS, reason="Optional parquet test datasets are not available."
+)
+PATH = next(iter(TEST_DATASETS.values())).datapath if TEST_DATASETS else Path()
 
 
+@requires_test_data
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_classifiers() -> None:
@@ -54,6 +64,7 @@ def test_classifiers() -> None:
         assert opts.categoricals == sorted(["one", "two", "three"])
 
 
+@requires_test_data
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_quoted_classifiers() -> None:
@@ -74,6 +85,60 @@ def test_quoted_classifiers() -> None:
 
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_programmatic_args_preserve_quotes_and_windows_paths() -> None:
+    args = (
+        r'--df "C:\Users\Jane Doe\data.csv" '
+        r'--target "Shell weight" '
+        r'--categoricals "CO2 CosIR Value" "MOX 2"'
+    )
+
+    assert _split_cli_args(args) == [
+        "--df",
+        r"C:\Users\Jane Doe\data.csv",
+        "--target",
+        "Shell weight",
+        "--categoricals",
+        "CO2 CosIR Value,MOX 2",
+    ]
+
+
+@pytest.mark.fast
+def test_programmatic_args_preserve_apostrophes_in_column_names() -> None:
+    assert _split_cli_args(
+        "--target mother's_qualification --verbosity 0"
+    ) == ["--target", "mother's_qualification", "--verbosity", "0"]
+    assert _split_cli_args(
+        "--target mother's_qualification --categoricals father's_occupation"
+    ) == [
+        "--target",
+        "mother's_qualification",
+        "--categoricals",
+        "father's_occupation",
+    ]
+
+
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
+def test_spreadsheet_args_preserve_quoted_columns(tmp_path: Path) -> None:
+    spreadsheet = tmp_path / "data with spaces.csv"
+    spreadsheet.write_text(
+        '--target "Shell weight"\n'
+        '--categoricals "CO2 CosIR Value" "MOX 2"\n'
+        "\n"
+        '"Shell weight","CO2 CosIR Value","MOX 2"\n'
+        "0,1,2\n",
+        encoding="utf-8",
+    )
+
+    opts = get_options(f'--spreadsheet "{spreadsheet}" --verbosity 0')
+
+    assert opts.target == "Shell weight"
+    assert opts.categoricals == ["CO2 CosIR Value", "MOX 2"]
+
+
+@requires_test_data
+@pytest.mark.fast
+@pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_int_seed() -> None:
     with ArgvContext(
         "df-analyze.py",
@@ -87,6 +152,7 @@ def test_int_seed() -> None:
         assert opts.seed == 12345
 
 
+@requires_test_data
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_unseeded() -> None:
@@ -100,6 +166,7 @@ def test_unseeded() -> None:
         assert opts.seed == SEED
 
 
+@requires_test_data
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_default_seeded() -> None:
@@ -115,6 +182,7 @@ def test_default_seeded() -> None:
         assert opts.seed == SEED
 
 
+@requires_test_data
 @pytest.mark.fast
 @pytest.mark.filterwarnings("ignore:.*not have write permissions.*")
 def test_random_seeded() -> None:

@@ -8,11 +8,14 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 import json
+import random
+from collections.abc import Generator
 from io import StringIO
 from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
+import pytest
 from pandas import DataFrame, Series
 from pytest import CaptureFixture
 from tqdm import tqdm
@@ -40,6 +43,19 @@ from df_analyze.testing.datasets import (
     sparse_snplike_data,
     turbo_ds,
 )
+
+
+@pytest.fixture
+def deterministic_cli_randomness() -> Generator[None, None, None]:
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    try:
+        random.seed(42)
+        np.random.seed(42)
+        yield
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
 
 
 def sanity_check_prediction_outputs(ds: TestDataset, preds: list[dict]) -> None:
@@ -417,22 +433,30 @@ def do_random_full_multitests(dataset: tuple[str, TestDataset]) -> None:
 
 
 @fast_ds
-def test_rand_spreadsheet(dataset: tuple[str, TestDataset]) -> None:
+def test_rand_spreadsheet(
+    dataset: tuple[str, TestDataset], deterministic_cli_randomness
+) -> None:
     do_random_spreadsheet(dataset)
 
 
 @fast_ds
-def test_rand_multitest(dataset: tuple[str, TestDataset]) -> None:
+def test_rand_multitest(
+    dataset: tuple[str, TestDataset], deterministic_cli_randomness
+) -> None:
     do_random_multitests(dataset)
 
 
 @turbo_ds
-def test_rand_full_multitest(dataset: tuple[str, TestDataset]) -> None:
+def test_rand_full_multitest(
+    dataset: tuple[str, TestDataset], deterministic_cli_randomness
+) -> None:
     do_random_full_multitests(dataset)
 
 
 @turbo_ds
-def test_rand_full_single(dataset: tuple[str, TestDataset]) -> None:
+def test_rand_full_single(
+    dataset: tuple[str, TestDataset], deterministic_cli_randomness
+) -> None:
     do_random_full_single(dataset)
 
 
@@ -578,7 +602,10 @@ def inspect_sparse_data(capsys: CaptureFixture) -> None:
 
 
 def test_sparse_data(capsys: CaptureFixture) -> None:
-    ds = FASTEST[1][1]
+    classification_datasets = [ds for _, ds in FASTEST if ds.is_classification]
+    if not classification_datasets:
+        pytest.skip("Bundled classification test datasets are not available")
+    ds = classification_datasets[0]
     with capsys.disabled():
         with TemporaryDirectory() as tempdir:
             for _ in range(10):

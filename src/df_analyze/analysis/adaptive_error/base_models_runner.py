@@ -17,6 +17,9 @@ from df_analyze.analysis.adaptive_error.aer import AdaptiveErrorCalculator
 from df_analyze.analysis.adaptive_error.base_models_types import (
     BaseModelAnalysisResult,
 )
+from df_analyze.analysis.adaptive_error.base_models_writer import (
+    _write_test_error_metrics,
+)
 from df_analyze.analysis.adaptive_error.fit_stage import _fit_aer_stage
 from df_analyze.analysis.adaptive_error.oof_stage import _run_oof_stage
 from df_analyze.analysis.adaptive_error.plots import (
@@ -26,17 +29,21 @@ from df_analyze.analysis.adaptive_error.plots import (
 from df_analyze.analysis.adaptive_error.report import (
     _coverage_summary,
     _df_to_markdown,
+    _write_csv,
     _write_markdown,
     _write_not_available_csv,
     _write_not_available_md,
-)
-from df_analyze.analysis.adaptive_error.base_models_writer import (
-    _write_test_error_metrics,
 )
 from df_analyze.analysis.adaptive_error.risk_control_writer import (
     _write_risk_control_threshold,
 )
 from df_analyze.analysis.adaptive_error.test_stage import _evaluate_test_stage
+from df_analyze.runtime.hardware import (
+    RuntimeComponent,
+    clear_fitted_model_state,
+    release_accelerator_memory,
+)
+from df_analyze.saving import windows_io_path
 
 
 @dataclass
@@ -49,21 +56,28 @@ class _ModelOutputDirs:
 
 
 def _init_model_output_dirs(out_dir: Path) -> _ModelOutputDirs:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    windows_io_path(out_dir).mkdir(parents=True, exist_ok=True)
     m_plots = out_dir / "plots"
     m_tables = out_dir / "tables"
     m_preds = out_dir / "predictions"
     m_meta = out_dir / "metadata"
     m_reports = out_dir / "reports"
     for d in (m_plots, m_tables, m_preds, m_meta, m_reports):
-        d.mkdir(parents=True, exist_ok=True)
+        windows_io_path(d).mkdir(parents=True, exist_ok=True)
     return _ModelOutputDirs(
-        plots=m_plots,
-        tables=m_tables,
-        preds=m_preds,
-        meta=m_meta,
-        reports=m_reports,
+        plots=windows_io_path(m_plots),
+        tables=windows_io_path(m_tables),
+        preds=windows_io_path(m_preds),
+        meta=windows_io_path(m_meta),
+        reports=windows_io_path(m_reports),
     )
+
+
+def _model_matrix_for_result(prepared, result) -> pd.DataFrame:
+    """Use TabPFN's native view without changing other AER model inputs."""
+    if prepared._is_tabpfn_model(result.model_cls):
+        return prepared.model_matrix(result.model_cls, result.selected_cols)
+    return prepared.X[result.selected_cols]
 
 
 def _build_aer_kwargs(options) -> dict[str, Any]:
@@ -153,7 +167,7 @@ def _write_model_extras(
         )
     else:
         clinician_df = test_df[clinician_cols].copy()
-        clinician_df.to_csv(m_tables / "clinician_view.csv", index=False)
+        _write_csv(clinician_df, m_tables / "clinician_view.csv", index=False)
 
         global_error = (
             float(np.mean(incorrect_test)) if incorrect_test.size else float("nan")
@@ -188,7 +202,11 @@ def _write_model_extras(
         _write_not_available_csv(m_tables / "top20_highest_adaptive_error.csv", reason)
     else:
         topk = test_df.sort_values(by="aer", ascending=False).head(20)
-        topk.to_csv(m_tables / "top20_highest_adaptive_error.csv", index=False)
+        _write_csv(
+            topk,
+            m_tables / "top20_highest_adaptive_error.csv",
+            index=False,
+        )
 
     # coverage-accuracy curve on test
     y_true_arr = test_df["y_true"].to_numpy()
@@ -210,10 +228,14 @@ def _write_model_extras(
             reason="No test samples.",
         )
     else:
-        curve_test.to_csv(m_tables / "coverage_accuracy_curve.csv", index=False)
+        _write_csv(
+            curve_test,
+            m_tables / "coverage_accuracy_curve.csv",
+            index=False,
+        )
         plot_coverage_vs_accuracy(curve_test, m_plots / "coverage_vs_accuracy.png")
         summary = _coverage_summary(curve_test, targets=[1.0, 0.9, 0.8, 0.7])
-        summary.to_csv(m_tables / "coverage_summary.csv", index=False)
+        _write_csv(summary, m_tables / "coverage_summary.csv", index=False)
         md = [
             "# Coverage-accuracy operating points",
             "",
@@ -258,24 +280,14 @@ def run_base_model_analyses(
     y_test_arr = prep_test.y.to_numpy()
 
     def _test_acc(res: Any, X_train, y_train, X_test) -> float:
-        model = getattr(res, "model", None)
-        if model is None:
-            return float("nan")
-        tuned_model = getattr(model, "tuned_model", None)
-        if tuned_model is None:
-            tuned_args = getattr(model, "tuned_args", None) or res.params
-            y_train_fit = y_train
-            if isinstance(y_train, pd.DataFrame) and y_train.shape[1] == 1:
-                y_train_fit = y_train.iloc[:, 0]
-            model.refit_tuned(
-                X_train,
-                y_train_fit,
-                tuned_args=tuned_args,
-            )
-        preds = np.asarray(model.tuned_predict(X_test)).ravel()
-        if preds.size != y_test_arr.size:
-            return float("nan")
-        return float(np.mean(preds == y_test_arr))
+        saved_preds = getattr(res, "preds_test", None)
+        if saved_preds is not None:
+            saved = np.asarray(saved_preds).ravel()
+            if saved.size == y_test_arr.size:
+                return float(np.mean(saved == y_test_arr.ravel()))
+        # The guarded holdout stage below handles refitting and prediction.
+        # Do not run the same GPU work again just to build this summary.
+        return float("nan")
 
     best_result = top_results[0]
     compare_bins: dict[str, pd.DataFrame] = {}
@@ -287,7 +299,7 @@ def run_base_model_analyses(
     ensemble_models: list[dict[str, Any]] = []
 
     models_dir = base_dir / "models"
-    models_dir.mkdir(parents=True, exist_ok=True)
+    windows_io_path(models_dir).mkdir(parents=True, exist_ok=True)
 
     y_train = prep_train.y
     y_test = prep_test.y
@@ -305,8 +317,8 @@ def run_base_model_analyses(
         is_best = result is best_result
         if is_best:
             best_slug = slug
-        X_train = prep_train.X[result.selected_cols]
-        X_test = prep_test.X[result.selected_cols]
+        X_train = _model_matrix_for_result(prep_train, result)
+        X_test = _model_matrix_for_result(prep_test, result)
 
         # write per-model outputs under the directory names
         out_dir = models_dir / slug
@@ -334,7 +346,7 @@ def run_base_model_analyses(
                 "metric": metric_name,
                 "cv_score": result.score,
                 "test_accuracy": _test_acc(result, X_train, y_train, X_test),
-                "n_features": len(result.selected_cols),
+                "n_features": int(X_train.shape[1]),
                 "out_dir_rel": out_dir_rel,
             }
         )
@@ -507,6 +519,23 @@ def run_base_model_analyses(
         )
         if is_best and model_curve is not None and not model_curve.empty:
             best_curve_test = model_curve.copy()
+        model = getattr(result, "model", None)
+        if model is not None:
+            runtime = getattr(model, "runtime", None)
+            component = getattr(
+                result.model_cls,
+                "runtime_component",
+                RuntimeComponent.Sklearn,
+            )
+            resolved = (
+                "cpu"
+                if runtime is None
+                else runtime.decision_for(component).resolved
+            )
+            clear_fitted_model_state(model)
+            model._cleanup_after_fold()
+            if resolved in {"cuda", "mps"}:
+                release_accelerator_memory()
 
     return BaseModelAnalysisResult(
         compare_bins=compare_bins,

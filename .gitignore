@@ -18,7 +18,8 @@ data/testing/**/*.txt
 
 cmc_ata
 downloaded_models
-runtimes/*.txt
+cuda_smoke/
+__GANDALF_INTERNAL_LOGS__/
 
 secrets
 
@@ -43,6 +44,10 @@ poetry.lock
 **/*.txt
 **/*.xlsx
 **/*.zip
+
+# Keep documentation in Git.
+!docs/
+!docs/**/*.md
 
 # research scripts
 calibration.py
@@ -217,6 +222,7 @@ celerybeat.pid
 # .env
 .env/
 .venv/
+.df-analyze-runtime/
 env/
 venv/
 ENV/

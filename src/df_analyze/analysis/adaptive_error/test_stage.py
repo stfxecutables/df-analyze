@@ -1,3 +1,10 @@
+"""Apply a fitted adaptive-error mapping to the untouched holdout.
+
+The confidence transform and error mapping are learned from training OOF
+predictions. This stage refits the selected base model, predicts the holdout,
+and reports expected error without fitting any risk component on holdout rows.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -39,11 +46,14 @@ from df_analyze.analysis.adaptive_error.proba import (
     scores_to_proba,
 )
 from df_analyze.analysis.adaptive_error.report import (
+    _write_csv,
     _write_not_available_csv,
     _write_not_available_parquet,
     _write_not_available_png,
+    _write_parquet,
     _write_sanity_checks,
 )
+from df_analyze.runtime.hardware import RuntimeComponent, device_reason_text
 
 
 @dataclass
@@ -204,7 +214,7 @@ def _compute_test_confidence(
     return conf_test, used_conf_metric
 
 
-def _evaluate_test_stage(
+def _evaluate_test_stage_attempt(
     *,
     result,
     X_train,
@@ -223,6 +233,7 @@ def _evaluate_test_stage(
     m_plots: Path,
     m_meta: Path,
 ) -> _TestEvalResult:
+    """Run one complete holdout evaluation on the currently resolved device."""
     y_pred_test_raw, proba_test, tuned_model, scores_test = _predict_test_outputs(
         result=result,
         X_train=X_train,
@@ -312,8 +323,12 @@ def _evaluate_test_stage(
         _write_not_available_parquet(m_preds / "test_per_sample.parquet", reason)
         _write_not_available_csv(m_preds / "test_per_sample.csv", reason)
     else:
-        test_df.to_parquet(m_preds / "test_per_sample.parquet", index=False)
-        test_df.to_csv(m_preds / "test_per_sample.csv", index=False)
+        _write_parquet(
+            test_df,
+            m_preds / "test_per_sample.parquet",
+            index=False,
+        )
+        _write_csv(test_df, m_preds / "test_per_sample.csv", index=False)
 
     sanity_issues: dict[str, Any] = {}
     sanity_info: dict[str, Any] = {}
@@ -394,7 +409,11 @@ def _evaluate_test_stage(
             test_bins_df = original_test_bins_df
         else:
             test_bins_df = merged_test_bins_df
-        test_bins_df.to_csv(m_tables / "test_confidence_error_bins.csv", index=False)
+        _write_csv(
+            test_bins_df,
+            m_tables / "test_confidence_error_bins.csv",
+            index=False,
+        )
         plot_confidence_vs_error(
             test_bins_df,
             m_plots / "confidence_vs_expected_error.png",
@@ -411,3 +430,69 @@ def _evaluate_test_stage(
         proba_test_cal=proba_test_cal,
         test_bins_df=test_bins_df,
     )
+
+
+def _evaluate_test_stage(
+    *,
+    result,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    labels_map,
+    aer: AdaptiveErrorCalculator,
+    calibrator,
+    selected_conf_metric: str,
+    selected_conf_params: dict[str, Any],
+    options,
+    no_preds: bool,
+    m_preds: Path,
+    m_tables: Path,
+    m_plots: Path,
+    m_meta: Path,
+) -> _TestEvalResult:
+    """Evaluate once, restarting the complete stage on CPU after an auto-CUDA failure."""
+    attempt_args = {
+        "result": result,
+        "X_train": X_train,
+        "X_test": X_test,
+        "y_train": y_train,
+        "y_test": y_test,
+        "labels_map": labels_map,
+        "aer": aer,
+        "calibrator": calibrator,
+        "selected_conf_metric": selected_conf_metric,
+        "selected_conf_params": selected_conf_params,
+        "options": options,
+        "no_preds": no_preds,
+        "m_preds": m_preds,
+        "m_tables": m_tables,
+        "m_plots": m_plots,
+        "m_meta": m_meta,
+    }
+    model = result.model
+    base_runtime = getattr(model, "runtime", None)
+    if base_runtime is None:
+        return _evaluate_test_stage_attempt(**attempt_args)
+
+    component = getattr(
+        result.model_cls,
+        "runtime_component",
+        RuntimeComponent.Sklearn,
+    )
+    runtime = base_runtime.for_task(
+        len(X_train),
+        X_train.shape[1],
+        n_queries=len(X_test),
+    )
+    decision = runtime.decision_for(component)
+    print(
+        "[device] Adaptive error holdout "
+        f"{getattr(model, 'shortname', result.model_cls.__name__)} / "
+        f"{getattr(result, 'selection', 'none')}: {decision.resolved.upper()} "
+        f"({len(X_train)} train rows x {len(X_test)} query rows x "
+        f"{X_train.shape[1]} features; {device_reason_text(decision)})"
+    )
+
+    model.set_runtime(runtime)
+    return _evaluate_test_stage_attempt(**attempt_args)

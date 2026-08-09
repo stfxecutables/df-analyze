@@ -151,6 +151,18 @@ def robust_auroc_score(
         raw = float(roc_auc_score(y_true, y_prob, average="macro", multi_class="ovr"))
 
     except Exception as e:
+        message = str(e)
+        undefined_fold_messages = (
+            "Number of classes in y_true not equal to the number of columns",
+            "Only one class present in y_true",
+        )
+        if isinstance(e, ValueError) and any(
+            fragment in message for fragment in undefined_fold_messages
+        ):
+            # A resampling fold that omits a class has no well-defined macro
+            # AUROC for the full probability matrix. Returning chance (0.5)
+            # would turn an undefined statistic into an apparently valid score.
+            return float("nan")
         idx = np.random.permutation(len(y_true))[:20]
         yt = y_true.iloc[idx]  # type: ignore
         yp = y_prob[idx]
@@ -158,11 +170,13 @@ def robust_auroc_score(
             "Could not compute AUROC for given inputs:\n"
             f"y_true: {type(y_true)} shape={y_true.shape}\n{yt}\n"
             f"y_prob: {type(y_prob)} shape={y_prob.shape}\n{yp}\n"
-            f"Details:\n{e}"
+            f"Details:\n{message}"
         )
         return 0.5
 
-    return 0.5 + abs(0.5 - raw)
+    # Keep AUROC values below 0.5: they show a reversed ranking. Reflecting them
+    # around 0.5 would make AUROC=0 look perfect.
+    return raw
 
 
 accuracy_scorer = make_scorer(accuracy_score)

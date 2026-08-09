@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 TESTS=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT="$(dirname "$TESTS")"
 echo "$ROOT"
@@ -9,7 +11,7 @@ echo "==========================================================================
 echo "Testing basic data inspection, cleaning, preparation, and associational stats"
 echo "================================================================================="
 "$PYTEST" \
-    -m 'not regen' -m 'cached' -x \
+    -m 'not regen and cached' -x \
     test/test_inspection.py \
     test/test_prepare.py \
     test/test_splitting.py \
@@ -24,6 +26,29 @@ echo "==========================================================================
     test/test_cli_parsing.py \
     test/test_cli_random.py \
     -x
+
+echo "================================================================================="
+echo "Testing error consistency, repeated K-fold, and EC CLI integration"
+echo "================================================================================="
+"$PYTEST" \
+    test/test_error_consistency.py \
+    test/test_error_consistency_cli_e2e.py \
+    -x
+
+echo "================================================================================="
+echo "Testing added models, devices, downsampling, multi-target, and runtime setup"
+echo "================================================================================="
+"$PYTEST" \
+    test/test_added_models.py \
+    test/test_device.py \
+    test/test_downsampling.py \
+    test/test_lgbm_defaults.py \
+    test/test_multitarget.py \
+    test/test_preprocessing_fit_scope.py \
+    test/test_sparse_downsampling.py \
+    -x
+
+echo "GPU and licensed-model integrations are run by their dedicated scripts."
 
 echo "================================================================================="
 echo "Testing test dataset IO and basics"
@@ -66,6 +91,8 @@ echo "==========================================================================
 # test_loading.py
 # test_cli_random.py
 # test_cli_parsing.py
+# test_error_consistency.py
+# test_error_consistency_cli_e2e.py
 # test_datasets.py
 # test_saving.py
 # test_models.py

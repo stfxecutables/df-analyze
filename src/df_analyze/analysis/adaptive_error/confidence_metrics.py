@@ -25,6 +25,16 @@ def _as_2d(X: Any) -> Any:
     return arr
 
 
+def _as_2d_without_feature_names(X: Any) -> Any:
+    """Prepare input for ensemble members fitted internally on NumPy arrays."""
+    arr = _as_2d(X)
+    if isinstance(arr, (pd.DataFrame, pd.Series)):
+        arr = arr.to_numpy()
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+    return arr
+
+
 def _pred_indices_for_proba(y_pred: Array, n_classes: int) -> Optional[np.ndarray]:
     y = np.asarray(y_pred).ravel()
     if y.size == 0:
@@ -179,7 +189,8 @@ def _sklearn_ensemble_estimators(estimator: Any) -> Optional[list[Any]]:
 def tree_vote_agreement_conf(estimator: Any, X: Any, y_pred: Array) -> Optional[Array]:
     base = _sklearn_ensemble_estimators(estimator)
     if base is not None:
-        preds = np.vstack([np.asarray(t.predict(_as_2d(X))).ravel() for t in base])
+        tree_X = _as_2d_without_feature_names(X)
+        preds = np.vstack([np.asarray(t.predict(tree_X)).ravel() for t in base])
         yhat = np.asarray(y_pred).ravel()[None, :]
         return np.mean(preds == yhat, axis=0).astype(float)
     booster = getattr(estimator, "booster_", None)
@@ -224,14 +235,27 @@ def tree_vote_agreement_conf(estimator: Any, X: Any, y_pred: Array) -> Optional[
 def tree_leaf_support_conf(estimator: Any, X: Any, *, n_train: int) -> Optional[Array]:
     n_train_f = float(max(int(n_train), 1))
 
+    # A single sklearn decision tree has no ``estimators_`` collection, but its
+    # fitted leaf sample counts provide the same support statistic used below
+    # for each member of a tree ensemble.
+    if hasattr(estimator, "apply") and hasattr(estimator, "tree_"):
+        tree_X = _as_2d(X)
+        leaf_nodes = np.asarray(estimator.apply(tree_X), dtype=int).ravel()
+        node_counts = getattr(estimator.tree_, "n_node_samples", None)
+        if node_counts is not None:
+            node_counts = np.asarray(node_counts, dtype=float)
+            leaf_nodes = np.clip(leaf_nodes, 0, node_counts.shape[0] - 1)
+            return np.clip(node_counts[leaf_nodes] / n_train_f, 0.0, 1.0)
+
     base = _sklearn_ensemble_estimators(estimator)
     if base is not None:
-        support = np.zeros(len(_as_2d(X)), dtype=float)
+        tree_X = _as_2d_without_feature_names(X)
+        support = np.zeros(len(tree_X), dtype=float)
         n_trees = 0
         for t in base:
             if not hasattr(t, "apply") or not hasattr(t, "tree_"):
                 continue
-            leaf_nodes = np.asarray(t.apply(_as_2d(X)), dtype=int).ravel()
+            leaf_nodes = np.asarray(t.apply(tree_X), dtype=int).ravel()
             node_counts = getattr(getattr(t, "tree_", None), "n_node_samples", None)
             if node_counts is None:
                 continue

@@ -7,6 +7,8 @@
 - **prepared**: summary of data preparation (compute times, final data shape
   after encoding and drops)
 - **features**: information about the features
+- **features/downsampling**: selected source columns or projected component
+  metadata, score tables, runtimes, and the resolved downsampling method
 - **features/associations**: univariate (statistical) associations of each
   feature with the target variable
 - **features/predictions**: predictive performance on the target for each
@@ -21,12 +23,74 @@
   (currently only step-up and backward)
 - **results**: final tables of predictive performance after feature selection
   and tuning
+- **results/error_consistency**: repeated K-fold error consistency summaries,
+  per-configuration diagnostics, trial scores, and plots
 - **tuning**: (currently unused) params for each tuned model and each
   selection method
 
+## Multi-Target Outputs
+
+For multi-target runs, target-specific feature reports are stored in subfolders
+named after each target. The `prepared` directory also contains the target and
+split audits. Final results include:
+
+- `final_performances_per_target.csv`
+- `results_report_target_<target>.md`
+- `performance_long_table_per_target.csv`
+- `multitarget_split_report.md` (or one file per external-test fold)
+
+Multi-target regression tuning normalizes error scores per target before
+aggregation. Final MAE, MSE, and RMSE values are not normalized; when targets
+have different units, compare their per-target tables or the scale-free R²
+metrics.
+
+Final holdout cross-validation uses at most five folds. Grouped runs reduce the
+fold count when the holdout contains fewer than five distinct groups, while
+keeping groups separate. `final_cv_folds` records the count actually
+used. The `cv_mean` value column contains the cross-validation mean and
+`final_cv_folds` identifies the actual fold count. Fewer than five folds also
+produces a warning because the resulting estimate can be unstable.
+
+## Error Consistency Outputs
+
+When `--error-consistency` is enabled, start with these files in
+`results/error_consistency`:
+
+- `summary.csv`: EC for every target, model, selected feature set, and method
+- `performance_summary.csv`: predictive performance of the repeated fits on the
+  shared holdout
+- `trial_failures.csv`: failed refits and their error messages
+- `selection_guard.csv`: whether the holdout was declared as `test` or
+  `validation`, and whether ranking and correlation output was enabled
+
+Use these files to check the folds, seeds, and settings used for the run:
+
+- `trial_scores.csv`: predictive score for each fitted model
+- `trial_design.csv`: repetition, fold, split seed, model seed, split sizes, and
+  group-overlap checks
+- `fold_assignments.csv`: the validation fold assigned to each training row
+- `metadata.json` and `reproducibility_manifest.json`: input hashes, versions,
+  resolved EC settings, and the redacted command
+
+`correlation_summary.csv` and `model_ec_ranking.csv` contain results only when
+`--ec-holdout-role validation` is used. With the default `test` role, they
+contain headers only so that final-test results are not presented as a model
+selection step.
+
+Each `<target>/<model>/<selection>_<embed-selector>/` directory contains the
+tables for one configuration. `--ec-output-detail pairwise`
+adds model-pair tables and plots. `full` also adds sample-level diagnostics.
+Classification directories always include `leave_one_model_out.csv`.
+`--ec-save-predictions` adds `trial_predictions.csv` and
+`residual_or_error_matrix.csv`.
+
+For multiple external test sets, these files are nested under `testXX`. See the
+[error-consistency guide](error_consistency.md) for the formulas, runtime
+guidance and interpretation.
+
 ## Output Files
 
-## Makrkdown Reports
+## Markdown Reports
 
 - **`associations_report.md`**
   - summarizes the (statistical) associations between each feature and the
@@ -56,9 +120,9 @@
     - **spearman_p**: p-value for Spearman's correlation coefficient
     - **F**: `sklearn.feature_selection.f_regression`, i.e. F-statistic
     - **F_p**: p-value for F-statistic above
-    - **H**: Kruskal-Wallace H, i.e. one-way ANOVA on ranks
+    - **H**: Kruskal-Wallis H, i.e. one-way ANOVA on ranks
       (https://en.wikipedia.org/w/index.php?title=Kruskal%E2%80%93Wallis_one-way_analysis_of_variance&oldid=1193273201)
-    - **H_p**: p-value for Kruskal-Wallace H
+    - **H_p**: p-value for Kruskal-Wallis H
 
 - **`predictions_report.md`**
   - summarizes the univariate predictive performance of each feature on the

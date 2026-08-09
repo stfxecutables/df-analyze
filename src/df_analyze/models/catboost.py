@@ -15,10 +15,14 @@ import numpy as np
 import optuna
 from optuna import Study, Trial
 from pandas import DataFrame, Series
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.preprocessing import StandardScaler
 
 from df_analyze._constants import SEED
 from df_analyze.enumerables import Scorer
 from df_analyze.models.base import DfAnalyzeModel
+from df_analyze.runtime.hardware import RuntimeComponent
 from df_analyze.splitting import OmniKFold
 
 try:
@@ -27,19 +31,15 @@ try:
 except ImportError as exc:
     CBCatBoostClassifier = None
     CBCatBoostRegressor = None
-    _CATBOOST_GPU_DEVICE_COUNT = None
     _CATBOOST_IMPORT_ERROR = exc
 else:
     _CATBOOST_IMPORT_ERROR = None
-    try:
-        from catboost.utils import get_gpu_device_count as _CATBOOST_GPU_DEVICE_COUNT
-    except ImportError:
-        _CATBOOST_GPU_DEVICE_COUNT = None
 
 
 class CatBoostEstimator(DfAnalyzeModel):
     shortname = "catboost"
     longname = "CatBoost Estimator"
+    runtime_component = RuntimeComponent.CatBoost
     timeout_s = 30 * 60
 
     def __init__(self, model_args: Optional[Mapping] = None) -> None:
@@ -47,6 +47,7 @@ class CatBoostEstimator(DfAnalyzeModel):
         self.needs_calibration = False
         self.model_cls: Type[Any] = type(None)
         self.target_cols: list[str] = []
+        self._tuning_thread_count: Optional[int] = None
         self.default_args = dict(
             iterations=100,
             depth=6,
@@ -64,22 +65,12 @@ class CatBoostEstimator(DfAnalyzeModel):
             ) from _CATBOOST_IMPORT_ERROR
 
     def _has_gpu(self) -> bool:
-        if _CATBOOST_GPU_DEVICE_COUNT is not None:
-            try:
-                return _CATBOOST_GPU_DEVICE_COUNT() > 0
-            except Exception:
-                return False
-        try:
-            import torch
-
-            return bool(torch.cuda.is_available())
-        except Exception:
-            return False
+        """Compatibility helper backed by the centralized runtime policy."""
+        return self.runtime.device_for(RuntimeComponent.CatBoost) == "cuda"
 
     def _maybe_use_gpu(self, kwargs: dict[str, Any]) -> None:
         task_type = str(kwargs.get("task_type", "")).upper()
-        has_gpu = self._has_gpu()
-        if has_gpu:
+        if self._has_gpu():
             kwargs["task_type"] = "GPU"
             kwargs.setdefault("devices", "0")
             return
@@ -158,12 +149,29 @@ class CatBoostEstimator(DfAnalyzeModel):
                 model_args.setdefault("loss_function", native_loss)
                 model_cls, clean_args = self.model_cls_args(model_args)
                 model = model_cls(**clean_args)
+                if not self.is_classifier:
+                    constant = [
+                        str(col)
+                        for col in y.columns
+                        if y[col].nunique(dropna=False) < 2
+                    ]
+                    if constant:
+                        raise ValueError(
+                            "Multi-target regression has constant target(s) in a "
+                            f"CatBoost training partition: {constant}."
+                        )
+                    estimator = TransformedTargetRegressor(
+                        regressor=model,
+                        transformer=StandardScaler(),
+                    )
+                    estimator.fit(X, y)
+                    return estimator
                 model.fit(X, y)
                 return model
-            return {
-                str(col): self._fit_single_target(X, y[col], kwargs)
-                for col in y.columns
-            }
+            model_cls, clean_args = self.model_cls_args(dict(kwargs))
+            estimator = MultiOutputClassifier(model_cls(**clean_args))
+            estimator.fit(X, y)
+            return estimator
         return self._fit_single_target(X, y, kwargs)
 
     def fit(self, X_train: DataFrame, y_train: Union[Series, DataFrame]) -> None:
@@ -240,8 +248,9 @@ class CatBoostEstimator(DfAnalyzeModel):
         y_train: Union[Series, DataFrame],
         g_train: Optional[Series],
         metric: Scorer,
-        n_folds: int = 5,
+        n_folds: Optional[int] = None,
     ) -> Callable[[Trial], float]:
+        n_folds = self.resolve_tuning_cv_folds(n_folds)
         self._assert_available()
         self._set_target_cols(y_train)
         y_df = y_train.to_frame() if isinstance(y_train, Series) else y_train
@@ -253,9 +262,19 @@ class CatBoostEstimator(DfAnalyzeModel):
             grouped=g_train is not None,
             labels=None,
             warn_on_fallback=False,
+            allow_group_fallback=False,
             df_analyze_phase="Tuning internal splits",
         )
-        splits, _ = kf.split(X_train=X_train, y_train=y_split, g_train=g_train)
+        splits, _ = kf.split(
+            X_train=X_train,
+            y_train=y_split,
+            g_train=g_train,
+            multitarget_y=(
+                y_df
+                if y_df.shape[1] > 1
+                else None
+            ),
+        )
 
         def objective(trial: Trial) -> float:
             opt_args = self.optuna_args(trial)
@@ -266,7 +285,12 @@ class CatBoostEstimator(DfAnalyzeModel):
                 **opt_args,
             }
             self._maybe_use_gpu(full_args)
+            if self._tuning_thread_count is not None:
+                # Optuna is already parallelizing trials. Keep each CatBoost
+                # fit single-threaded to avoid nested CPU oversubscription.
+                full_args["thread_count"] = self._tuning_thread_count
             scores = []
+            scores_by_target: dict[str, list[float]] = {}
             for step, (idx_train, idx_test) in enumerate(splits):
                 X_tr = X_train.iloc[idx_train]
                 X_te = X_train.iloc[idx_test]
@@ -280,12 +304,21 @@ class CatBoostEstimator(DfAnalyzeModel):
                 model = self._fit_target_models(X=X_tr, y=y_fit, kwargs=full_args)
                 preds = self._predict_from_model(model, X_te)
                 pred_df = self._preds_to_df(preds, y_te, y_te.index)
-                score = self._mean_tuning_score(metric, y_te, pred_df)
+                target_scores = self._tuning_scores_by_target(
+                    metric=metric,
+                    y_true_df=y_te,
+                    y_pred_df=pred_df,
+                    y_baseline_df=y_df,
+                )
+                for target, target_score in target_scores.items():
+                    scores_by_target.setdefault(target, []).append(target_score)
+                score = float(np.nanmean(list(target_scores.values())))
 
                 scores.append(score)
                 trial.report(float(np.mean(scores)), step=step)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
+            self._record_trial_target_scores(trial, scores_by_target)
             return float(np.mean(scores))
 
         return objective
@@ -303,17 +336,23 @@ class CatBoostEstimator(DfAnalyzeModel):
         self._assert_available()
         base_args = {**self.fixed_args, **self.default_args, **self.model_args}
         self._maybe_use_gpu(base_args)
-        if self._uses_gpu(base_args):
-            n_jobs = 1
-        return super().htune_optuna(
-            X_train=X_train,
-            y_train=y_train,
-            g_train=g_train,
-            metric=metric,
-            n_trials=n_trials,
-            n_jobs=n_jobs,
-            verbosity=verbosity,
+        n_jobs = self.runtime.tuning_jobs(RuntimeComponent.CatBoost, n_jobs)
+        decision = self.runtime.decision_for(RuntimeComponent.CatBoost)
+        self._tuning_thread_count = (
+            1 if decision.resolved == "cpu" and n_jobs != 1 else None
         )
+        try:
+            return super().htune_optuna(
+                X_train=X_train,
+                y_train=y_train,
+                g_train=g_train,
+                metric=metric,
+                n_trials=n_trials,
+                n_jobs=n_jobs,
+                verbosity=verbosity,
+            )
+        finally:
+            self._tuning_thread_count = None
 
     def _score_outputs_joint(
         self,
@@ -414,7 +453,13 @@ class CatBoostClassifier(CatBoostEstimator):
                 target: np.asarray(self.tuned_model[target].predict_proba(X))
                 for target in self.target_cols
             }
-        probs = np.asarray(self.tuned_model.predict_proba(X))
+        raw_probs = self.tuned_model.predict_proba(X)
+        if isinstance(raw_probs, (list, tuple)):
+            return {
+                target: np.asarray(values)
+                for target, values in zip(self.target_cols, raw_probs, strict=True)
+            }
+        probs = np.asarray(raw_probs)
         if (
             probs.ndim == 2
             and len(self.target_cols) > 1

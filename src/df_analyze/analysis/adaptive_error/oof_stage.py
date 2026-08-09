@@ -30,6 +30,7 @@ from df_analyze.analysis.adaptive_error.proba import (
     normalize_proba,
     select_best_proba_calibrator,
 )
+from df_analyze.analysis.adaptive_error.report import _write_text
 
 
 @dataclass
@@ -127,6 +128,7 @@ def _run_oof_stage(
         groups=groups,
         n_folds=options.aer_oof_folds,
         seed=seed,
+        options=options,
     )
     groups_arr = None
     if groups is not None:
@@ -229,12 +231,13 @@ def _run_oof_stage(
         **sel.to_json(),
         "params": conf_params,
     }
-    (m_meta / "confidence_metric_selection.json").write_text(
+    _write_text(
+        m_meta / "confidence_metric_selection.json",
         json.dumps(selection_payload, indent=2),
-        encoding="utf-8",
     )
 
-    (m_meta / "proba_calibrator.json").write_text(
+    _write_text(
+        m_meta / "proba_calibrator.json",
         json.dumps(
             {
                 "calibrator": calibrator.to_json_dict(),
@@ -246,7 +249,6 @@ def _run_oof_stage(
             },
             indent=2,
         ),
-        encoding="utf-8",
     )
 
     return _OofSelectionResult(
