@@ -404,6 +404,11 @@ class PreparedData:
                 is_classification=self.is_classification,
                 grouped=self.groups is not None,
                 labels=self.split_labels,
+                # Without shuffling, the grouped holdout split was identical for every
+                # --seed (StratifiedGroupKFold ignores random_state unless shuffle=True;
+                # OmniKFold only uses the seed when shuffling), unlike the ungrouped
+                # StratifiedShuffleSplit path, which does honour the seed.
+                shuffle=seed is not None,
                 seed=seed,
                 warn_on_fallback=True,
                 warn_on_large_size_diff=True,

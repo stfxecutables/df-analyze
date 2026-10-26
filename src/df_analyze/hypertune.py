@@ -590,22 +590,18 @@ def _get_splits(
         X_train = prep_train.X
         X_test = prep_test.X
     else:
-        # clunky way to deal with renames and indicators
-        # should be safe since we sanitize names
-        try:
-            X_train = prep_train.X.filter(regex="|".join(cols))
-            X_test = prep_test.X.filter(regex="|".join(cols))
-        except Exception:
-            to_drop = set()
-            for col in cols:  # may be e.g. colname__target.1
-                for c in prep_train.X.columns:
-                    cname = os.path.commonprefix([col, c])
-                    if cname == "":
-                        continue
-                    if cname in [col, c]:  # handle e.g. car1, car2
-                        to_drop.add(c)
-            X_train = prep_train.X.drop(list(to_drop))
-            X_test = prep_test.X.drop(list(to_drop))
+        # Keep each selected feature plus the columns derived from it during preparation
+        # (NaN indicators "<name>_NAN", one-hot levels "<name>_<level>").
+        # - re.escape: category levels can contain regex metacharacters (e.g. urine
+        #   dipstick "+", "++", "+++"); unescaped, "++" raised re.error ("multiple repeat").
+        # - "^" anchor: an unanchored pattern also kept unrelated columns that merely
+        #   contain a selected name (e.g. "Age" kept "Mother_Age").
+        # The previous fallback (os.path.commonprefix + DataFrame.drop) dropped by row
+        # label rather than by column, and dropped the selected columns instead of keeping
+        # them, so it is removed rather than repaired.
+        pattern = "|".join(rf"^{re.escape(str(col))}(?:$|_)" for col in cols)
+        X_train = prep_train.X.filter(regex=pattern)
+        X_test = prep_test.X.filter(regex=pattern)
 
     return X_train, X_test
 

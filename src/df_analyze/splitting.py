@@ -4,6 +4,7 @@ from typing import Any, Mapping, Optional, Type, Union
 from warnings import catch_warnings, filterwarnings, warn
 
 import numpy as np
+import pandas as pd
 from numpy import ndarray
 from pandas import DataFrame, Index, Series
 from sklearn.model_selection import (
@@ -147,6 +148,14 @@ class OmniKFold:
             X = X_train.iloc[ix_shuf]
             y = y_train.iloc[ix_shuf]
             g = None if g_train is None else g_train.iloc[ix_shuf]
+            if g is not None:
+                # Row order does not affect (Stratified)GroupKFold: it orders groups by
+                # their (sorted) labels. Randomly relabel the groups with the seeded rng so
+                # the grouped split actually depends on the seed. Group membership is
+                # unchanged, so groups are still never split.
+                uniq = pd.unique(g)
+                relabel = dict(zip(uniq, rng.permutation(len(uniq))))
+                g = g.map(relabel)
         else:
             X, y, g = X_train, y_train, g_train
 
